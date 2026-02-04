@@ -1,0 +1,95 @@
+Nov 25 18:15:16 panel.thdevops.co.in gunicorn[4120046]: Not Found: /
+Nov 25 18:16:21 panel.thdevops.co.in gunicorn[4120046]: Not Found: /
+Nov 25 18:19:01 panel.thdevops.co.in gunicorn[4120046]: Not Found: /ws/v1/cluster/apps/new-application
+Nov 25 18:20:44 panel.thdevops.co.in gunicorn[4126647]: Unauthorized: /api/v1/recorded-beneficiaries/
+Nov 25 18:21:43 panel.thdevops.co.in gunicorn[4120047]: Not Found: /api/v1/lookups/villages/3182020/
+Nov 25 18:23:45 panel.thdevops.co.in gunicorn[4120046]: Not Found: /error/50x.html
+Nov 25 18:23:45 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:23:45 +0000] [4120043] [CRITICAL] WORKER TIMEOUT (pid:4120047)
+Nov 25 18:23:46 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:23:46 +0000] [4120043] [ERROR] Worker (pid:4120047) was sent SIGKILL! Perhaps out of memory?
+Nov 25 18:23:46 panel.thdevops.co.in gunicorn[4172240]: [2025-11-25 18:23:46 +0000] [4172240] [INFO] Booting worker with pid: 4172240
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]: Traceback (most recent call last):
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:     response = get_response(request)
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/utils/deprecation.py", line 133, in __call__
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:     response = self.process_request(request)
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/middleware/common.py", line 48, in process_request
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:     host = request.get_host()
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/http/request.py", line 150, in get_host
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]:     raise DisallowedHost(msg)
+Nov 25 18:24:17 panel.thdevops.co.in gunicorn[4120046]: django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:32:12 panel.thdevops.co.in gunicorn[4120046]: Not Found: /
+Nov 25 18:40:42 panel.thdevops.co.in systemd[1]: Stopping gunicorn for pragati_setu...
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4126647]: [2025-11-26 00:10:42 +0530] [4126647] [INFO] Worker exiting (pid: 4126647)
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120046]: [2025-11-26 00:10:42 +0530] [4120046] [INFO] Worker exiting (pid: 4120046)
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4172240]: [2025-11-26 00:10:42 +0530] [4172240] [INFO] Worker exiting (pid: 4172240)
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:40:42 +0000] [4120043] [INFO] Handling signal: term
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:40:42 +0000] [4120043] [ERROR] Worker (pid:4126647) was sent SIGTERM!
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:40:42 +0000] [4120043] [ERROR] Worker (pid:4120046) was sent SIGTERM!
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:40:42 +0000] [4120043] [ERROR] Worker (pid:4172240) was sent SIGTERM!
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4120043]: [2025-11-25 18:40:42 +0000] [4120043] [INFO] Shutting down: Master
+Nov 25 18:40:42 panel.thdevops.co.in systemd[1]: pragati_setu_gunicorn.service: Deactivated successfully.
+Nov 25 18:40:42 panel.thdevops.co.in systemd[1]: Stopped gunicorn for pragati_setu.
+Nov 25 18:40:42 panel.thdevops.co.in systemd[1]: pragati_setu_gunicorn.service: Consumed 8.060s CPU time.
+Nov 25 18:40:42 panel.thdevops.co.in systemd[1]: Started gunicorn for pragati_setu.
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175070]: [2025-11-25 18:40:42 +0000] [4175070] [INFO] Starting gunicorn 23.0.0
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175070]: [2025-11-25 18:40:42 +0000] [4175070] [INFO] Listening at: http://127.0.0.1:8001 (4175070)
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175070]: [2025-11-25 18:40:42 +0000] [4175070] [INFO] Using worker: sync
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175073]: [2025-11-25 18:40:42 +0000] [4175073] [INFO] Booting worker with pid: 4175073
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175074]: [2025-11-25 18:40:42 +0000] [4175074] [INFO] Booting worker with pid: 4175074
+Nov 25 18:40:42 panel.thdevops.co.in gunicorn[4175075]: [2025-11-25 18:40:42 +0000] [4175075] [INFO] Booting worker with pid: 4175075
+Nov 25 18:41:22 panel.thdevops.co.in gunicorn[4175073]: Unauthorized: /api/v1/recorded-beneficiaries/
+Nov 25 18:41:29 panel.thdevops.co.in gunicorn[4175075]: Not Found: /api/v1/lookups/villages/3182022/
+Nov 25 18:44:46 panel.thdevops.co.in gunicorn[4175075]: Bad Gateway: /api/v1/upsrlm-shg-list/310139/
+Nov 25 18:45:11 panel.thdevops.co.in gunicorn[4175074]: Unauthorized: /api/v1/crp-detail/id/1993/
+Nov 25 18:48:31 panel.thdevops.co.in gunicorn[4175073]: Unauthorized: /api/v1/lookups/villages/3182020/
+Nov 25 18:48:36 panel.thdevops.co.in gunicorn[4175073]: Not Found: /api/v1/lookups/villages/3182020/
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]: Traceback (most recent call last):
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:     response = get_response(request)
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/utils/deprecation.py", line 133, in __call__
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:     response = self.process_request(request)
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/middleware/common.py", line 48, in process_request
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:     host = request.get_host()
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/http/request.py", line 150, in get_host
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]:     raise DisallowedHost(msg)
+Nov 25 18:54:38 panel.thdevops.co.in gunicorn[4175075]: django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175075]: Not Found: /nmaplowercheck1764096994
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175073]: Not Found: /sdk
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]: Traceback (most recent call last):
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:     response = get_response(request)
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/utils/deprecation.py", line 133, in __call__
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:     response = self.process_request(request)
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/middleware/common.py", line 48, in process_request
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:     host = request.get_host()
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/http/request.py", line 150, in get_host
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]:     raise DisallowedHost(msg)
+Nov 25 18:56:34 panel.thdevops.co.in gunicorn[4175074]: django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:56:35 panel.thdevops.co.in gunicorn[4175075]: Not Found: /evox/about
+Nov 25 18:56:35 panel.thdevops.co.in gunicorn[4175075]: Not Found: /HNAP1
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]: Traceback (most recent call last):
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:     response = get_response(request)
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/utils/deprecation.py", line 133, in __call__
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:     response = self.process_request(request)
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/middleware/common.py", line 48, in process_request
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:     host = request.get_host()
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/http/request.py", line 150, in get_host
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]:     raise DisallowedHost(msg)
+Nov 25 18:57:04 panel.thdevops.co.in gunicorn[4175075]: django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:57:05 panel.thdevops.co.in gunicorn[4175073]: Not Found: /
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]: Traceback (most recent call last):
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:     response = get_response(request)
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/utils/deprecation.py", line 133, in __call__
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:     response = self.process_request(request)
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/middleware/common.py", line 48, in process_request
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:     host = request.get_host()
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:   File "/home/th-deploy/th_test_server/lib/python3.10/site-packages/django/http/request.py", line 150, in get_host
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]:     raise DisallowedHost(msg)
+Nov 25 18:58:04 panel.thdevops.co.in gunicorn[4175075]: django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '_'. The domain name provided is not valid according to RFC 1034/1035.
