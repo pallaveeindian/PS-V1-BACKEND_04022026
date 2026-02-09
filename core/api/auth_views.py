@@ -68,9 +68,9 @@ class LoginView(APIView):
             str(refresh),
             max_age=cookie_max_age,
             httponly=True,
-            secure=secure_flag,
+            secure=False,
             samesite='Lax',
-            path='/api/v1/auth/'
+            path='/api/'
         )
 
         return response

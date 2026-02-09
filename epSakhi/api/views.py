@@ -212,7 +212,8 @@ def _call_apisetu_shg_list(block_id: int):
     resp = session.get(
         url,
         headers=_get_apisetu_headers(),
-        timeout=(5, 60)   # connect timeout, read timeout
+        timeout=(5, 60),   # connect timeout, read timeout
+        verify=False,
     )
 
     if resp.status_code != 200:
@@ -257,7 +258,8 @@ def _call_apisetu_shg_detail(shg_code: str):
     resp = session.get(
         url,
         headers=_get_apisetu_headers(),
-        timeout=(5, 60)   # connect timeout, read timeout
+        timeout=(5, 60),   # connect timeout, read timeout
+        verify=False,
     )
 
     if resp.status_code != 200:

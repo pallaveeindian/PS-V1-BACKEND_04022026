@@ -328,6 +328,7 @@ class BaseUpsrlmView(APIView):
                 headers=headers,
                 params=params or {},
                 timeout=(5, 60),   # connect timeout, read timeout
+                verify=False,
             )
         except requests.RequestException as exc:
             logger.exception("Error calling UPSRLM API (%s)", url)

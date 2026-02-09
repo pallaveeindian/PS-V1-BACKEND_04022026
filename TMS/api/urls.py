@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from TMS.api import tms_views, dashboard_views
+from TMS.api import tms_views, dashboard_views, report_views
 
 router = DefaultRouter()
 
@@ -172,6 +172,13 @@ router.register(
     basename="tms-batch-report",
 )
 
+# Training Request List with filters
+router.register(
+    r'training-requests-list',
+    tms_views.TrainingRequestListViewSet,
+    basename='training-request-list'
+)
+
 urlpatterns = [
     # CRUD / core APIs
     path("", include(router.urls)),
@@ -210,7 +217,14 @@ urlpatterns = [
     
     # Training Report
     path('training-report/<int:id>/', tms_views.TrainingReportView.as_view(), name='training-report'),
-    
+        
     # Batches List
     path('batches-list/', tms_views.BatchesListView.as_view(), name='batches-list'),
+    
+    # Training Participant Report
+    path(
+        "cmp-training-report/",
+        report_views.TmsTrainingReportViewSet.as_view({"get": "list"}),
+        name="participant-training-report",
+    ),
 ]

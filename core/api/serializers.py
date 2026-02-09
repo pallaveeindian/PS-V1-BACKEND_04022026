@@ -280,18 +280,34 @@ class MasterUserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context.get('request')
-
         validated_data['created_at'] = timezone.now()
-        if request and request.user and hasattr(request.user, 'id'):
-            validated_data['created_by_id'] = request.user.id
-
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         request = self.context.get('request')
-
         validated_data['updated_at'] = timezone.now()
-        if request and request.user and hasattr(request.user, 'id'):
-            validated_data['updated_by_id'] = request.user.id
-
         return super().update(instance, validated_data)
+    
+class MasterUserListSerializer(serializers.ModelSerializer):
+    role_name = serializers.SerializerMethodField()
+    created_by_username = serializers.CharField(
+        source="created_by.username",
+        read_only=True
+    )
+
+    class Meta:
+        model = models.MasterUser
+        fields = [
+            "id",
+            "username",
+            "password",
+            "role",
+            "role_name",
+            "is_active",
+            "created_at",
+            "created_by",
+            "created_by_username",
+        ]
+
+    def get_role_name(self, obj):
+        return obj.get_role_name()    

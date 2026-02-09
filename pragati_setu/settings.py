@@ -182,6 +182,7 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_NULL_ORIGIN = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-api-id',
     'x-api-key',

@@ -154,12 +154,20 @@ class TrainingPartnerCentreDetailSerializer(SoftDeleteModelSerializer):
     DETAIL serializer for centre including nested rooms.
     """
     rooms = TrainingPartnerCentreRoomsSerializer(many=True, read_only=True)
-    submissions = TrainingPartnerSubmissionSerializer(many=True, read_only=True)
+    submissions = serializers.SerializerMethodField()
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingPartnerCentre
         fields = "__all__"
         depth = 1
+
+    def get_submissions(self, obj):
+        qs = obj.submissions.filter(is_active=True)
+        return TrainingPartnerSubmissionSerializer(
+            qs,
+            many=True,
+            context=self.context,
+        ).data    
 
 
 class TrainingPartnerDetailSerializer(SoftDeleteModelSerializer):
@@ -865,3 +873,43 @@ class TrainingRequestReportSerializer(SoftDeleteModelSerializer):
             is_active=True
         )
         return BatchMediaReportSerializer(qs, many=True).data
+    
+# TR list with filters
+class TrainingRequestListSerializer(serializers.ModelSerializer):
+    training_plan_name = serializers.CharField(
+        source='training_plan.training_name', read_only=True
+    )
+    theme_id = serializers.IntegerField(
+        source='training_plan.theme.id', read_only=True
+    )
+    theme_name = serializers.CharField(
+        source='training_plan.theme.theme_name', read_only=True
+    )
+    district_name = serializers.CharField(
+        source='district.district_name_en', read_only=True
+    )
+    block_name = serializers.CharField(
+        source='block.block_name_en', read_only=True
+    )
+    partner_name = serializers.CharField(
+        source='partner.name', read_only=True
+    )
+
+    class Meta:
+        model = tms_models.TrainingRequest
+        fields = [
+            'id',
+            'training_plan',
+            'training_plan_name',
+            'theme_id',
+            'theme_name',
+            'partner',
+            'partner_name',
+            'training_type',
+            'level',
+            'status',
+            'district',
+            'district_name',
+            'block',
+            'block_name',
+        ]

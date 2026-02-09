@@ -19,6 +19,7 @@ IMPORTANT FIXES:
 from rest_framework import permissions, generics, pagination, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.db.models import Q, Count
@@ -789,7 +790,7 @@ class MasterUserListView(generics.ListAPIView):
     pagination_class = FlexiblePagination
 
     SEARCH_FIELDS = ['username', 'recovery_email', 'recovery_mobile', 'id']
-    ALLOWED_FILTERS = {'role_id': 'role_id', 'is_active': 'is_active'}
+    ALLOWED_FILTERS = {'role_id': 'role_id', 'is_active': 'is_active', 'created_by': 'created_by'}
     ALLOWED_ORDERING = {'id', 'username', 'created_at'}
     ALLOWED_GROUP_BY = {'role_id', 'is_active'}
 
@@ -882,29 +883,65 @@ class UserGeoScopeView(APIView):
             return Response({'detail': 'user_id required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            mu = MasterUser.objects.select_related('role').only('id', 'username', 'role_id').get(id=user_id)
+            mu = (
+                MasterUser.objects
+                .select_related('role')
+                .only('id', 'username', 'role_id')
+                .get(id=user_id)
+            )
             role_name = mu.get_role_name() or ''
         except MasterUser.DoesNotExist:
             return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        scopes = MasterGeoUserScope.objects.filter(user_id=user_id, is_active=1).only('block_id', 'district_id')
+        scopes = (
+            MasterGeoUserScope.objects
+            .filter(user_id=user_id, is_active=1)
+            .only('block_id', 'district_id')
+        )
+
         blocks = set()
         districts = set()
+
         for s in scopes:
             if s.block_id:
                 blocks.add(int(s.block_id))
             if s.district_id:
                 districts.add(int(s.district_id))
 
-        role_name_lower = (role_name or '').lower()
-        response = {'user_id': user_id, 'username': mu.username, 'role': role_name, 'blocks': [], 'districts': []}
+        role_name_lower = role_name.lower()
+
+        response = {
+            'user_id': user_id,
+            'username': mu.username,
+            'role': role_name,
+            'blocks': [],
+            'districts': [],
+        }
+
+        # ✅ BMMU LOGIC (UPDATED)
         if role_name_lower.startswith('bmmu') or role_name_lower == 'bmmu':
-            response['blocks'] = sorted(list(blocks))
+            block_list = sorted(blocks)
+            response['blocks'] = block_list
+
+            if block_list:
+                # 🔥 derive districts from block_ids
+                derived_districts = (
+                    MasterBlock.objects
+                    .filter(block_id__in=block_list)
+                    .values_list('district_id', flat=True)
+                    .distinct()
+                )
+                response['districts'] = sorted(map(int, derived_districts))
+
+        # DMMU / DC / DCNRLM
         elif role_name_lower.startswith('dmmu') or role_name_lower in ('dmmu', 'dc', 'dcnrlm'):
-            response['districts'] = sorted(list(districts))
+            response['districts'] = sorted(districts)
+
+        # Others (admin, state, etc.)
         else:
-            response['blocks'] = sorted(list(blocks))
-            response['districts'] = sorted(list(districts))
+            response['blocks'] = sorted(blocks)
+            response['districts'] = sorted(districts)
+
         return Response(response)
 
 class UserGeoScopeLookupView(APIView):
@@ -963,3 +1000,21 @@ class IsBlockAspirationalView(APIView):
             return Response({'detail': 'Block not found'}, status=status.HTTP_404_NOT_FOUND)
 
         return Response({'block_id': block_id, 'is_aspirational': block.is_aspirational})        
+
+class MasterUserListAPIView(ListAPIView):
+    serializer_class = MasterUserListSerializer
+
+    def get_queryset(self):
+        created_by = self.request.query_params.get("created_by")
+
+        if not created_by:
+            raise ValidationError({
+                "created_by": "This query parameter is mandatory."
+            })
+
+        return (
+            MasterUser.objects
+            .filter(created_by_id=created_by, deleted_at__isnull=True)
+            .select_related("role", "created_by")
+            .order_by("-id")
+        )

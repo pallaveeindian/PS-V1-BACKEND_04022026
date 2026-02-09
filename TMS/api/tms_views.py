@@ -16,7 +16,7 @@ import zipfile
 from io import BytesIO
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.db.models import QuerySet
 from django.utils import timezone
 
@@ -39,7 +39,9 @@ from drf_yasg import openapi
 from core.models import MasterUser
 from TMS import models as tms_models
 from TMS.api.serializers import *
-
+from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # -------------------------------------------------------------------
 # Common helpers
@@ -326,10 +328,15 @@ class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     """
     swagger_schema = PartnersSchema
     queryset = (
-        tms_models.TrainingPartnerCentre.objects.select_related(
-            "partner", "district", "block", "panchayat", "village"
+        tms_models.TrainingPartnerCentre.objects
+        .select_related("partner", "district", "block", "panchayat", "village")
+        .prefetch_related(
+            "rooms",
+            Prefetch(
+                "submissions",
+                queryset=tms_models.TrainingPartnerSubmission.objects.filter(is_active=True),
+            )
         )
-        .prefetch_related("rooms")
     )
     serializer_class = TrainingPartnerCentreSerializer
     filterset_fields = [
@@ -373,7 +380,7 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     swagger_schema = PartnersSchema
     queryset = tms_models.TPCPToCentre.objects.select_related("contact_person", "allocated_centre")
     serializer_class = TPCPToCentreSerializer   
-    filterset_fields = ["contact_person", "allocated_centre"]
+    filterset_fields = ["contact_person", "allocated_centre", "created_by"]
     
 class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     """
@@ -382,7 +389,7 @@ class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     swagger_schema = PartnersSchema
     queryset = tms_models.TPCPToCentre.objects.select_related("contact_person", "allocated_centre")
     serializer_class = TPCPToCentreDetailSerializer
-    filterset_fields = ["contact_person", "allocated_centre"]    
+    filterset_fields = ["contact_person", "allocated_centre", "created_by"]    
 
 
 class TrainingPartnerSubmissionViewSet(BaseTMSModelViewSet):
@@ -390,9 +397,14 @@ class TrainingPartnerSubmissionViewSet(BaseTMSModelViewSet):
     Image/PDF submissions by partners for centres (fooding, toilets, etc.).
     """
     swagger_schema = PartnersSchema
-    queryset = tms_models.TrainingPartnerSubmission.objects.select_related("partner", "centre")
+    queryset = (
+        tms_models.TrainingPartnerSubmission.objects
+        .select_related("partner", "centre")
+        .filter(is_active=1)
+    )
     serializer_class = TrainingPartnerSubmissionSerializer
     filterset_fields = ["partner", "centre", "category"]
+    parser_classes = [MultiPartParser, FormParser]
 
 
 # -------------------------------------------------------------------
@@ -595,7 +607,7 @@ class BatchViewSet(BaseTMSModelViewSet):
         .prefetch_related("beneficiary_participations", "trainer_participations", "master_trainer_participations")
     )
     serializer_class = BatchSerializer
-    filterset_fields = ["request", "centre", "status", "start_date", "end_date"]
+    filterset_fields = ["request", "centre", "status", "start_date", "end_date", "created_by"]
     search_fields = ["code"]
 
     @swagger_auto_schema(
@@ -695,53 +707,143 @@ class BatchListPagination(PageNumberPagination):
     max_page_size = 10
 
 class BatchesListView(APIView):
-    def get(self, request):
-        request_id = request.GET.get('request')
-        district_id = request.GET.get('district_id')
-        block_id = request.GET.get('block_id')
-        theme_id = request.GET.get('theme_id')
-        batch_type = request.GET.get('batch_type')
-        status = request.GET.get('status')
-        ordering = request.GET.get('ordering', 'start_date')
+    """
+    Unified Batches List API with full filtering support.
 
-        qs = tms_models.Batch.objects.select_related(
-            'request',
-            'request__district',
-            'request__block',
-            'request__training_plan',
-            'request__training_plan__theme',
-            'centre',
-            'centre__partner',
+    Filters supported:
+    - Geography:
+        mandal_id
+        district_category_id
+        district_id
+        block_id
+
+    - Training / Batch:
+        request_id
+        centre_id
+        batch_type
+        status
+
+    - Training Plan (via request):
+        training_plan_id
+        theme_id
+        partner_id
+        training_type
+
+    - Ownership:
+        created_by
+
+    Ordering:
+        start_date, -start_date
+        end_date, -end_date
+    """
+
+    def get(self, request):
+        params = request.GET
+
+        qs = (
+            tms_models.Batch.objects
+            .select_related(
+                "request",
+                "request__district",
+                "request__block",
+                "request__training_plan",
+                "request__training_plan__theme",
+                "centre",
+                "centre__partner",
+            )
         )
 
-        location_filter = Q()
-        if district_id:
-            location_filter |= Q(request__district_id=district_id)
-        if block_id:
-            location_filter |= Q(request__block_id=block_id)
-        if theme_id:
-            location_filter |= Q(request__training_plan__theme=theme_id)
+        # -------------------------
+        # GEOGRAPHICAL FILTERS
+        # -------------------------
 
-        if location_filter:
-            qs = qs.filter(location_filter)
+        mandal_id = params.get("mandal_id")
+        district_category_id = params.get("district_category_id")
+        district_id = params.get("district_id")
+        block_id = params.get("block_id")
+
+        if mandal_id:
+            qs = qs.filter(request__district__mandal_id=mandal_id)
+
+        if district_category_id:
+            qs = qs.filter(
+                request__district__masterdistrictcategorymapping__category_id=district_category_id
+            )
+
+        if district_id:
+            qs = qs.filter(request__district_id=district_id)
+
+        if block_id:
+            qs = qs.filter(request__block_id=block_id)
+
+        # -------------------------
+        # TRAINING / BATCH FILTERS
+        # -------------------------
+
+        request_id = params.get("request_id")
+        centre_id = params.get("centre_id")
+        batch_type = params.get("batch_type")
+        status = params.get("status")
+
+        if request_id:
+            qs = qs.filter(request_id=request_id)
+
+        if centre_id:
+            qs = qs.filter(centre_id=centre_id)
 
         if batch_type:
             qs = qs.filter(batch_type=batch_type)
 
-        if request_id:
-            qs = qs.filter(request=request_id)
-
         if status:
             qs = qs.filter(status=status)
 
+        # -------------------------
+        # TRAINING PLAN FILTERS (via request)
+        # -------------------------
+
+        training_plan_id = params.get("training_plan_id")
+        theme_id = params.get("theme_id")
+        partner_id = params.get("partner_id")
+        training_type = params.get("training_type")
+
+        if training_plan_id:
+            qs = qs.filter(request__training_plan_id=training_plan_id)
+
+        if theme_id:
+            qs = qs.filter(request__training_plan__theme_id=theme_id)
+
+        if partner_id:
+            qs = qs.filter(request__partner_id=partner_id)
+
+        if training_type:
+            qs = qs.filter(request__training_type=training_type)
+
+        # -------------------------
+        # OWNERSHIP FILTER
+        # -------------------------
+
+        created_by = params.get("created_by")
+        if created_by:
+            qs = qs.filter(created_by_id=created_by)
+
+        # -------------------------
+        # ORDERING
+        # -------------------------
+
+        ordering = params.get("ordering", "start_date")
         allowed_ordering = {
-            'start_date', '-start_date',
-            'end_date', '-end_date'
+            "start_date", "-start_date",
+            "end_date", "-end_date",
         }
+
         if ordering not in allowed_ordering:
-            ordering = 'start_date'
+            ordering = "start_date"
 
         qs = qs.order_by(ordering)
+
+        # -------------------------
+        # PAGINATION
+        # -------------------------
 
         paginator = BatchListPagination()
         page = paginator.paginate_queryset(qs, request)
@@ -961,3 +1063,65 @@ class TrainingReportView(APIView):
         )
 
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+# TR list with filters    
+class TrainingRequestListViewSet(ReadOnlyModelViewSet):
+    serializer_class = TrainingRequestListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        params = self.request.query_params
+
+        qs = (
+            tms_models.TrainingRequest.objects
+            .select_related(
+                'training_plan',
+                'training_plan__theme',
+                'partner',
+                'district',
+                'block',
+                'district__mandal',
+            )
+            .filter(deleted_at__isnull=True)
+            .order_by('-id')
+        )
+
+        # --------------------------------------------------
+        # ✅ PURE FILTERS (NO ROLE / NO GEO ENFORCEMENT)
+        # --------------------------------------------------
+
+        if params.get('theme_id'):
+            qs = qs.filter(training_plan__theme_id=params['theme_id'])
+
+        if params.get('training_plan_id'):
+            qs = qs.filter(training_plan_id=params['training_plan_id'])
+
+        if params.get('partner_id'):
+            qs = qs.filter(partner_id=params['partner_id'])
+
+        if params.get('training_type'):
+            qs = qs.filter(training_type=params['training_type'])
+
+        if params.get('level'):
+            qs = qs.filter(level=params['level'])
+
+        if params.get('status'):
+            qs = qs.filter(status=params['status'])
+
+        if params.get('mandal_id'):
+            qs = qs.filter(district__mandal_id=params['mandal_id'])
+
+        if params.get('district_category_id'):
+            district_ids = MasterDistrictCategoryMapping.objects.filter(
+                category_id=params['district_category_id']
+            ).values_list('district_id', flat=True)
+
+            qs = qs.filter(district_id__in=district_ids)
+
+        if params.get('district_id'):
+            qs = qs.filter(district_id=params['district_id'])
+
+        if params.get('block_id'):
+            qs = qs.filter(block_id=params['block_id'])
+
+        return qs

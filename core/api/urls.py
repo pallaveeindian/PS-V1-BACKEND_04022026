@@ -184,4 +184,9 @@ urlpatterns = [
     path('users/', MasterUserListView.as_view(), name='master-user-list'),
     path('users/create/', MasterUserCreateView.as_view(), name='master-user-create'),
     path('users/<int:user_id>/', MasterUserDetailView.as_view(), name='master-user-detail'),
+    path(
+        "master-users/",
+        MasterUserListAPIView.as_view(),
+        name="master-user-list",
+    ),    
 ]
