@@ -266,25 +266,33 @@ class MasterRolesSerializer(serializers.ModelSerializer):
 
 
 class MasterUserSerializer(serializers.ModelSerializer):
-    role_id = serializers.IntegerField(required=False, allow_null=True)
+    role_id = serializers.IntegerField(source="role.id", read_only=True)
+    role_name = serializers.CharField(source="role.name", read_only=True)
 
     class Meta:
         model = models.MasterUser
-        fields = '__all__'
         read_only_fields = (
             'id',
             'created_at',
             'updated_at',
             'deleted_at',
         )
+        exclude = (
+            "password",
+            "pass_attempt_no",
+            "pass_updated_at",
+            "pass_updated_by",
+            "locked_on",
+            "suspended_on",
+            "recovery_email",
+            "recovery_mobile",            
+        )        
 
     def create(self, validated_data):
-        request = self.context.get('request')
         validated_data['created_at'] = timezone.now()
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        request = self.context.get('request')
         validated_data['updated_at'] = timezone.now()
         return super().update(instance, validated_data)
     

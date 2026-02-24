@@ -21,6 +21,10 @@ from rest_framework_simplejwt.tokens import AccessToken, TokenError
 
 from core.models import MasterUser
 
+#  AUDIT ADD ONS
+from api_audit.models import GlobalApiAudit, AppApiAudit
+from api_audit.utils import resolve_operation
+
 API_ID_HEADER = "HTTP_X_API_ID"
 API_KEY_HEADER = "HTTP_X_API_KEY"
 
@@ -32,11 +36,10 @@ API_KEY_HEADER = "HTTP_X_API_KEY"
 COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10}
 
 # epSakhi-only roles
-EPSAKHI_ROLE_IDS = {5, 6}
+EPSAKHI_ROLE_IDS = {6}
 
 # TMS-only roles
 TMS_ROLE_IDS = {4, 7, 11}
-
 
 class ApiIdApiKeyMiddleware(MiddlewareMixin):
     """
@@ -51,6 +54,13 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
         super().__init__(get_response)
         self.get_response = get_response
         self.allowed = getattr(settings, "ALLOWED_API_CREDENTIALS", {})
+
+    # IP Helper
+    def _get_client_ip(self, request):
+        xff = request.META.get("HTTP_X_FORWARDED_FOR")
+        if xff:
+            return xff.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR")
 
     # -------------------------------------------------
     # Lookup header validation 
@@ -71,41 +81,41 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
     def _validate_access_token_and_get_role(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if not auth_header:
-            return None, "Missing Authorization header"
+            return None, None, "Missing Authorization header"
 
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != "bearer":
-            return None, "Invalid Authorization header format"
+            return None, None, "Invalid Authorization header format"
 
         token_str = parts[1]
         try:
             access = AccessToken(token_str)
         except TokenError:
-            return None, "Invalid or expired access token"
+            return None, None, "Invalid or expired access token"
 
         user_id = access.payload.get("user_id") or access.payload.get("id")
         if not user_id:
-            return None, "Access token missing user_id"
+            return None, None, "Access token missing user_id"
 
         User = get_user_model()
         try:
             auth_user = User.objects.get(pk=int(user_id))
         except Exception:
-            return None, "User not found for access token"
+            return None, None, "User not found for access token"
 
         try:
             mu = MasterUser.objects.get(username=auth_user.username)
         except MasterUser.DoesNotExist:
-            return None, "Master user not found"
+            return None, None, "Master user not found"
 
         if not getattr(mu, "is_active", 0):
-            return None, "User inactive"
+            return None, None, "User inactive"
 
         role_id = getattr(mu.role, "id", None) or getattr(mu, "role_id", None)
         if not role_id:
-            return None, "User role missing"
+            return None, None, "User role missing"
 
-        return int(role_id), None
+        return int(role_id), mu, None
 
     # -------------------------------------------------
     # Main request processing
@@ -120,46 +130,80 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
         # Auth APIs
         if path.startswith("/api/v1/auth/"):
             return None
+        
+        request._audit_context = None
 
         # Lookup APIs (API key based)
         if path.startswith("/api/v1/lookups/"):
             ok, reason = self._check_api_headers(request)
             if not ok:
                 return JsonResponse({"detail": reason}, status=401)
+            
+            request._audit_context = ("GLOBAL", None)
             return None
 
         # All other APIs → JWT required
-        role_id, reason = self._validate_access_token_and_get_role(request)
+        role_id, master_user, reason = self._validate_access_token_and_get_role(request)
         if role_id is None:
             return JsonResponse({"detail": reason}, status=401)
-
+        
         # -------------------------------------------------
         # ROLE × API NAMESPACE CHECK 
         # -------------------------------------------------
 
-        # Common roles → allow everywhere
-        if role_id in COMMON_ROLE_IDS:
-            return None
+        if role_id not in COMMON_ROLE_IDS:
 
-        # epSakhi APIs
-        if path.startswith("/api/v1/") and not path.startswith("/api/v1/tms/"):
-            if role_id in EPSAKHI_ROLE_IDS:
-                return None
-            return JsonResponse(
-                {"detail": "User role not authorized for epSakhi API"},
-                status=401,
-            )
+            # TMS APIs
+            if path.startswith("/api/v1/tms/") and role_id not in TMS_ROLE_IDS:
+                return JsonResponse(
+                    {"detail": "Unauthorized for TMS"},
+                    status=401,
+                )
 
-        # TMS APIs
-        if path.startswith("/api/v1/tms/"):
-            if role_id in TMS_ROLE_IDS:
-                return None
-            return JsonResponse(
-                {"detail": "User role not authorized for TMS API"},
-                status=401,
-            )
+            # epSakhi APIs
+            if path.startswith("/api/v1/epsakhi/") and role_id not in EPSAKHI_ROLE_IDS:
+                return JsonResponse(
+                    {"detail": "Unauthorized for epSakhi"},
+                    status=401,
+                )
 
+            # LDMS APIs (if restricted later)
+            if path.startswith("/api/v1/ldms/") and role_id not in COMMON_ROLE_IDS:
+                return JsonResponse(
+                    {"detail": "Unauthorized for LDMS"},
+                    status=401,
+                )
+
+        request._audit_context = ("APP", master_user)
         return None
 
     def process_response(self, request, response):
+        ctx = getattr(request, "_audit_context", None)
+
+        if ctx and response.status_code < 400:
+            try:
+                audit_type, user = ctx
+
+                if audit_type == "GLOBAL":
+                    GlobalApiAudit.objects.create(
+                        api_id=request.META.get(API_ID_HEADER),
+                        endpoint=request.path,
+                        method=request.method,
+                        operation=resolve_operation(request.method),
+                        ip_address=self._get_client_ip(request),
+                        user_agent=request.META.get("HTTP_USER_AGENT"),
+                    )
+
+                elif audit_type == "APP":
+                    AppApiAudit.objects.create(
+                        user=user,
+                        endpoint=request.path,
+                        method=request.method,
+                        operation=resolve_operation(request.method),
+                        ip_address=self._get_client_ip(request),
+                        user_agent=request.META.get("HTTP_USER_AGENT"),
+                    )
+            except Exception:
+                pass  # API is never blocked due to audit failure
+
         return response

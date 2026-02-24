@@ -227,4 +227,10 @@ urlpatterns = [
         report_views.TmsTrainingReportViewSet.as_view({"get": "list"}),
         name="participant-training-report",
     ),
+    
+    path(
+        "submissions/<int:pk>/download/",
+        tms_views.download_submission,
+        name="download_submission",
+    ),    
 ]

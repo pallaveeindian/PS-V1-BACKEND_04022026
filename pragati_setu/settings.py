@@ -1,16 +1,39 @@
+from dotenv import load_dotenv
 import os
 from pathlib import Path
 from datetime import timedelta
 from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv("/etc/pragati_setu.env")
 
 # =========================
 # BASIC / SECURITY
 # =========================
-SECRET_KEY = 'DJANGO_SECRET_KEY'
-DEBUG = 'True'
-ALLOWED_HOSTS = ['*'] 
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY not set in environment")
+DEBUG = False
+ALLOWED_HOSTS = [
+    "72.61.255.170",
+    "localhost",
+    "127.0.0.1",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://72.61.255.170:8080",
+    "http://localhost:5174",
+    "http://localhost:5173",
+    "http://localhost:8081",
+]
+
+RECAPTCHA_SECRET_KEY = os.getenv("RS_KEY")
+RECAPTCHA_MIN_SCORE = 0.5
+
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
 APISETU_CLIENT_ID = os.getenv('APISETU_CLIENT_ID', '')
 APISETU_API_KEY = os.getenv('APISETU_API_KEY', '')
 APISETU_SHG_LIST_URL_TEMPLATE = os.getenv('APISETU_SHG_LIST_URL_TEMPLATE', '')
@@ -28,6 +51,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    'rest_framework_simplejwt.token_blacklist',
 
     # 3rd party
     'rest_framework',
@@ -41,6 +66,9 @@ INSTALLED_APPS = [
     'epSakhi',
     'TMS',
     'LDMS',
+    
+    # audit
+    'api_audit',
 ]
 
 # =========================
@@ -57,6 +85,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'pragati_setu.urls'
 
@@ -111,11 +140,14 @@ DATABASE_ROUTERS = ['core.dbrouters.MasterDBRouter']
 # - SHG / APISetu proxy caching
 # - cache_page decorators
 # - any other cache usage via django.core.cache.cache
+REDIS_PASSWORD = os.getenv("REDIS_PASS")
+if not REDIS_PASSWORD:
+    raise RuntimeError("REDIS_PASS not set in environment")
+
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        # Password 'techno@2025' -> 'techno%402025' in URL
-        'LOCATION': 'redis://:techno%402025@127.0.0.1:6379/1',
+        'LOCATION': f'redis://:{REDIS_PASSWORD}@127.0.0.1:6379/1',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
             'SOCKET_CONNECT_TIMEOUT': 2,
@@ -171,18 +203,39 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "2500000/min",
+        "anon": "5/min",
+    },    
 }
 
+JWT_PRIVATE_KEY = Path("/etc/pragati_setu/jwt/jwt_private.pem").read_text()
+JWT_PUBLIC_KEY = Path("/etc/pragati_setu/jwt/jwt_public.pem").read_text()
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': False,
+    "ALGORITHM": "RS256",
+    "SIGNING_KEY": JWT_PRIVATE_KEY,
+    "VERIFYING_KEY": JWT_PUBLIC_KEY,
+
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+
+    # REQUIRED FOR BLACKLIST
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+
+    # Optional hardening
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_NULL_ORIGIN = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True 
+
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-api-id',
     'x-api-key',
@@ -197,8 +250,14 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 # Map of api_id -> api_key
 # In production store in DB/env; this is here for quick start
 # =========================
+ALLOWED_API_ID = os.getenv("ALLOWED_API_ID")
+ALLOWED_API_KEY = os.getenv("ALLOWED_API_KEY")
+
+if not ALLOWED_API_ID or not ALLOWED_API_KEY:
+    raise RuntimeError("ALLOWED_API_ID / ALLOWED_API_KEY not set")
+
 ALLOWED_API_CREDENTIALS = {
-    "BDO_PMUser.TH_test.co.in": 'wFR8IpSeNMawCF4RPLXit1POGuQAJTSmRexBBOwO'
+    ALLOWED_API_ID: ALLOWED_API_KEY
 }
 
 # Simple admin email

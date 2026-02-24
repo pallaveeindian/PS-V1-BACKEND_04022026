@@ -424,6 +424,7 @@ class TPCPToCentre(SoftDeleteMixin):
 
     class Meta:
         db_table = 'tms_tpcp_centre'
+        unique_together = ('contact_person', 'allocated_centre')
         managed = True
 
     def __str__(self):

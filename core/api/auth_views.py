@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken, TokenError
 from core.models import MasterUser
 from .serializers import MasterUserSerializer
+from django.contrib.auth.models import User
 
 # Cookie name for storing refresh token (httpOnly)
 REFRESH_COOKIE_NAME = 'ps_refresh'
@@ -27,54 +28,125 @@ def _get_refresh_cookie_max_age():
 
 class LoginView(APIView):
     permission_classes = (permissions.AllowAny,)
+    MAX_LOGIN_ATTEMPTS = 4
+
 
     def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
+        username = request.data.get("username")
+        password = request.data.get("password")
+
         if not username or not password:
-            return Response({'detail':'username and password required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "username and password required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        # ---------------------------------
+        # Resolve MasterUser first
+        # ---------------------------------
+        try:
+            mu = MasterUser.objects.get(username=username)
+        except MasterUser.DoesNotExist:
+            # Do not reveal user existence
+            return Response(
+                {"detail": "invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # ---------------------------------
+        # Hard account blocks
+        # ---------------------------------
+        if mu.is_active != 1:
+            return Response(
+                {"detail": "account inactive"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if mu.is_suspended == 1:
+            return Response(
+                {"detail": "account suspended"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if mu.is_locked == 1:
+            return Response(
+                {"detail": "account locked"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ---------------------------------
+        # Authenticate credentials
+        # ---------------------------------
         user = authenticate(request, username=username, password=password)
-        if not user:
-            return Response({'detail':'invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Create tokens
-        refresh = RefreshToken.for_user(user)
+        if not user:
+            attempts = mu.pass_attempt_no or 0
+            attempts += 1
+
+            mu.pass_attempt_no = attempts
+            mu.last_active_on = timezone.now()
+
+            if attempts >= self.MAX_LOGIN_ATTEMPTS:
+                mu.is_locked = 1
+                mu.locked_on = timezone.now()
+
+            mu.save(
+                update_fields=[
+                    "pass_attempt_no",
+                    "is_locked",
+                    "locked_on",
+                    "last_active_on",
+                ]
+            )
+
+            return Response(
+                {"detail": "invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # ---------------------------------
+        # Successful login → reset attempts
+        # ---------------------------------
+        if mu.pass_attempt_no:
+            mu.pass_attempt_no = 0
+
+        mu.last_active_on = timezone.now()
+        mu.save(update_fields=["pass_attempt_no", "last_active_on"])
+
+        # ---------------------------------
+        # Issue JWT tokens
+        # ---------------------------------
+
+        auth_user, _ = User.objects.get_or_create(
+            username=mu.username,
+            defaults={"is_active": True},
+        )
+        
+        refresh = RefreshToken.for_user(auth_user)
         access_token = refresh.access_token
 
-        try:
-            # Get master user record
-            mu = MasterUser.objects.get(username=user.username)
-        except MasterUser.DoesNotExist:
-            return Response({'detail': 'master user missing'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        serializer = MasterUserSerializer(mu)
 
-        s = MasterUserSerializer(mu)
+        response = Response(
+            {
+                "access": str(access_token),
+                "refresh": str(refresh),  # backward compatibility
+                "user": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-        response_data = {
-            'access': str(access_token),
-            'refresh': str(refresh),   # keep returning refresh to preserve backward compatibility
-            'user': s.data
-        }
-
-        response = Response(response_data, status=status.HTTP_200_OK)
-
-        # Set HttpOnly refresh cookie for browser clients (secure flag only when not DEBUG)
-        cookie_max_age = _get_refresh_cookie_max_age()
-        # If DEBUG True, secure=False to allow local HTTP; in production secure=True recommended.
-        secure_flag = not getattr(settings, 'DEBUG', False)
-        # Path is limited to auth endpoints; change as needed.
         response.set_cookie(
             REFRESH_COOKIE_NAME,
             str(refresh),
-            max_age=cookie_max_age,
+            max_age=_get_refresh_cookie_max_age(),
             httponly=True,
             secure=False,
-            samesite='Lax',
-            path='/api/'
+            samesite="Lax",
+            path="/",
         )
 
         return response
-
 
 class RefreshTokenView(APIView):
     """
@@ -84,7 +156,12 @@ class RefreshTokenView(APIView):
     permission_classes = (permissions.AllowAny,)
 
     def post(self, request):
-        refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+        
+        refresh_token = (
+            request.COOKIES.get(REFRESH_COOKIE_NAME)
+            or request.data.get("refresh")
+        )
+        
         if not refresh_token:
             return Response({'detail': 'Missing refresh token cookie'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -95,21 +172,31 @@ class RefreshTokenView(APIView):
 
         # Create a fresh access token
         access = refresh.access_token
+
         return Response({'access': str(access)}, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
-    """
-    Logout for browser clients: clear the refresh cookie.
-    Note: This does not invalidate the token server-side (RefreshToken.blacklist requires additional setup).
-    """
     permission_classes = (permissions.AllowAny,)
 
     def post(self, request):
-        response = Response({'detail': 'logged out'}, status=status.HTTP_200_OK)
-        # Delete cookie by setting it expired
-        response.delete_cookie(REFRESH_COOKIE_NAME, path='/api/v1/auth/')
+        refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist() 
+            except TokenError:
+                # token already expired or invalid
+                pass
+
+        response = Response({"detail": "logged out"}, status=status.HTTP_200_OK)
+        response.delete_cookie(
+            REFRESH_COOKIE_NAME,
+            path="/",
+        )
         return response
+
 
 
 class CRPRequestOtpView(APIView):

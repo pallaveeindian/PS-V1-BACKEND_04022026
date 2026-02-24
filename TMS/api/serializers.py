@@ -1,11 +1,16 @@
 # TMS/api/serializers.py
-
+import os
+import uuid
+import re
 from rest_framework import serializers
 from django.apps import apps
 from datetime import datetime
 from TMS import models as tms_models
 from core import models as core_models
-
+from PIL import Image
+from PyPDF2 import PdfReader
+from django.core.exceptions import ValidationError
+from django.utils.text import get_valid_filename
 
 class SoftDeleteModelSerializer(serializers.ModelSerializer):
     """
@@ -112,6 +117,39 @@ class TrainingPartnerCPSerializer(SoftDeleteModelSerializer):
         model = tms_models.TrainingPartnerCP
         fields = "__all__"
 
+    def validate(self, attrs):
+        # ---- master_user validation ----
+        master_user = attrs.get(
+            "master_user",
+            getattr(self.instance, "master_user", None)
+        )
+
+        if not master_user:
+            raise serializers.ValidationError({
+                "master_user": "User ID is mandatory for Contact Person"
+            })
+
+        # ---- duplicate mobile check (per partner) ----
+        mobile = attrs.get("mobile_number")
+        partner = attrs.get("partner")
+
+        if mobile and partner:
+            qs = tms_models.TrainingPartnerCP.objects.filter(
+                mobile_number=mobile,
+                partner=partner,
+            )
+
+            # exclude self during update
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.exists():
+                raise serializers.ValidationError({
+                    "mobile_number": "Contact person with this mobile already exists"
+                })
+
+        return attrs
+
 
 class TrainingPartnerCentreSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
@@ -130,6 +168,29 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TPCPToCentre
         fields = "__all__"
+        exclude = ["created_by", "updated_by", "deleted_by"]
+ 
+    def validate(self, attrs):
+        request = self.context["request"]
+        user = request.user
+
+        cp = attrs.get("contact_person")
+        centre = attrs.get("allocated_centre")
+
+        # Ensure contact person belongs to logged-in user's partner
+        if cp.created_by != user:
+            raise serializers.ValidationError(
+                "Unauthorized contact person selection."
+            )
+
+        # Ensure centre belongs to same partner
+        if centre.created_by != user:
+            raise serializers.ValidationError(
+                "Unauthorized centre selection."
+            )
+
+        return attrs        
+        
         
 class TPCPToCentreDetailSerializer(SoftDeleteModelSerializer):
     """
@@ -143,11 +204,97 @@ class TPCPToCentreDetailSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
         depth = 1
 
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".pdf"}
+ALLOWED_MIME_TYPES = {
+    "image/jpeg",
+    "application/pdf",
+}
+
+DANGEROUS_FILENAMES = {
+    ".htaccess",
+    "web.config",
+    "settings.py",
+    "manage.py",
+}
+
 class TrainingPartnerSubmissionSerializer(SoftDeleteModelSerializer):
-    class Meta(SoftDeleteModelSerializer.Meta):
+    class Meta:
         model = tms_models.TrainingPartnerSubmission
         fields = "__all__"
 
+    def validate_file(self, file):
+
+        if not file:
+            return file
+
+        original_name = file.name
+
+        # ----------------------------
+        # For empty or hidden filenames
+        # ----------------------------
+        if not original_name or original_name.startswith("."):
+            raise serializers.ValidationError("Invalid file name.")
+
+        # ----------------------------
+        # To Block dangerous known filenames
+        # ----------------------------
+        if original_name.lower() in DANGEROUS_FILENAMES:
+            raise serializers.ValidationError("Forbidden file name.")
+
+        # ----------------------------
+        # To Block double extensions
+        # ----------------------------
+        parts = original_name.split(".")
+        if len(parts) > 2:
+            raise serializers.ValidationError("Double extensions are not allowed.")
+
+        # ----------------------------
+        # Extension whitelist
+        # ----------------------------
+        ext = os.path.splitext(original_name)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise serializers.ValidationError("Unsupported file type.")
+
+        # ----------------------------
+        # Size limit (10 MB)
+        # ----------------------------
+        if file.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("File must be <= 10 MB.")
+
+        # ----------------------------
+        # MIME type validation
+        # ----------------------------
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            raise serializers.ValidationError("Invalid content type.")
+
+        # ----------------------------
+        # Content validation
+        # ----------------------------
+        file.seek(0)
+
+        if ext in (".jpg", ".jpeg"):
+            try:
+                Image.open(file).verify()
+            except Exception:
+                raise serializers.ValidationError("Invalid image file.")
+
+        elif ext == ".pdf":
+            try:
+                PdfReader(file)
+            except Exception:
+                raise serializers.ValidationError("Invalid PDF file.")
+
+        file.seek(0)
+        return file
+
+    def create(self, validated_data):
+        file = validated_data.get("file")
+
+        if file:
+            ext = os.path.splitext(file.name)[1].lower()
+            file.name = f"{uuid.uuid4().hex}{ext}"
+
+        return super().create(validated_data)
 
 class TrainingPartnerCentreDetailSerializer(SoftDeleteModelSerializer):
     """

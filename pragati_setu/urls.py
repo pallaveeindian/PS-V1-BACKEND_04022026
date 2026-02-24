@@ -10,7 +10,7 @@ schema_view = get_schema_view(
    openapi.Info(
       title="Pragati Setu API",
       default_version='v1',
-      description="API for epSakhi",
+      description="API Directory for TMS, CRP-EP, and LDMS Apps",
    ),
    public=True,
    permission_classes=(permissions.AllowAny,),
@@ -18,12 +18,13 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/', include(('epSakhi.api.urls', 'epSakhi'), namespace='epSakhi_api')),
+    path('api/v1/', include(('epSakhi.api.upsrlm_urls', 'upsrlm'), namespace='upsrlm')),
     path('api/v1/auth/', include(('core.api.auth_urls', 'core_auth'), namespace='core_auth')),
     path('api/v1/lookups/', include(('core.api.urls', 'core_lookups'), namespace='core_lookups')),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    path('health', health),
+    path('health/', health),
     path("api/v1/tms/", include("TMS.api.urls")),
+    path('api/v1/epsakhi/', include(('epSakhi.api.epsakhi_urls', 'epSakhi'), namespace='epSakhi')),
     path("api/v1/ldms/", include("LDMS.api.urls")),
 ]
 

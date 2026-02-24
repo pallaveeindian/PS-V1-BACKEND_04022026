@@ -6,6 +6,7 @@ from io import StringIO
 from collections import defaultdict
 
 import requests
+import certifi
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -30,36 +31,9 @@ from core.models import (
     MasterDistrict,
     MasterGeoUserScope,
 )
-from epSakhi.models import (
-    CRPEP,
-    CRPEPToPanchayat,
-    BeneficiaryRecorded,
-    ExistingEnterprise,
-    NewEnterprise,
-    EnterpriseLoanDetail,
-    EnterpriseSubsidyDetail,   
-    EnterpriseTrainingReq,
-    EnterpriseMedia,
-    EnterpriseProduct,         
-    EnterpriseTypeCategory,    
-    NoEnterpriseForm,          
-    NoEnterpriseWage,          
-)
+from epSakhi.models import *
 
-from .serializers import (
-    CRPEPSerializer,
-    BeneficiaryRecordedSerializer,
-    ExistingEnterpriseSerializer,
-    NewEnterpriseSerializer,
-    EnterpriseLoanDetailSerializer,
-    EnterpriseSupportDetailSerializer,  
-    EnterpriseTrainingReqSerializer,
-    EnterpriseMediaSerializer,
-    EnterpriseProductSerializer,        
-    EnterpriseTypeCategorySerializer,   
-    NoEnterpriseFormSerializer,         
-    NoEnterpriseWageSerializer,         
-)
+from .serializers import *
 # from core.upsrlm_sync import sync_shg_list, sync_shg_detail
 
 
@@ -213,7 +187,7 @@ def _call_apisetu_shg_list(block_id: int):
         url,
         headers=_get_apisetu_headers(),
         timeout=(5, 60),   # connect timeout, read timeout
-        verify=False,
+        verify=False
     )
 
     if resp.status_code != 200:
@@ -259,7 +233,7 @@ def _call_apisetu_shg_detail(shg_code: str):
         url,
         headers=_get_apisetu_headers(),
         timeout=(5, 60),   # connect timeout, read timeout
-        verify=False,
+        verify=False
     )
 
     if resp.status_code != 200:
@@ -458,7 +432,7 @@ class BaseProjectionMixin:
         group_by = request.GET.get('group_by')
         if group_by:
             keys = [k.strip() for k in group_by.split(',') if k.strip()]
-            vals = qs.values(*keys).order_by().annotate(count=models.Count('TH_urid'))
+            vals = qs.values(*keys).order_by().annotate(count=models.Count('id'))
             return Response(list(vals))
 
         fields = request.GET.get('fields')
@@ -562,7 +536,7 @@ class CRPPanchayatMappingViewSet(viewsets.ViewSet):
 # -------------------------------------------------------------------
 
 class BeneficiaryRecordedViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
-    queryset = BeneficiaryRecorded.objects.all().order_by('-created_at')
+
     serializer_class = BeneficiaryRecordedSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -570,8 +544,18 @@ class BeneficiaryRecordedViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
     ordering_fields = ['age', 'created_at']
 
     def get_queryset(self):
-        qs = BeneficiaryRecorded.objects.all().order_by('-created_at')
+        qs = (
+            BeneficiaryRecorded.objects
+            .select_related('district_id', 'block_id', 'panchayat_id', 'village_id')
+            .order_by('-created_at')
+        )
+
+        if self.action == "list":
+            qs = qs.filter(is_active=True)
+
         params = self.request.GET
+        if params.get('created_by'):
+            qs = qs.filter(created_by_id=int(params['created_by']))
         if params.get('district_id'):
             qs = qs.filter(district_id=int(params['district_id']))
         if params.get('block_id'):
@@ -619,76 +603,155 @@ class NewEnterpriseViewSet(viewsets.ModelViewSet):
 # Child tables – loan/support(subsidy)/training/media
 # (updated with search, ordering, simple filtering)
 # -------------------------------------------------------------------
-
-class EnterpriseLoanDetailViewSet(viewsets.ModelViewSet):
+class EnterpriseLicensesViewSet(viewsets.ModelViewSet):
     """
-    /api/v1/epsakhi/enterprise-loan-details/
+    /api/v1/epsakhi/enterprise-licenses/
 
     Query params:
-      - enterprise_id=<TH_urid> (optional filter)
-    """
-    queryset = EnterpriseLoanDetail.objects.all().order_by('-created_at')
-    serializer_class = EnterpriseLoanDetailSerializer
+      - enterprise_id=<id> (optional filter)
+    """    
+    queryset = EnterpriseLicenses.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseLicensesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['enterprise_id', 'institution_name']
-    ordering_fields = ['created_at', 'loan_amount', 'date_taken']
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        enterprise_id = self.request.query_params.get('enterprise_id')
-        if enterprise_id:
-            qs = qs.filter(enterprise_id=enterprise_id)
-        form_type = self.request.query_params.get('form_type')
-        if form_type:
-            qs = qs.filter(form_type=form_type)
-        return qs
-
-
-class EnterpriseSupportDetailViewSet(viewsets.ModelViewSet):
-    """
-    /api/v1/epsakhi/enterprise-support-details/
-
-    NOTE:
-    - Backward-compatible name; works on EnterpriseSubsidyDetail model.
-    - One enterprise can have MANY subsidy rows (epSakhi_exEpSubsidy).
-    """
-    queryset = EnterpriseSupportDetail.objects.all().order_by('-created_at')
-    serializer_class = EnterpriseSupportDetailSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['enterprise_id', 'subsidy_type', 'subsidy_name']
+    search_fields = ['enterprise_id__id', 'license_category', 'license_no', 'license_name']
     ordering_fields = ['created_at']
 
     def get_queryset(self):
         qs = super().get_queryset()
         enterprise_id = self.request.query_params.get('enterprise_id')
         if enterprise_id:
-            qs = qs.filter(enterprise_id=enterprise_id)
+            qs = qs.filter(enterprise_id__id=enterprise_id)
         return qs
 
+class EnterpriseLoanDetailViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-loan-details/
 
-class EnterpriseTrainingReqViewSet(viewsets.ModelViewSet):
+    Query params:
+      - enterprise_id=<id> (optional filter)
     """
-    /api/v1/epsakhi/enterprise-training-reqs/
-    """
-    queryset = EnterpriseTrainingReq.objects.all().order_by('-created_at')
-    serializer_class = EnterpriseTrainingReqSerializer
+    queryset = EnterpriseLoanDetail.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseLoanDetailSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['enterprise_id', 'training_module_name', 'sector', 'department']
-    ordering_fields = ['created_at', 'expected_income']
+    search_fields = ['enterprise_id__id', 'institution_name']
+    ordering_fields = ['created_at', 'loan_amount', 'date_taken']
 
     def get_queryset(self):
         qs = super().get_queryset()
         enterprise_id = self.request.query_params.get('enterprise_id')
         if enterprise_id:
-            qs = qs.filter(enterprise_id=enterprise_id)
+            qs = qs.filter(enterprise_id__id=enterprise_id)
         form_type = self.request.query_params.get('form_type')
         if form_type:
             qs = qs.filter(form_type=form_type)
         return qs
 
+class EnterpriseSubsidyDetailViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-support-details/
+
+    NOTE:
+    - One enterprise can have MANY subsidy rows (epSakhi_exEpSubsidy).
+    """
+    queryset = EnterpriseSubsidyDetail.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseSubsidyDetailSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id__id', 'subsidy_type', 'subsidy_name']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id__id=enterprise_id)
+        return qs
+
+class EnterpriseShopViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-shop/
+
+    Query params:
+      - enterprise_id=<id> (optional filter)
+    """    
+    queryset = EnterpriseShop.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseShopSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id__id', 'shop_category', 'shop_type']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id__id=enterprise_id)
+        return qs
+
+class ShopMediaViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/shop-media/
+
+    Query params:
+      - product_id=<id> (optional filter)
+    """    
+    queryset = ShopMedia.objects.all().order_by('-created_at')
+    serializer_class = ShopMediaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['product_id__id']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        product_id = self.request.query_params.get('product_id')
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        return qs
+
+class EnterpriseProductViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-products/
+
+    Query params:
+      - enterprise_id=<id> (optional filter)
+    """    
+    queryset = EnterpriseProduct.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseProductSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id__id', 'activity_or_product_type']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id__id=enterprise_id)
+        return qs
+    
+class ProductMediaViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/product-media/
+
+    Query params:
+      - product_id=<id> (optional filter)
+    """    
+    queryset = ProductMedia.objects.all().order_by('-created_at')
+    serializer_class = ProductMediaSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['product_id__id']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        product_id = self.request.query_params.get('product_id')
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        return qs    
 
 class EnterpriseMediaViewSet(viewsets.ModelViewSet):
     """
@@ -698,49 +761,17 @@ class EnterpriseMediaViewSet(viewsets.ModelViewSet):
     serializer_class = EnterpriseMediaSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['enterprise_id']
+    search_fields = ['enterprise_id__id']
     ordering_fields = ['created_at']
 
     def get_queryset(self):
         qs = super().get_queryset()
         enterprise_id = self.request.query_params.get('enterprise_id')
         if enterprise_id:
-            qs = qs.filter(enterprise_id=enterprise_id)
-        form_type = self.request.query_params.get('form_type')
-        if form_type:
-            qs = qs.filter(form_type=form_type)
+            qs = qs.filter(enterprise_id__id=enterprise_id)
         return qs
 
-
-# -------------------------------------------------------------------
-# NEW: EnterpriseProduct / EnterpriseType / NoEnterprise* CRUD APIs
-# -------------------------------------------------------------------
-
-class EnterpriseProductViewSet(viewsets.ModelViewSet):
-    """
-    /api/v1/epsakhi/enterprise-products/
-    """
-    queryset = EnterpriseProduct.objects.all().order_by('-created_at')
-    serializer_class = EnterpriseProductSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = [
-        'enterprise_id',
-        'main_product_name',
-        'activity_or_product_type',
-        'marketing_strategy',
-        'marketing_channels',
-    ]
-    ordering_fields = ['created_at', 'avg_monthly_sales']
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        enterprise_id = self.request.query_params.get('enterprise_id')
-        if enterprise_id:
-            qs = qs.filter(enterprise_id=enterprise_id)
-        return qs
-
-
+# Shared Classes
 class EnterpriseTypeCategoryViewSet(viewsets.ModelViewSet):
     """
     /api/v1/epsakhi/enterprise-types/
@@ -761,7 +792,94 @@ class EnterpriseTypeCategoryViewSet(viewsets.ModelViewSet):
         if form_type:
             qs = qs.filter(form_type=form_type)
         return qs
+    
+class EnterpriseSupportViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-support/
+    """
+    queryset = EnterpriseSupport.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseSupportSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id', 'support_category', 'support_sub_category', 'form_type']
+    ordering_fields = ['created_at']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id=enterprise_id)
+        form_type = self.request.query_params.get('form_type')
+        if form_type:
+            qs = qs.filter(form_type=form_type)
+        return qs    
+
+class EnterpriseMandatoryFundViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/mandatory-fund/
+    """
+    queryset = EnterpriseMandatoryFund.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseMandatoryFundSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id', 'fund_type', 'repayment_status', 'form_type']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id=enterprise_id)
+        form_type = self.request.query_params.get('form_type')
+        if form_type:
+            qs = qs.filter(form_type=form_type)
+        return qs    
+
+class EnterpriseTrainingReqViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/enterprise-training-reqs/
+    """
+    queryset = EnterpriseTrainingReq.objects.all().order_by('-created_at')
+    serializer_class = EnterpriseTrainingReqSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id', 'sector', 'department']
+    ordering_fields = ['created_at', 'expected_income']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id=enterprise_id)
+        form_type = self.request.query_params.get('form_type')
+        if form_type:
+            qs = qs.filter(form_type=form_type)
+        return qs
+
+class TrainingCertificatesViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/epsakhi/training-certif/
+
+    Query params:
+      - enterprise_id=<TH_urid> (optional filter)
+      - training_id=<TH_urid> (optional filter)
+    """    
+    queryset = TrainingCertificates.objects.all().order_by('-created_at')
+    serializer_class = TrainingCertificatesSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['enterprise_id', 'training_id']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        enterprise_id = self.request.query_params.get('enterprise_id')
+        if enterprise_id:
+            qs = qs.filter(enterprise_id=enterprise_id)
+        training_id = self.request.query_params.get('training_id')
+        if training_id:
+            qs = qs.filter(training_id_id=training_id)    
+        return qs  
 
 class NoEnterpriseFormViewSet(viewsets.ModelViewSet):
     """
@@ -851,15 +969,22 @@ class CRPDetailView(APIView):
 
     def get(self, request, member_code):
         try:
-            crp = CRPEP.objects.get(lokos_member_code=member_code)
+            crp = CRPEP.objects.select_related("master_user").get(
+                lokos_member_code=member_code
+            )
         except CRPEP.DoesNotExist:
-            return Response({'detail': 'CRP not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'detail': 'CRP not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         data = CRPEPSerializer(crp).data
+
         fields_param = request.GET.get('fields')
         if fields_param:
             allowed = _parse_csv_param(fields_param)
             data = {k: v for k, v in data.items() if k in allowed}
+
         return Response(data)
 
 
@@ -884,96 +1009,143 @@ class CRPDetailbyUserID(APIView):
             data = {k: v for k, v in data.items() if k in allowed}
         return Response(data)
 
-
 @method_decorator(cache_page(CACHE_TTL), name='get')
 class CRPPanchayatsUnderCrpView(APIView):
     """
+    GET /api/v1/epsakhi/panchayats-under-crp/
     GET /api/v1/epsakhi/panchayats-under-crp/<member_code>/
-    member_code = CRPEP.lokos_member_code
+
+    Optional Query Params:
+        ?member_code=
+        ?panchayat_id=
     """
     permission_classes = (IsAuthenticated,)
 
-    def get(self, request, member_code):
-        try:
-            crp = CRPEP.objects.get(lokos_member_code=member_code)
-        except CRPEP.DoesNotExist:
-            return Response({'detail': 'CRP not found'}, status=status.HTTP_404_NOT_FOUND)
+    def get(self, request, member_code=None):
 
-        panchayat_ids = list(
-            CRPEPToPanchayat.objects.filter(crp=crp).values_list('allocated_panchayat_id', flat=True)
-        )
+        # Allow member_code from query param also
+        member_code = member_code or request.GET.get("member_code")
+        panchayat_id = request.GET.get("panchayat_id")
 
-        if not panchayat_ids:
-            rows = []
-        else:
-            qs = MasterPanchayat.objects.filter(panchayat_id__in=panchayat_ids).only(
-                'panchayat_id',
-                'panchayat_name_en',
-                'panchayat_name_local',
-                'panchayat_code',
-                'block_id',
-                'district_id',
-                'state_id',
-            )
-            rows = list(
-                qs.values(
-                    'panchayat_id',
-                    'panchayat_name_en',
-                    'panchayat_name_local',
-                    'panchayat_code',
-                    'block_id',
-                    'district_id',
-                    'state_id',
+        # --------------------------------------------------
+        # Base queryset
+        # --------------------------------------------------
+        assignment_qs = CRPEPToPanchayat.objects.filter(is_active=True)
+
+        # --------------------------------------------------
+        # Filter by member_code
+        # --------------------------------------------------
+        if member_code:
+            try:
+                crp = CRPEP.objects.get(lokos_member_code=member_code)
+            except CRPEP.DoesNotExist:
+                return Response(
+                    {'detail': 'CRP not found'},
+                    status=status.HTTP_404_NOT_FOUND
                 )
+
+            assignment_qs = assignment_qs.filter(
+                crp_id=crp.master_user_id
             )
 
-        # Filters
-        filter_map = {
-            'block_id': 'block_id',
-            'district_id': 'district_id',
-            'state_id': 'state_id',
+        # --------------------------------------------------
+        # Filter by panchayat_id (NEW)
+        # --------------------------------------------------
+        if panchayat_id:
+            assignment_qs = assignment_qs.filter(
+                allocated_panchayat_id=panchayat_id
+            )
+
+        # --------------------------------------------------
+        # Get Panchayat IDs with CRP ID
+        # --------------------------------------------------
+        assignments = list(
+            assignment_qs.values(
+                'id',
+                'crp_id',
+                'allocated_panchayat_id'
+            )
+        )
+
+        if not assignments:
+            return Response({
+                "meta": {
+                    "page": 1,
+                    "page_size": 10,
+                    "total": 0
+                },
+                "data": []
+            })
+
+        # --------------------------------------------------
+        # Fetch Panchayat details
+        # --------------------------------------------------
+        panchayat_ids = list(
+            set(a['allocated_panchayat_id'] for a in assignments)
+        )
+
+        panchayats = MasterPanchayat.objects.filter(
+            panchayat_id__in=panchayat_ids
+        ).values(
+            'panchayat_id',
+            'panchayat_name_en',
+            'panchayat_name_local',
+            'panchayat_code',
+            'block_id',
+            'district_id',
+            'state_id',
+        )
+
+        panchayat_map = {
+            p['panchayat_id']: p
+            for p in panchayats
         }
-        rows = _apply_list_filters(rows, filter_map, request.GET)
 
-        # Search
-        rows = _apply_list_search(
-            rows,
-            request.GET.get('search'),
-            ['panchayat_name_en', 'panchayat_name_local', 'panchayat_code'],
-        )
-
-        # Ordering
-        rows = _apply_list_ordering(
-            rows,
-            request.GET.get('ordering'),
-            allowed_fields={'panchayat_id', 'panchayat_name_en'},
-        )
-
-        # Grouping
-        grouped = _apply_list_group_by(rows, request.GET.get('group_by'))
-        if grouped is not None:
-            grouped = _apply_fields_projection_list(grouped, request.GET.get('fields'))
-            return Response(grouped)
-
-        # Fields projection (default subset)
-        fields_param = request.GET.get('fields')
-        if fields_param:
-            rows = _apply_fields_projection_list(rows, fields_param)
-        else:
-            rows = [
-                {
-                    'panchayat_id': r['panchayat_id'],
-                    'panchayat_name_en': r['panchayat_name_en'],
-                    'block_id': r['block_id'],
-                    'district_id': r['district_id'],
-                    'state_id': r['state_id'],
+        # --------------------------------------------------
+        # Merge CRP ID + Panchayat Data
+        # --------------------------------------------------
+        rows = []
+        for a in assignments:
+            p_data = panchayat_map.get(a['allocated_panchayat_id'])
+            if p_data:
+                row = {
+                    "id": a['id'],
+                    "crp_id": a['crp_id'],
+                    **p_data
                 }
-                for r in rows
-            ]
+                rows.append(row)
 
         result = _paginate_plain_list(request, rows)
         return Response(result)
 
+class CRPPanchayatViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for CRPEPToPanchayat
+    """
+    serializer_class = CRPEPToPanchayatCRUDSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        queryset = CRPEPToPanchayat.objects.filter(is_active=True)
+
+        member_code = self.request.query_params.get("member_code")
+        panchayat_id = self.request.query_params.get("panchayat_id")
+
+        # Filter by member_code
+        if member_code:
+            try:
+                crp = CRPEP.objects.get(lokos_member_code=member_code)
+                queryset = queryset.filter(crp_id=crp.master_user_id)
+            except CRPEP.DoesNotExist:
+                return CRPEPToPanchayat.objects.none()
+
+        # Filter by panchayat_id
+        if panchayat_id:
+            queryset = queryset.filter(
+                allocated_panchayat_id=panchayat_id
+            )
+
+        return queryset
 
 @method_decorator(cache_page(CACHE_TTL), name='get')
 class CRPPanchayatsUnderCrpByID(APIView):
@@ -992,7 +1164,8 @@ class CRPPanchayatsUnderCrpByID(APIView):
         # Fetch panchayat mappings where crp_id == user_id (master_user_id semantics)
         panchayat_ids = list(
             CRPEPToPanchayat.objects.filter(
-                crp_id=user_id
+                crp_id=user_id,
+                is_active=True
             ).values_list('allocated_panchayat_id', flat=True)
         )
 
@@ -1113,179 +1286,165 @@ class EpsakhiListByShgView(APIView):
         result = _paginate_plain_list(request, rows)
         return Response(result)
 
-
 class EpsakhiDetailByMemberView(APIView):
     """
-    GET /api/v1/epsakhi/epsakhi-detail/<member_code>/
+    GET /api/v1/epsakhi/enterprise-full/<lokos_member_code>/
 
-    Returns an aggregate of:
-      - latest BeneficiaryRecorded (by created_at) for given lokos_member_code
-      - linked enterprise (ExistingEnterprise/NewEnterprise)
-      - linked NoEnterpriseForm (if any)
-      - child detail tables
-
-    Response:
-        {
-          "beneficiary": {.},
-          "enterprise_type": "existing" | "new" | null,
-          "enterprise": {.} | null,
-
-          # children for Existing / New enterprise (when BeneficiaryRecorded.enterprise_id is set)
-          "enterprise_loan_details": [.],        # EnterpriseLoanDetail (only if has_taken_loan is True for Existing)
-          "enterprise_support_details": [.],     # EnterpriseSubsidyDetail (only if has_receieved_subsidy is True for Existing)
-          "enterprise_training_reqs": [.],       # EnterpriseTrainingReq filtered by is_training_received / is_training_required
-          "enterprise_media": [.],               # EnterpriseMedia filtered by form_type (ex/new)
-          "enterprise_products": [.],            # EnterpriseProduct (existing + new)
-          "enterprise_type_categories": [.],     # EnterpriseTypeCategory (form_type ex/new)
-
-          # No-Enterprise flow (when a NoEnterpriseForm exists for this recorded beneficiary)
-          "no_enterprise_form": {.} | null,              # NoEnterpriseForm
-          "no_enterprise_training_reqs": [.],            # EnterpriseTrainingReq (enterprise_id = NoEnterpriseForm.TH_urid, form_type='req')
-          "no_enterprise_wage_details": [.],             # NoEnterpriseWage (enterprise_id = NoEnterpriseForm.TH_urid)
-        }
-
-    Supports:
-      - fields: comma-separated list of top-level keys to return
-                (e.g. fields=beneficiary,enterprise).
+    Returns COMPLETE enterprise form (Existing OR New) with ALL nested data.
     """
     permission_classes = (IsAuthenticated,)
 
     def get(self, request, member_code):
-        # take latest recorded beneficiary for this member_code
+        # --------------------------------------------------
+        # 1. Latest BeneficiaryRecorded
+        # --------------------------------------------------
         br = (
-            BeneficiaryRecorded.objects.filter(lokos_member_code=member_code)
+            BeneficiaryRecorded.objects
+            .filter(lokos_member_code=member_code, is_active=True)
             .order_by('-created_at')
             .first()
         )
+
         if not br:
             return Response(
-                {'detail': 'No recorded beneficiary found for given member_code'},
+                {"detail": "No beneficiary found for this lokos_member_code"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        beneficiary_data = BeneficiaryRecordedSerializer(br).data
-        eid = br.enterprise_id
+        enterprise_th = br.enterprise_id  # THIS IS TH_urid
 
-        enterprise_type = None
-        enterprise_data = None
-        loan_data = []
-        support_data = []
-        training_data = []
-        media_data = []
-        product_data = []
-        type_cat_data = []
-
-        # ---------- Existing / New enterprise branch (via BeneficiaryRecorded.enterprise_id) ----------
-        if eid:
-            existing = ExistingEnterprise.objects.filter(TH_urid=eid).first()
-            if existing:
-                enterprise_type = 'existing'
-                enterprise_data = ExistingEnterpriseSerializer(existing).data
-
-                # Loan details: only if has_taken_loan is True
-                if existing.has_taken_loan:
-                    loans = EnterpriseLoanDetail.objects.filter(enterprise_id=eid)
-                    loan_data = EnterpriseLoanDetailSerializer(loans, many=True).data
-
-                # Subsidy (support) details: only if has_receieved_subsidy is True
-                if existing.has_receieved_subsidy:
-                    supports = EnterpriseSupportDetail.objects.filter(enterprise_id=eid)
-                    support_data = EnterpriseSupportDetailSerializer(supports, many=True).data
-
-                # Training requirements:
-                #   - if is_training_received is False -> drop form_type="rec"
-                #   - if is_training_required is False -> drop form_type="req"
-                trainings_qs = EnterpriseTrainingReq.objects.filter(enterprise_id=eid)
-                if not existing.is_training_received:
-                    trainings_qs = trainings_qs.exclude(form_type='rec')
-                if not existing.is_training_required:
-                    trainings_qs = trainings_qs.exclude(form_type='req')
-                training_data = EnterpriseTrainingReqSerializer(trainings_qs, many=True).data
-
-                # Media: only for this existing enterprise (form_type="ex")
-                medias = EnterpriseMedia.objects.filter(enterprise_id=eid, form_type='ex')
-                media_data = EnterpriseMediaSerializer(medias, many=True).data
-
-                # Products: all EnterpriseProduct linked via enterprise_id
-                products = EnterpriseProduct.objects.filter(enterprise_id=eid)
-                product_data = EnterpriseProductSerializer(products, many=True).data
-
-                # Type categories: only for this existing enterprise (form_type="ex")
-                type_qs = EnterpriseTypeCategory.objects.filter(enterprise_id=eid, form_type='ex')
-                type_cat_data = EnterpriseTypeCategorySerializer(type_qs, many=True).data
-
-            else:
-                new_ent = NewEnterprise.objects.filter(TH_urid=eid).first()
-                if new_ent:
-                    enterprise_type = 'new'
-                    enterprise_data = NewEnterpriseSerializer(new_ent).data
-
-                    # For NewEnterprise, loan_amount is on main form; no separate LoanDetail.
-                    # Training requirements:
-                    trainings_qs = EnterpriseTrainingReq.objects.filter(enterprise_id=eid)
-                    if not new_ent.is_training_received:
-                        trainings_qs = trainings_qs.exclude(form_type='rec')
-                    if not new_ent.is_training_required:
-                        trainings_qs = trainings_qs.exclude(form_type='req')
-                    training_data = EnterpriseTrainingReqSerializer(trainings_qs, many=True).data
-
-                    # Media: only for this new enterprise (form_type="new")
-                    medias = EnterpriseMedia.objects.filter(enterprise_id=eid, form_type='new')
-                    media_data = EnterpriseMediaSerializer(medias, many=True).data
-
-                    # Products: all EnterpriseProduct linked via enterprise_id
-                    products = EnterpriseProduct.objects.filter(enterprise_id=eid)
-                    product_data = EnterpriseProductSerializer(products, many=True).data
-
-                    # Type categories: only for this new enterprise (form_type="new")
-                    type_qs = EnterpriseTypeCategory.objects.filter(enterprise_id=eid, form_type='new')
-                    type_cat_data = EnterpriseTypeCategorySerializer(type_qs, many=True).data
-
-        # ---------- No-Enterprise branch (linked via recorded_benef_id) ----------
-        no_ent_form = NoEnterpriseForm.objects.filter(recorded_benef_id=br.TH_urid).first()
-        no_ent_data = None
-        no_ent_training_data = []
-        wage_data = []
-
-        if no_ent_form:
-            no_ent_data = NoEnterpriseFormSerializer(no_ent_form).data
-
-            # Training requirements (NoEnterprise):
-            #   - only when is_training_required is True
-            #   - enterprise_id in EnterpriseTrainingReq = NoEnterpriseForm.TH_urid
-            if no_ent_form.is_training_required:
-                no_ent_treqs = EnterpriseTrainingReq.objects.filter(
-                    enterprise_id=no_ent_form.TH_urid,
-                    form_type='req',
-                )
-                no_ent_training_data = EnterpriseTrainingReqSerializer(no_ent_treqs, many=True).data
-
-            # Wage preferences when reason is "Interested in Wage Employment"
-            reason = (no_ent_form.no_int_reason or '').strip()
-            if reason == 'Interested in Wage Employment':
-                wages = NoEnterpriseWage.objects.filter(enterprise_id=no_ent_form.TH_urid)
-                wage_data = NoEnterpriseWageSerializer(wages, many=True).data
-
-        # ---------- Assemble response ----------
-        response_obj = {
-            'beneficiary': beneficiary_data,
-            'enterprise_type': enterprise_type,
-            'enterprise': enterprise_data,
-            'enterprise_loan_details': loan_data,
-            'enterprise_support_details': support_data,
-            'enterprise_training_reqs': training_data,
-            'enterprise_media': media_data,
-            'enterprise_products': product_data,
-            'enterprise_type_categories': type_cat_data,
-            'no_enterprise_form': no_ent_data,
-            'no_enterprise_training_reqs': no_ent_training_data,
-            'no_enterprise_wage_details': wage_data,
+        response = {
+            "beneficiary": BeneficiaryRecordedSerializer(br).data,
+            "enterprise_type": None,
+            "enterprise": None,
+            "existing_enterprise": None,
+            "shared": {
+                "enterprise_types": [],
+                "enterprise_support": [],
+                "mandatory_fund": [],
+                "training": [],
+            },
         }
 
-        # Optional top-level field projection
-        fields_param = request.GET.get('fields')
-        if fields_param:
-            allowed_keys = _parse_csv_param(fields_param)
-            response_obj = {k: v for k, v in response_obj.items() if k in allowed_keys}
+        if not enterprise_th:
+            return Response(response)
 
-        return Response(response_obj)
+        # --------------------------------------------------
+        # 2. EXISTING ENTERPRISE
+        # --------------------------------------------------
+        existing = ExistingEnterprise.objects.filter(
+            TH_urid=enterprise_th,
+            is_active=True
+        ).first()
+
+        if existing:
+            response["enterprise_type"] = "existing"
+            response["enterprise"] = ExistingEnterpriseSerializer(existing).data
+
+            # ---- FK CHILD TABLES (use enterprise_id__id) ----
+            licenses = EnterpriseLicenses.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            )
+
+            loans = EnterpriseLoanDetail.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            )
+
+            subsidies = EnterpriseSubsidyDetail.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            )
+
+            shop = EnterpriseShop.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            ).first()
+
+            shop_media = (
+                ShopMedia.objects.filter(product_id=shop.id, is_active=True)
+                if shop else []
+            )
+
+            products = EnterpriseProduct.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            )
+
+            product_data = []
+            for p in products:
+                pdata = EnterpriseProductSerializer(p).data
+                pdata["product_media"] = ProductMediaSerializer(
+                    ProductMedia.objects.filter(product_id=p.id, is_active=True),
+                    many=True
+                ).data
+                product_data.append(pdata)
+
+            enterprise_media = EnterpriseMedia.objects.filter(
+                enterprise_id=existing.id, is_active=True
+            )
+
+            response["existing_enterprise"] = {
+                "licenses": EnterpriseLicensesSerializer(licenses, many=True).data,
+                "loan_details": EnterpriseLoanDetailSerializer(loans, many=True).data,
+                "subsidy_details": EnterpriseSubsidyDetailSerializer(subsidies, many=True).data,
+                "shop": EnterpriseShopSerializer(shop).data if shop else None,
+                "shop_media": ShopMediaSerializer(shop_media, many=True).data,
+                "products": product_data,
+                "enterprise_media": EnterpriseMediaSerializer(enterprise_media, many=True).data,
+            }
+
+        else:
+            # --------------------------------------------------
+            # 3. NEW ENTERPRISE
+            # --------------------------------------------------
+            new_ent = NewEnterprise.objects.filter(
+                TH_urid=enterprise_th,
+                is_active=True
+            ).first()
+
+            if new_ent:
+                response["enterprise_type"] = "new"
+                response["enterprise"] = NewEnterpriseSerializer(new_ent).data
+
+        # --------------------------------------------------
+        # 4. SHARED TABLES (TH_urid based)
+        # --------------------------------------------------
+        response["shared"]["enterprise_types"] = EnterpriseTypeCategorySerializer(
+            EnterpriseTypeCategory.objects.filter(
+                enterprise_id=enterprise_th, is_active=True
+            ),
+            many=True
+        ).data
+
+        response["shared"]["enterprise_support"] = EnterpriseSupportSerializer(
+            EnterpriseSupport.objects.filter(
+                enterprise_id=enterprise_th, is_active=True
+            ),
+            many=True
+        ).data
+
+        response["shared"]["mandatory_fund"] = EnterpriseMandatoryFundSerializer(
+            EnterpriseMandatoryFund.objects.filter(
+                enterprise_id=enterprise_th, is_active=True
+            ),
+            many=True
+        ).data
+
+        # --------------------------------------------------
+        # 5. TRAINING + CERTIFICATES
+        # --------------------------------------------------
+        trainings = EnterpriseTrainingReq.objects.filter(
+            enterprise_id=enterprise_th, is_active=True
+        )
+
+        training_data = []
+        for t in trainings:
+            tdata = EnterpriseTrainingReqSerializer(t).data
+            tdata["certificates"] = TrainingCertificatesSerializer(
+                TrainingCertificates.objects.filter(
+                    training_id=t.id, is_active=True
+                ),
+                many=True
+            ).data
+            training_data.append(tdata)
+
+        response["shared"]["training"] = training_data
+
+        return Response(response)

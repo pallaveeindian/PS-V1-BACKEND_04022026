@@ -22,13 +22,13 @@ from django.utils import timezone
 
 from rest_framework.views import APIView
 from rest_framework import status,generics
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.conf import settings
 from datetime import datetime
 from rest_framework import serializers
-
+from rest_framework.authentication import SessionAuthentication
 from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -42,6 +42,7 @@ from TMS.api.serializers import *
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.exceptions import PermissionDenied
 
 # -------------------------------------------------------------------
 # Common helpers
@@ -66,6 +67,12 @@ def parse_csv_param(val):
     if not val:
         return []
     return [p.strip() for p in val.split(',') if p.strip()]
+
+def get_master_user_from_request(request):
+    try:
+        return MasterUser.objects.get(username=request.user.username)
+    except MasterUser.DoesNotExist:
+        return None
 
 # -------------------------------------------------------------------
 # Swagger tagging helpers (drf_yasg)
@@ -103,6 +110,21 @@ class ClosureSchema(SwaggerAutoSchema):
 class ReportsSchema(SwaggerAutoSchema):
     def get_tags(self, operation_keys=None):
         return ["TMS – Reports"]
+
+# -------------------------------------------------------------------
+# Get MasterUser
+# -------------------------------------------------------------------
+
+def get_master_user(request):
+    django_user = request.user
+
+    if not django_user or not django_user.is_authenticated:
+        raise PermissionDenied("Authentication required.")
+
+    try:
+        return MasterUser.objects.get(username=django_user.username)
+    except MasterUser.DoesNotExist:
+        raise PermissionDenied("Master user not found.")
 
 # -------------------------------------------------------------------
 # Base ViewSet with soft-delete support
@@ -312,15 +334,66 @@ class TrainingPartnerBankViewSet(BaseTMSModelViewSet):
 
 
 class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
-    """
-    CRUD for TrainingPartnerCP (contact persons).
-    """
-    swagger_schema = PartnersSchema
-    queryset = tms_models.TrainingPartnerCP.objects.select_related("partner", "master_user")
     serializer_class = TrainingPartnerCPSerializer
-    filterset_fields = ["partner", "master_user"]
-    search_fields = ["name", "mobile_number", "email"]
+    queryset = tms_models.TrainingPartnerCP.objects.select_related(
+        "partner", "master_user"
+    )
+    filterset_fields = ["id", "partner", "master_user"]
+    
+    def get_queryset(self):
+        auth_user = self.request.user
 
+        try:
+            master_user = core_models.MasterUser.objects.get(
+                username=auth_user.username
+            )
+        except core_models.MasterUser.DoesNotExist:
+            return tms_models.TrainingPartnerCP.objects.none()
+
+        return (
+            super().get_queryset()
+            .filter(partner__master_user=master_user)
+        )
+
+    def perform_create(self, serializer):
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.get(
+            username=auth_user.username
+        )
+
+        partner = tms_models.TrainingPartner.objects.filter(
+            master_user=master_user
+        ).first()
+
+        if not partner:
+            raise NotFound("Training Partner not found")
+
+        serializer.save(
+            partner=partner,
+            created_by=master_user
+        )
+        
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        master_user = get_master_user_from_request(self.request)
+
+        if not master_user or instance.partner.master_user != master_user:
+            raise PermissionDenied("Unauthorized update attempt")
+
+        serializer.save(updated_by=master_user)  
+
+    def get_object(self):
+        obj = super().get_object()
+        master_user = get_master_user_from_request(self.request)
+
+        if not master_user:
+            raise NotFound()
+
+        if not obj.partner or obj.partner.master_user != master_user:
+            raise NotFound()
+
+        return obj     
 
 class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     """
@@ -371,16 +444,35 @@ class TrainingPartnerCentreRoomsViewSet(BaseTMSModelViewSet):
     serializer_class = TrainingPartnerCentreRoomsSerializer
     filterset_fields = ["centre"]
 
-
+    
 class TPCPToCentreViewSet(BaseTMSModelViewSet):
     """
     Maps TrainingPartnerCP → TrainingPartnerCentre.
     Used when partner assigns contact person for centre.
     """
     swagger_schema = PartnersSchema
-    queryset = tms_models.TPCPToCentre.objects.select_related("contact_person", "allocated_centre")
-    serializer_class = TPCPToCentreSerializer   
+    serializer_class = TPCPToCentreSerializer
     filterset_fields = ["contact_person", "allocated_centre", "created_by"]
+    
+    def get_queryset(self):
+        return (
+            tms_models.TPCPToCentre.objects
+            .select_related("contact_person", "allocated_centre")
+            .filter(
+                is_active=True
+            )
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        if instance.created_by != self.request.user:
+            raise PermissionDenied("Unauthorized.")
+        instance.delete(by_user=self.request.user)
     
 class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     """
@@ -406,6 +498,28 @@ class TrainingPartnerSubmissionViewSet(BaseTMSModelViewSet):
     filterset_fields = ["partner", "centre", "category"]
     parser_classes = [MultiPartParser, FormParser]
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def download_submission(request, pk):
+    submission = get_object_or_404(
+        tms_models.TrainingPartnerSubmission,
+        pk=pk,
+        partner__master_user__username=request.user.username,
+        is_active=1,
+    )
+
+    safe_path = os.path.normpath(submission.file.name).lstrip("/")
+
+    response = HttpResponse()
+    response["X-Accel-Redirect"] = f"/media/{safe_path}"
+    response["Content-Type"] = "application/octet-stream"
+    response["Content-Disposition"] = (
+        f'attachment; filename="{os.path.basename(safe_path)}"'
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "no-store"
+
+    return response
 
 # -------------------------------------------------------------------
 # Targets & Authority
@@ -603,8 +717,22 @@ class BatchViewSet(BaseTMSModelViewSet):
     """
     swagger_schema = BatchesSchema
     queryset = (
-        tms_models.Batch.objects.select_related("request", "centre")
-        .prefetch_related("beneficiary_participations", "trainer_participations", "master_trainer_participations")
+        tms_models.Batch.objects
+        .select_related("request", "centre")
+        .prefetch_related(
+            Prefetch(
+                "beneficiary_participations",
+                queryset=tms_models.BatchBeneficiary.objects.filter(is_active=True),
+            ),
+            Prefetch(
+                "trainer_participations",
+                queryset=tms_models.BatchTrainer.objects.filter(is_active=True),
+            ),
+            Prefetch(
+                "master_trainer_participations",
+                queryset=tms_models.BatchMasterTrainer.objects.filter(is_active=True),
+            ),
+        )
     )
     serializer_class = BatchSerializer
     filterset_fields = ["request", "centre", "status", "start_date", "end_date", "created_by"]
@@ -644,30 +772,44 @@ class BatchViewSet(BaseTMSModelViewSet):
             if beneficiary_ids:
                 existing = set(
                     tms_models.BatchBeneficiary.objects.filter(
-                        batch=batch, beneficiary_id__in=beneficiary_ids
+                        batch=batch,
+                        beneficiary_id__in=beneficiary_ids,
+                        is_active=True,
                     ).values_list("beneficiary_id", flat=True)
                 )
+
+                # Reactivate soft-deleted beneficiaries
+                tms_models.BatchBeneficiary.objects.filter(
+                    batch=batch,
+                    beneficiary_id__in=beneficiary_ids,
+                    is_active=False,
+                ).update(is_active=True)
+
                 new_ids = [bid for bid in beneficiary_ids if bid not in existing]
-                to_create = [
-                    tms_models.BatchBeneficiary(batch=batch, beneficiary_id=bid)
-                    for bid in new_ids
-                ]
-                if to_create:
-                    tms_models.BatchBeneficiary.objects.bulk_create(to_create)
+                tms_models.BatchBeneficiary.objects.bulk_create(
+                    [tms_models.BatchBeneficiary(batch=batch, beneficiary_id=bid) for bid in new_ids]
+                )
 
             if trainer_ids:
                 existing = set(
                     tms_models.BatchTrainer.objects.filter(
-                        batch=batch, trainer_id__in=trainer_ids
+                        batch=batch,
+                        trainer_id__in=trainer_ids,
+                        is_active=True,
                     ).values_list("trainer_id", flat=True)
                 )
+
+                # Reactivate soft-deleted trainers
+                tms_models.BatchTrainer.objects.filter(
+                    batch=batch,
+                    trainer_id__in=trainer_ids,
+                    is_active=False,
+                ).update(is_active=True)
+
                 new_ids = [tid for tid in trainer_ids if tid not in existing]
-                to_create = [
-                    tms_models.BatchTrainer(batch=batch, trainer_id=tid)
-                    for tid in new_ids
-                ]
-                if to_create:
-                    tms_models.BatchTrainer.objects.bulk_create(to_create)
+                tms_models.BatchTrainer.objects.bulk_create(
+                    [tms_models.BatchTrainer(batch=batch, trainer_id=tid) for tid in new_ids]
+                )
 
         serializer = BatchDetailSerializer(batch, context={"request": request})
         return Response(serializer.data)
@@ -742,6 +884,7 @@ class BatchesListView(APIView):
 
         qs = (
             tms_models.Batch.objects
+            .filter(is_active=True)
             .select_related(
                 "request",
                 "request__district",
