@@ -1,6 +1,12 @@
 # core/api/auth_views.py
+import random
+import string
+import io
+import base64
+from PIL import Image, ImageDraw, ImageFont
 from django.conf import settings
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -26,14 +32,87 @@ def _get_refresh_cookie_max_age():
     # fallback: 7 days
     return 7 * 24 * 3600
 
+# Captcha for Login
+class CaptchaView(APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    CAPTCHA_SESSION_KEY = "login_captcha"
+    CAPTCHA_EXPIRY_SECONDS = 180  # 3 minutes
+
+    def get(self, request):
+        # Generate random text
+        captcha_text = "".join(
+            random.choices(string.ascii_uppercase + string.digits, k=6)
+        )
+
+        # Save to session
+        request.session[self.CAPTCHA_SESSION_KEY] = {
+            "value": captcha_text,
+            "expires": (timezone.now() + timedelta(seconds=self.CAPTCHA_EXPIRY_SECONDS)).timestamp(),
+        }
+
+        # Create image
+        image = Image.new("RGB", (180, 50), (255, 255, 255))
+        draw = ImageDraw.Draw(image)
+
+        # Optional: use default font
+        draw.text((40, 10), captcha_text, fill=(0, 0, 0))
+
+        # Add noise lines
+        for _ in range(5):
+            draw.line(
+                (
+                    random.randint(0, 180),
+                    random.randint(0, 50),
+                    random.randint(0, 180),
+                    random.randint(0, 50),
+                ),
+                fill=(0, 0, 0),
+                width=1,
+            )
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+
+        return Response({"image": f"data:image/png;base64,{img_str}"})
+
 class LoginView(APIView):
     permission_classes = (permissions.AllowAny,)
     MAX_LOGIN_ATTEMPTS = 4
-
-
+    
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
+        
+        app_client = request.headers.get("X-App-Client")
+        CAPTCHA_ENABLED_APPS = {"TMS_WEB"} 
+
+        if app_client in CAPTCHA_ENABLED_APPS:
+            captcha_input = request.data.get("captcha")
+            captcha_data = request.session.get("login_captcha")
+
+            if not captcha_input or not captcha_data:
+                return Response(
+                    {"detail": "Captcha required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # expiry check
+            if timezone.now().timestamp() > captcha_data.get("expires", 0):
+                return Response(
+                    {"detail": "Captcha expired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if captcha_input.strip().upper() != captcha_data.get("value"):
+                return Response(
+                    {"detail": "Invalid captcha"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # one-time use
+            request.session.pop("login_captcha", None)
 
         if not username or not password:
             return Response(

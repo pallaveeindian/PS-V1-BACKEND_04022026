@@ -6,6 +6,8 @@ urlpatterns = [
     # login returns access + refresh (also sets HttpOnly cookie ps_refresh)
     path('login/', auth_views.LoginView.as_view(), name='login'),
 
+    path("captcha/", auth_views.CaptchaView.as_view()),
+
     # Keep body-based refresh for backward compatibility
     path('refresh/', auth_views.RefreshTokenView.as_view(), name='token_refresh'),
 

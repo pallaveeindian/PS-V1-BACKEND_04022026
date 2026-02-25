@@ -42,6 +42,13 @@ SHG_CACHE_TTL = int(os.getenv('SHG_CACHE_TTL', '300'))
 CACHE_TTL = int(os.getenv('CACHE_TTL', '300'))
 
 # =========================
+# Session Settings
+# =========================
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = False 
+SESSION_COOKIE_HTTPONLY = True
+
+# =========================
 # APPS
 # =========================
 INSTALLED_APPS = [
@@ -239,6 +246,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-api-id',
     'x-api-key',
+    'x-app-client',
 ]
 
 # Upload limits
