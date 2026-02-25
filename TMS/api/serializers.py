@@ -117,7 +117,69 @@ class TrainingPartnerCPSerializer(SoftDeleteModelSerializer):
         model = tms_models.TrainingPartnerCP
         fields = "__all__"
 
+    # -----------------------------
+    # Field level validations
+    # -----------------------------
+
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Name is required")
+
+        value = value.strip()
+
+        if len(value) > 50:
+            raise serializers.ValidationError(
+                "Name must be max 50 characters"
+            )
+
+        if not re.match(r"^[A-Za-z\s]+$", value):
+            raise serializers.ValidationError(
+                "Only alphabets (A–Z, a–z) and spaces are allowed"
+            )
+
+        return value
+
+    def validate_mobile_number(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                "Mobile number is required"
+            )
+
+        if not re.match(r"^\d{10}$", value):
+            raise serializers.ValidationError(
+                "Mobile number must be exactly 10 digits"
+            )
+
+        return value
+
+    def validate_email(self, value):
+        if not value:
+            raise serializers.ValidationError("Email is required")
+
+        # DRF EmailField already validates format,
+        # but keeping explicit message for consistency
+        email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+
+        if not re.match(email_regex, value):
+            raise serializers.ValidationError(
+                "Invalid email format (example@domain.com)"
+            )
+
+        return value
+
+    def validate_address(self, value):
+        if value and len(value) > 150:
+            raise serializers.ValidationError(
+                "Address must be max 150 characters"
+            )
+        return value
+
+    # -----------------------------
+    # Object level validation
+    # -----------------------------
+
     def validate(self, attrs):
+
         # ---- master_user validation ----
         master_user = attrs.get(
             "master_user",
@@ -169,27 +231,51 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
         model = tms_models.TPCPToCentre
         fields = "__all__"
         exclude = ["created_by", "updated_by", "deleted_by"]
- 
+
     def validate(self, attrs):
         request = self.context["request"]
-        user = request.user
+
+        auth_user = request.user
+        master_user = core_models.MasterUser.objects.filter(
+            username=auth_user.username
+        ).first()
+
+        if not master_user:
+            raise serializers.ValidationError("Invalid user.")
+
+        partner = tms_models.TrainingPartner.objects.filter(
+            master_user=master_user,
+            is_active=True
+        ).first()
+
+        if not partner:
+            raise serializers.ValidationError("Training Partner not found.")
 
         cp = attrs.get("contact_person")
         centre = attrs.get("allocated_centre")
 
-        # Ensure contact person belongs to logged-in user's partner
-        if cp.created_by != user:
+        if not cp or not centre:
+            raise serializers.ValidationError("Invalid assignment data.")
+
+        # 🔐 Ensure CP belongs to logged-in partner
+        if cp.partner != partner:
             raise serializers.ValidationError(
                 "Unauthorized contact person selection."
             )
 
-        # Ensure centre belongs to same partner
-        if centre.created_by != user:
+        # 🔐 Ensure centre belongs to same partner
+        if centre.partner != partner:
             raise serializers.ValidationError(
                 "Unauthorized centre selection."
             )
 
-        return attrs        
+        # 🔐 Ensure CP and Centre belong to SAME partner
+        if cp.partner_id != centre.partner_id:
+            raise serializers.ValidationError(
+                "Contact person and centre must belong to same partner."
+            )
+
+        return attrs
         
         
 class TPCPToCentreDetailSerializer(SoftDeleteModelSerializer):

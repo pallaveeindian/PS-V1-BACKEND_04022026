@@ -453,26 +453,67 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     swagger_schema = PartnersSchema
     serializer_class = TPCPToCentreSerializer
     filterset_fields = ["contact_person", "allocated_centre", "created_by"]
-    
+
+    # ----------------------------------
+    # IDOR Patch Ref POC3
+    # ----------------------------------
+    def _get_partner(self):
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.filter(
+            username=auth_user.username
+        ).first()
+
+        if not master_user:
+            raise PermissionDenied("Invalid user.")
+
+        partner = tms_models.TrainingPartner.objects.filter(
+            master_user=master_user,
+            is_active=True
+        ).first()
+
+        if not partner:
+            raise NotFound("Training Partner not found")
+
+        return master_user, partner
+
     def get_queryset(self):
+        master_user, partner = self._get_partner()
+
         return (
             tms_models.TPCPToCentre.objects
-            .select_related("contact_person", "allocated_centre")
+            .select_related(
+                "contact_person__partner",
+                "allocated_centre__partner",
+            )
             .filter(
-                is_active=True
+                is_active=True,
+                contact_person__partner=partner
             )
         )
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        master_user, partner = self._get_partner()
+
+        serializer.save(created_by=master_user)
 
     def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+        master_user, partner = self._get_partner()
+        instance = self.get_object()
+
+        if instance.contact_person.partner != partner:
+            raise PermissionDenied("Unauthorized access.")
+
+        serializer.save(updated_by=master_user)
 
     def perform_destroy(self, instance):
-        if instance.created_by != self.request.user:
-            raise PermissionDenied("Unauthorized.")
-        instance.delete(by_user=self.request.user)
+        master_user, partner = self._get_partner()
+
+        if instance.contact_person.partner != partner:
+            raise PermissionDenied("Unauthorized access.")
+
+        instance.delete(by_user=master_user)
+        
     
 class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     """
