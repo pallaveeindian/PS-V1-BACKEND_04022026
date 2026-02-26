@@ -131,6 +131,10 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
         if path.startswith("/api/v1/auth/"):
             return None
         
+        # ✅ Allow health endpoints (no JWT required)
+        if path.startswith("/api/v1/health"):
+            return None        
+        
         request._audit_context = None
 
         # Lookup APIs (API key based)

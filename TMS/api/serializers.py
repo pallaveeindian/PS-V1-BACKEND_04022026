@@ -230,7 +230,6 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TPCPToCentre
         fields = "__all__"
-        exclude = ["created_by", "updated_by", "deleted_by"]
 
     def validate(self, attrs):
         request = self.context["request"]

@@ -13,22 +13,35 @@ load_dotenv("/etc/pragati_setu.env")
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY not set in environment")
-DEBUG = False
-ALLOWED_HOSTS = [
-    "72.61.255.170",
-    "localhost",
-    "127.0.0.1",
-]
+DEBUG = True
+# ALLOWED_HOSTS = [
+#     "thdevops.co.in",
+#     "www.thdevops.co.in",
+#     "66.116.207.88",
+# ]
+ALLOWED_HOSTS = ['*']
 
 CORS_ALLOWED_ORIGINS = [
-    "http://72.61.255.170:8080",
-    "http://localhost:5174",
-    "http://localhost:5173",
-    "http://localhost:8081",
+    "https://thdevops.co.in",
 ]
 
 RECAPTCHA_SECRET_KEY = os.getenv("RS_KEY")
 RECAPTCHA_MIN_SCORE = 0.5
+
+SECURE_SSL_REDIRECT = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -45,8 +58,6 @@ CACHE_TTL = int(os.getenv('CACHE_TTL', '300'))
 # Session Settings
 # =========================
 SESSION_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SECURE = False 
-SESSION_COOKIE_HTTPONLY = True
 
 # =========================
 # APPS
@@ -138,6 +149,7 @@ CONN_MAX_AGE = 600
 
 # Router to keep core (master_*) read-only for this Django project
 DATABASE_ROUTERS = ['core.dbrouters.MasterDBRouter']
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
 # =========================
 # CACHES
@@ -215,8 +227,8 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "user": "2500000/min",
-        "anon": "5/min",
+        "user": "1000/min",
+        "anon": "10/min",
     },    
 }
 
@@ -247,6 +259,14 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-api-id',
     'x-api-key',
     'x-app-client',
+]
+
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+SECURE_CROSS_ORIGIN_RESOURCE_POLICY = "same-origin"
+SECURE_CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp"
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://thdevops.co.in",
 ]
 
 # Upload limits
