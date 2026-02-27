@@ -1,2 +1,5 @@
 .env
 media/
+
+# Django Settings
+pragati_setu/settings.py
