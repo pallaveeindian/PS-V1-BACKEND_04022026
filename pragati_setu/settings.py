@@ -13,13 +13,12 @@ load_dotenv("/etc/pragati_setu.env")
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY not set in environment")
-DEBUG = True
-# ALLOWED_HOSTS = [
-#     "thdevops.co.in",
-#     "www.thdevops.co.in",
-#     "66.116.207.88",
-# ]
-ALLOWED_HOSTS = ['*']
+DEBUG = False
+ALLOWED_HOSTS = [
+    "thdevops.co.in",
+    "www.thdevops.co.in",
+    "66.116.207.88",
+]
 
 CORS_ALLOWED_ORIGINS = [
     "https://thdevops.co.in",
@@ -227,7 +226,7 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "user": "1000/min",
+        "user": "2500000/min",
         "anon": "10/min",
     },    
 }

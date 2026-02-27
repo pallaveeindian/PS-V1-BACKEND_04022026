@@ -148,6 +148,7 @@ class UpsrlmAnalyticsView(APIView):
             return Response({
                 "block_id": block.block.block_id,
                 "block_name": block.block.block_name_en,
+                "is_aspirational": block.block.is_aspirational,
                 "total_vos": block.total_vos,
                 "total_clfs": block.total_clfs,
                 "total_shgs": block.total_shgs,
@@ -212,6 +213,7 @@ class UpsrlmAnalyticsView(APIView):
             data.append({
                 "block_id": b.block.block_id,
                 "block_name": b.block.block_name_en,
+                "is_aspirational": b.block.is_aspirational,
                 "total_vos": b.total_vos,
                 "total_clfs": b.total_clfs,
                 "total_shgs": b.total_shgs,
