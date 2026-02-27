@@ -3,7 +3,7 @@ import random
 import string
 import io
 import base64
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
@@ -48,28 +48,61 @@ class CaptchaView(APIView):
         # Save to session
         request.session[self.CAPTCHA_SESSION_KEY] = {
             "value": captcha_text,
-            "expires": (timezone.now() + timedelta(seconds=self.CAPTCHA_EXPIRY_SECONDS)).timestamp(),
+            "expires": (
+                timezone.now() + timedelta(seconds=self.CAPTCHA_EXPIRY_SECONDS)
+            ).timestamp(),
         }
 
-        # Create image
-        image = Image.new("RGB", (180, 50), (255, 255, 255))
+        # ----------------------------
+        # Create Clean Professional CAPTCHA
+        # ----------------------------
+        width, height = 300, 100
+        image = Image.new("RGB", (width, height), (255, 255, 255))
         draw = ImageDraw.Draw(image)
 
-        # Optional: use default font
-        draw.text((40, 10), captcha_text, fill=(0, 0, 0))
-
-        # Add noise lines
-        for _ in range(5):
-            draw.line(
-                (
-                    random.randint(0, 180),
-                    random.randint(0, 50),
-                    random.randint(0, 180),
-                    random.randint(0, 50),
-                ),
-                fill=(0, 0, 0),
-                width=1,
+        # Load Good Bold Font (IMPORTANT)
+        try:
+            font = ImageFont.truetype(
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 64
             )
+        except:
+            font = ImageFont.load_default()
+
+        # Calculate spacing
+        char_width = width // 8
+        x = 25
+
+        for char in captcha_text:
+            y_offset = random.randint(-5, 5)
+
+            # Slight rotation per character
+            char_image = Image.new("RGBA", (80, 80), (255, 255, 255, 0))
+            char_draw = ImageDraw.Draw(char_image)
+            char_draw.text((10, 5), char, font=font, fill=(20, 20, 20))
+
+            rotated = char_image.rotate(random.randint(-15, 15), expand=1)
+            image.paste(rotated, (x, 15 + y_offset), rotated)
+
+            x += char_width
+
+        # ----------------------------
+        # Add LIGHT noise dots only
+        # ----------------------------
+        for _ in range(150):
+            draw.point(
+                (random.randint(0, width), random.randint(0, height)),
+                fill=(180, 180, 180),
+            )
+
+        # Very light decorative line (optional)
+        draw.line(
+            (0, random.randint(30, 70), width, random.randint(30, 70)),
+            fill=(200, 200, 200),
+            width=2,
+        )
+        
+        # Slight blur for smooth look
+        image = image.filter(ImageFilter.SMOOTH)
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
