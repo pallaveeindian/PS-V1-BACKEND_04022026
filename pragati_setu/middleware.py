@@ -20,6 +20,7 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import AccessToken, TokenError
 
 from core.models import MasterUser
+from django.http import HttpResponse
 
 #  AUDIT ADD ONS
 from api_audit.models import GlobalApiAudit, AppApiAudit
@@ -123,6 +124,24 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
     def process_request(self, request):
         path = request.path or ""
 
+        # ---------------------------------------------
+        # Options Method Patch Ref POC7 // SA-Round 2
+        # ---------------------------------------------
+        if request.method == "OPTIONS":
+            response = HttpResponse(status=204)
+
+            response["Access-Control-Allow-Origin"] = "http://72.61.255.170:8080"
+            response["Access-Control-Allow-Headers"] = (
+                "authorization, content-type, x-api-id, x-api-key"
+            )
+            response["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, PATCH, DELETE"
+            )
+            response["Access-Control-Max-Age"] = "86400"
+            response.headers.pop("Allow", None)
+
+            return response
+
         # Non-API paths
         if not path.startswith("/api/"):
             return None
@@ -178,6 +197,12 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
         return None
 
     def process_response(self, request, response):
+        
+        # ---------------------------------------------
+        # No more Allowed Methods exposure Patch Ref POC7 // SA-Round 2
+        # ---------------------------------------------
+        response.headers.pop("Allow", None)       
+        
         ctx = getattr(request, "_audit_context", None)
 
         if ctx and response.status_code < 400:

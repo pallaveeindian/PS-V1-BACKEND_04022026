@@ -14,18 +14,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY not set in environment")
 DEBUG = False
-ALLOWED_HOSTS = [
-    "72.61.255.170",
-    "localhost",
-    "127.0.0.1",
-]
+ALLOWED_HOSTS = ['*']
 
-CORS_ALLOWED_ORIGINS = [
-    "http://72.61.255.170:8080",
-    "http://localhost:5174",
-    "http://localhost:5173",
-    "http://localhost:8081",
-]
+# CORS_ALLOWED_ORIGINS = ['*']
 
 RECAPTCHA_SECRET_KEY = os.getenv("RS_KEY")
 RECAPTCHA_MIN_SCORE = 0.5
@@ -240,7 +231,7 @@ SIMPLE_JWT = {
 }
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True 
 
 CORS_ALLOW_HEADERS = list(default_headers) + [

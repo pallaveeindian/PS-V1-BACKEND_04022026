@@ -230,7 +230,6 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TPCPToCentre
         fields = "__all__"
-        exclude = ["created_by", "updated_by", "deleted_by"]
 
     def validate(self, attrs):
         request = self.context["request"]
@@ -273,6 +272,26 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
         if cp.partner_id != centre.partner_id:
             raise serializers.ValidationError(
                 "Contact person and centre must belong to same partner."
+            )
+
+        # -------------------------------
+        # 🚫 Prevent Duplicate Mapping
+        # -------------------------------
+        instance = getattr(self, "instance", None)
+
+        duplicate_qs = tms_models.TPCPToCentre.objects.filter(
+            contact_person=cp,
+            allocated_centre=centre,
+            contact_person__partner=partner,
+            is_active=True
+        )
+
+        if instance:
+            duplicate_qs = duplicate_qs.exclude(id=instance.id)
+
+        if duplicate_qs.exists():
+            raise serializers.ValidationError(
+                "This contact person is already assigned to this centre."
             )
 
         return attrs

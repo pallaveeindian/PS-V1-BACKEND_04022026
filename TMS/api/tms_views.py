@@ -42,7 +42,7 @@ from TMS.api.serializers import *
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 
 # -------------------------------------------------------------------
 # Common helpers
@@ -492,8 +492,17 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
             )
         )
 
+    # ----------------------------------
+    # IDOR Patch Ref POC3 // SA-Round 2
+    # ----------------------------------
     def perform_create(self, serializer):
         master_user, partner = self._get_partner()
+
+        cp = serializer.validated_data["contact_person"]
+        centre = serializer.validated_data["allocated_centre"]
+
+        if cp.partner != partner or centre.partner != partner:
+            raise PermissionDenied("Unauthorized assignment.")
 
         serializer.save(created_by=master_user)
 
@@ -511,6 +520,14 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
 
         if instance.contact_person.partner != partner:
             raise PermissionDenied("Unauthorized access.")
+
+        # ----------------------------------
+        # IDOR Patch Ref POC3 // SA-Round 2
+        # ----------------------------------
+        if instance.created_by != master_user:
+            raise PermissionDenied(
+                "Only the user who created this mapping can delete it."
+            )
 
         instance.delete(by_user=master_user)
         
