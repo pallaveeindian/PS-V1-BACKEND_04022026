@@ -253,7 +253,7 @@ class LoginView(APIView):
             str(refresh),
             max_age=_get_refresh_cookie_max_age(),
             httponly=True,
-            secure=True,
+            secure=False,
             samesite="Lax",
             path="/",
         )

@@ -440,6 +440,15 @@ class TRPUserScopeSerializer(SoftDeleteModelSerializer):
 # ----------------------------
 
 class TrainingRequestSerializer(SoftDeleteModelSerializer):
+    theme_id = serializers.IntegerField(
+        source='training_plan.theme_id',
+        read_only=True
+    )
+    theme_name = serializers.CharField(
+        source='training_plan.theme.theme_name',  
+        read_only=True
+    )
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
         fields = "__all__"

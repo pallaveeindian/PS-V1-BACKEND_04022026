@@ -76,6 +76,10 @@ class DeparmentSchema(SwaggerAutoSchema):
 class SupportCaptureSchema(SwaggerAutoSchema):
     def get_tags(self, operation_keys=None):
         return ["LDMS – Support Capture APIs"]
+    
+class MeetingSchema(SwaggerAutoSchema):
+    def get_tags(self, operation_keys=None):
+        return ["LDMS – DLCC & BLCC Meetings"]    
 
 # -------------------------------------------------------------------
 # Base ViewSet with soft-delete support
@@ -358,3 +362,49 @@ class BucketApprovalViewset (BaseLDMSModelViewSet):
             context={"request": request}
         )
         return Response(serializer.data)      
+    
+# DLCC / BLCC Meetings List VIew
+class DLCCMeetListViewSet(BaseLDMSModelViewSet):
+    """
+    CRUD for DLCC_Meeting_List.
+    """
+    swagger_schema = MeetingSchema
+    queryset = DLCC_Meeting_List.objects.all()
+    serializer_class = DLCCMeetListSerializer
+    filterset_fields = ["id", "district", "meeting_month"]
+    search_fields = ["created_by"]
+    ordering_fields = ["created_at", "updated_at", "notif_date"]    
+    
+class DLCCMeetViewSet(BaseLDMSModelViewSet):
+    """
+    CRUD for DLCC_Meeting.
+    """
+    swagger_schema = MeetingSchema
+    queryset = DLCC_Meeting.objects.all()
+    serializer_class = DLCC_Meeting
+    filterset_fields = ["id", "is_uploaded", "dlcc_meeting_list"]
+    search_fields = ["created_by"]
+    ordering_fields = ["created_at", "updated_at"]
+        
+class BLCCMeetListViewSet(BaseLDMSModelViewSet):
+    """
+    CRUD for BLCC_Meeting_List.
+    """
+    swagger_schema = MeetingSchema
+    queryset = BLCC_Meeting_List.objects.all()
+    serializer_class = BLCC_Meeting_List
+    filterset_fields = ["id", "district", "meeting_month"]
+    search_fields = ["created_by"]
+    ordering_fields = ["created_at", "updated_at", "blocks_notif_issued"]      
+    
+class BLCCMeetViewSet(BaseLDMSModelViewSet):
+    """
+    CRUD for BLCC_Meeting.
+    """
+    swagger_schema = MeetingSchema
+    queryset = BLCC_Meeting.objects.all()
+    serializer_class = BLCC_Meeting
+    filterset_fields = ["id", "is_uploaded", "blcc_meeting_list", "block"]
+    search_fields = ["created_by"]
+    ordering_fields = ["created_at", "updated_at", "meeting_date"]         
+    

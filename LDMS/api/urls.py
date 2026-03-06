@@ -59,6 +59,31 @@ router.register(
     basename="ldms-recorded-beneficiary-report",
 )
 
+router.register(
+    r"dlcc-meetings-list",
+    DLCCMeetListViewSet,
+    basename='dlcc-meetings-list',
+)
+
+router.register(
+    r"dlcc-meeting",
+    DLCCMeetViewSet,
+    basename='dlcc-meeting',
+)
+
+router.register(
+    r"blcc-meetings-list",
+    BLCCMeetListViewSet,
+    basename='blcc-meetings-list',
+)
+
+router.register(
+    r"blcc-meeting",
+    BLCCMeetViewSet,
+    basename='blcc-meeting',
+)
+
+
 urlpatterns = [
     path("", include(router.urls)),
     path(

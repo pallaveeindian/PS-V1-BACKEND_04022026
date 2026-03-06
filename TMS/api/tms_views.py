@@ -601,7 +601,8 @@ class TrainingRequestViewSet(BaseTMSModelViewSet):
     """
     swagger_schema = RequestsSchema
     queryset = (
-        tms_models.TrainingRequest.objects.select_related("training_plan", "partner")
+        tms_models.TrainingRequest.objects
+        .select_related("training_plan", "training_plan__theme", "partner")
         .prefetch_related("beneficiary_registrations", "trainer_registrations")
     )
     serializer_class = TrainingRequestSerializer
