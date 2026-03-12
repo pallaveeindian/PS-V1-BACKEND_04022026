@@ -510,8 +510,16 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
         master_user, partner = self._get_partner()
         instance = self.get_object()
 
+        # ----------------------------------
+        # IDOR Patch Ref POC3 // SA-Round 2
+        # ----------------------------------
         if instance.contact_person.partner != partner:
             raise PermissionDenied("Unauthorized access.")
+
+        if instance.created_by != master_user:
+            raise PermissionDenied(
+                "Only the user who created this mapping can update it."
+            )
 
         serializer.save(updated_by=master_user)
 

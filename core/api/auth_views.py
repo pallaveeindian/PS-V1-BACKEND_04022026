@@ -52,11 +52,12 @@ class CaptchaView(APIView):
         }
 
         # Create image
-        image = Image.new("RGB", (180, 50), (255, 255, 255))
+        image = Image.new("RGB", (300, 80), (255, 255, 255))
         draw = ImageDraw.Draw(image)
 
         # Optional: use default font
-        draw.text((40, 10), captcha_text, fill=(0, 0, 0))
+        font = ImageFont.truetype("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 48)
+        draw.text((60, 15), captcha_text, fill=(0, 0, 0), font=font)
 
         # Add noise lines
         for _ in range(5):
