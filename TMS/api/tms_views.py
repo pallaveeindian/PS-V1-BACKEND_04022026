@@ -36,7 +36,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg.inspectors import SwaggerAutoSchema
 from drf_yasg import openapi
 
-from core.models import MasterUser
+from core.models import MasterUser, MasterDistrictCategoryMapping
 from TMS import models as tms_models
 from TMS.api.serializers import *
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -351,8 +351,13 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
             return tms_models.TrainingPartnerCP.objects.none()
 
         return (
-            super().get_queryset()
-            .filter(partner__master_user=master_user)
+            super()
+            .get_queryset()
+            .filter(
+                Q(partner__master_user=master_user) |  # Training Partner Owner
+                Q(master_user=master_user)             # Contact Person
+            )
+            .distinct()
         )
 
     def perform_create(self, serializer):
@@ -378,10 +383,13 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
         instance = self.get_object()
         master_user = get_master_user_from_request(self.request)
 
-        if not master_user or instance.partner.master_user != master_user:
+        if not (
+            instance.partner.master_user == master_user
+            or instance.master_user == master_user
+        ):
             raise PermissionDenied("Unauthorized update attempt")
 
-        serializer.save(updated_by=master_user)  
+        serializer.save(updated_by=master_user)
 
     def get_object(self):
         obj = super().get_object()
@@ -390,10 +398,13 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
         if not master_user:
             raise NotFound()
 
-        if not obj.partner or obj.partner.master_user != master_user:
-            raise NotFound()
+        if not (
+            obj.partner.master_user == master_user
+            or obj.master_user == master_user
+        ):
+            raise PermissionDenied("Unauthorized access")
 
-        return obj     
+        return obj    
 
 class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     """
@@ -455,9 +466,9 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     filterset_fields = ["contact_person", "allocated_centre", "created_by"]
 
     # ----------------------------------
-    # IDOR Patch Ref POC3
+    # Access Resolver
     # ----------------------------------
-    def _get_partner(self):
+    def _get_access(self):
         auth_user = self.request.user
 
         master_user = core_models.MasterUser.objects.filter(
@@ -467,78 +478,93 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
         if not master_user:
             raise PermissionDenied("Invalid user.")
 
+        # Partner owner
         partner = tms_models.TrainingPartner.objects.filter(
             master_user=master_user,
             is_active=True
         ).first()
 
-        if not partner:
-            raise NotFound("Training Partner not found")
+        # Contact person
+        contact_person = tms_models.TrainingPartnerCP.objects.filter(
+            master_user=master_user,
+            is_active=True
+        ).first()
 
-        return master_user, partner
+        if not partner and not contact_person:
+            raise PermissionDenied("User has no partner access.")
 
+        return master_user, partner, contact_person
+
+    # ----------------------------------
+    # Queryset
+    # ----------------------------------
     def get_queryset(self):
-        master_user, partner = self._get_partner()
+        master_user, partner, contact_person = self._get_access()
 
-        return (
+        queryset = (
             tms_models.TPCPToCentre.objects
             .select_related(
                 "contact_person__partner",
                 "allocated_centre__partner",
             )
-            .filter(
-                is_active=True,
-                contact_person__partner=partner
-            )
+            .filter(is_active=True)
         )
 
+        # Partner owner → see all
+        if partner:
+            queryset = queryset.filter(contact_person__partner=partner)
+
+        # Contact person → see only their centres
+        if contact_person:
+            queryset = queryset.filter(contact_person=contact_person)
+
+        return queryset
+
     # ----------------------------------
-    # IDOR Patch Ref POC3 // SA-Round 2
+    # Create
     # ----------------------------------
     def perform_create(self, serializer):
-        master_user, partner = self._get_partner()
+        master_user, partner, contact_person = self._get_access()
 
-        cp = serializer.validated_data["contact_person"]
-        centre = serializer.validated_data["allocated_centre"]
-
-        if cp.partner != partner or centre.partner != partner:
-            raise PermissionDenied("Unauthorized assignment.")
+        # Only partner owner should assign centres
+        if not partner:
+            raise PermissionDenied("Only Training Partner can assign centres.")
 
         serializer.save(created_by=master_user)
 
+    # ----------------------------------
+    # Update
+    # ----------------------------------
     def perform_update(self, serializer):
-        master_user, partner = self._get_partner()
+        master_user, partner, contact_person = self._get_access()
         instance = self.get_object()
 
-        # ----------------------------------
-        # IDOR Patch Ref POC3 // SA-Round 2
-        # ----------------------------------
-        if instance.contact_person.partner != partner:
-            raise PermissionDenied("Unauthorized access.")
+        if partner:
+            if instance.contact_person.partner != partner:
+                raise PermissionDenied("Unauthorized access.")
 
-        if instance.created_by != master_user:
-            raise PermissionDenied(
-                "Only the user who created this mapping can update it."
-            )
+        if contact_person:
+            if instance.contact_person != contact_person:
+                raise PermissionDenied("Unauthorized access.")
 
         serializer.save(updated_by=master_user)
 
+    # ----------------------------------
+    # Delete
+    # ----------------------------------
     def perform_destroy(self, instance):
-        master_user, partner = self._get_partner()
+        master_user, partner, contact_person = self._get_access()
 
-        if instance.contact_person.partner != partner:
-            raise PermissionDenied("Unauthorized access.")
+        if partner:
+            if instance.contact_person.partner != partner:
+                raise PermissionDenied("Unauthorized access.")
 
-        # ----------------------------------
-        # IDOR Patch Ref POC3 // SA-Round 2
-        # ----------------------------------
-        if instance.created_by != master_user:
-            raise PermissionDenied(
-                "Only the user who created this mapping can delete it."
-            )
+        if contact_person:
+            if instance.contact_person != contact_person:
+                raise PermissionDenied("Unauthorized access.")
 
         instance.delete(by_user=master_user)
-        
+                
     
 class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     """
@@ -736,7 +762,7 @@ class TRBeneficiaryViewSet(BaseTMSModelViewSet):
         "training", "district", "block", "panchayat", "village"
     )
     serializer_class = TRBeneficiarySerializer
-    filterset_fields = ["training", "district", "block", "pld_status"]
+    filterset_fields = ["training", "district", "block", "pld_status", "training__partner",]
     search_fields = ["member_name", "lokos_member_code", "lokos_shg_code"]
 
     @swagger_auto_schema(
@@ -757,7 +783,7 @@ class TRTrainerViewSet(BaseTMSModelViewSet):
     swagger_schema = RequestsSchema
     queryset = tms_models.TRTrainer.objects.select_related("training", "trainer")
     serializer_class = TRTrainerSerializer
-    filterset_fields = ["training", "trainer" , "district" , "block"]
+    filterset_fields = ["training", "trainer" , "district" , "block", "training__partner",]
 
     @swagger_auto_schema(
         operation_summary="Retrieve trainer registration with nested training & trainer",
