@@ -2,8 +2,10 @@
 
 from django.db import transaction
 from rest_framework import serializers
+from django.db import IntegrityError
 
 from epSakhi.models import *
+from core.models import MasterPanchayat
 
 from core.api.serializers import (
     MasterPanchayatListSerializer,
@@ -39,7 +41,45 @@ class CRPEPSerializer(serializers.ModelSerializer):
     block = MasterBlockListSerializer(read_only=True)
     panchayat = MasterPanchayatListSerializer(read_only=True)
 
+    # -------- READ IDs (for response) --------
+    district_id = serializers.SerializerMethodField()
+    block_id = serializers.SerializerMethodField()
+    panchayat_id = serializers.SerializerMethodField()
+
+    # -------- WRITE IDs (for create/update) --------
+    district_write = serializers.PrimaryKeyRelatedField(
+        queryset=MasterDistrict.objects.all(),
+        source="district",
+        write_only=True
+    )
+
+    block_write = serializers.PrimaryKeyRelatedField(
+        queryset=MasterBlock.objects.all(),
+        source="block",
+        write_only=True
+    )
+
+    panchayat_write = serializers.PrimaryKeyRelatedField(
+        queryset=MasterPanchayat.objects.all(),
+        source="panchayat",
+        write_only=True
+    )
+
     master_user = MasterUserNestedSerializer(read_only=True)
+    master_user_id = serializers.PrimaryKeyRelatedField(
+        queryset=MasterUser.objects.all(),
+        source="master_user",
+        write_only=True
+    )
+
+    def get_district_id(self, obj):
+        return obj.district_id
+
+    def get_block_id(self, obj):
+        return obj.block_id
+
+    def get_panchayat_id(self, obj):
+        return obj.panchayat_id
 
     class Meta:
         model = CRPEP
@@ -55,10 +95,16 @@ class CRPEPSerializer(serializers.ModelSerializer):
             'district_id',
             'block_id',
             'panchayat_id',
+            
+            'district_write',
+            'block_write',
+            'panchayat_write',            
 
             'lokos_shg_code',
             'lokos_member_code',
             'nodal_clf',
+            
+            'master_user_id',
 
             # Nested
             'district',
@@ -80,11 +126,72 @@ class CRPEPSerializer(serializers.ModelSerializer):
             'updated_at',
             'deleted_at',
             'TH_urid',
-            'district',
-            'block',
-            'panchayat',
-            'master_user',
         ]
+
+    # -------------------------
+    # VALIDATIONS
+    # -------------------------
+
+    def validate_mobile_number(self, value):
+
+        if value and not value.isdigit():
+            raise serializers.ValidationError(
+                "Mobile number must contain only digits."
+            )
+
+        if value and len(value) != 10:
+            raise serializers.ValidationError(
+                "Mobile number must be 10 digits."
+            )
+
+        return value
+
+    def validate_marks_obtained(self, value):
+
+        if value is not None and value < 0:
+            raise serializers.ValidationError(
+                "Marks obtained cannot be negative."
+            )
+
+        return value
+
+    def validate_lokos_member_code(self, value):
+
+        qs = CRPEP.objects.filter(lokos_member_code=value)
+
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+
+        if qs.exists():
+            raise serializers.ValidationError(
+                "CRP with this LokOS member code already exists."
+            )
+
+        return value
+
+    # -------------------------
+    # CREATE / UPDATE SAFETY
+    # -------------------------
+
+    def create(self, validated_data):
+
+        try:
+            return super().create(validated_data)
+
+        except IntegrityError:
+            raise serializers.ValidationError({
+                "detail": "Duplicate or invalid CRP data."
+            })
+
+    def update(self, instance, validated_data):
+
+        try:
+            return super().update(instance, validated_data)
+
+        except IntegrityError:
+            raise serializers.ValidationError({
+                "detail": "Duplicate or invalid CRP data."
+            })        
 
 class CRPEPToPanchayatCRUDSerializer(serializers.ModelSerializer):
     class Meta:
@@ -268,3 +375,118 @@ class CRPEPAnalyticsSerializer(serializers.ModelSerializer):
             "mobile_number",
             "total_beneficiaries",
         ]
+
+# CRP-Panchayat mapping Form Serializers
+class CRPPanchayatBulkSerializer(serializers.Serializer):
+    crp_id = serializers.IntegerField()
+    allocated_panchayats = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False
+    )
+
+    def validate_crp_id(self, value):
+        """
+        Validate CRP exists
+        """
+        try:
+            CRPEP.objects.get(master_user_id=value)
+        except CRPEP.DoesNotExist:
+            raise serializers.ValidationError("Invalid CRP ID")
+
+        return value
+
+    def validate_allocated_panchayats(self, value):
+        """
+        Remove duplicates in payload
+        """
+        unique_ids = list(set(value))
+
+        if len(unique_ids) != len(value):
+            raise serializers.ValidationError(
+                "Duplicate Panchayat IDs in request"
+            )
+
+        return unique_ids
+
+    def create(self, validated_data):
+        crp_id = validated_data["crp_id"]
+        panchayats = validated_data["allocated_panchayats"]
+        user = self.context["request"].user
+
+        master_user = MasterUser.objects.get(username=user.username)
+
+        existing = set(
+            CRPEPToPanchayat.objects.filter(
+                crp_id=crp_id,
+                allocated_panchayat_id__in=panchayats,
+                is_active=True
+            ).values_list("allocated_panchayat_id", flat=True)
+        )
+
+        created_rows = []
+
+        with transaction.atomic():
+
+            for panchayat_id in panchayats:
+
+                if panchayat_id in existing:
+                    continue
+
+                obj = CRPEPToPanchayat.objects.create(
+                    crp_id=crp_id,
+                    allocated_panchayat_id=panchayat_id,
+                    created_by=master_user,
+                    updated_by=master_user,
+                    is_active=True
+                )
+
+                created_rows.append(obj)
+
+        return created_rows 
+    
+# CRP view with panchayat
+class PanchayatSerializer(serializers.ModelSerializer):
+    panchayat_name_en = serializers.CharField()
+    
+    class Meta:
+        model = MasterPanchayat
+        fields = ["panchayat_id", "panchayat_name_en"]
+        
+class CRPListSerializer(serializers.ModelSerializer):
+
+    district_name_en = serializers.CharField(source="district.district_name_en", read_only=True)
+    block_name_en = serializers.CharField(source="block.block_name_en", read_only=True)
+    panchayat_name_en = serializers.CharField(source="panchayat.panchayat_name_en", read_only=True)
+
+    allocated_panchayats = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CRPEP
+        fields = [
+            "id",
+            "name",
+            "mobile_number",
+            "lokos_shg_code",
+            "lokos_member_code",
+
+            "district",
+            "district_name_en",
+
+            "block",
+            "block_name_en",
+
+            "panchayat",
+            "panchayat_name_en",
+
+            "allocated_panchayats"
+        ]
+
+    def get_allocated_panchayats(self, obj):
+
+        allocations = CRPEPToPanchayat.objects.filter(
+            crp=obj.master_user_id
+        ).values_list("allocated_panchayat_id", flat=True)
+
+        panchayats = MasterPanchayat.objects.filter(panchayat_id__in=allocations)
+
+        return PanchayatSerializer(panchayats, many=True).data

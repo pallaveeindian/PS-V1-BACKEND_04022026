@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from core import models
 from django.utils import timezone
+from django.db import IntegrityError
 
 # -------------------------
 # Lightweight list serializers (return FK ids only)
@@ -288,13 +289,55 @@ class MasterUserSerializer(serializers.ModelSerializer):
             "recovery_mobile",            
         )        
 
+class MasterUserCUDSerializer(serializers.ModelSerializer):
+    role_id = serializers.IntegerField(source="role.id", read_only=True)
+    role_name = serializers.CharField(source="role.name", read_only=True)
+
+    class Meta:
+        model = models.MasterUser
+        read_only_fields = (
+            "id",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        )
+        fields = "__all__"
+
+    # Username uniqueness validation
+    def validate_username(self, value):
+        qs = models.MasterUser.objects.filter(username=value)
+
+        # same username allowed when updating same record
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+
+        if qs.exists():
+            raise serializers.ValidationError("Username already exists.")
+
+        return value
+
     def create(self, validated_data):
         validated_data['created_at'] = timezone.now()
-        return super().create(validated_data)
+
+        try:
+            return super().create(validated_data)
+
+        # Race-condition protection
+        except IntegrityError:
+            raise serializers.ValidationError({
+                "username": "Username already exists."
+            })
 
     def update(self, instance, validated_data):
         validated_data['updated_at'] = timezone.now()
-        return super().update(instance, validated_data)
+
+        try:
+            return super().update(instance, validated_data)
+
+        except IntegrityError:
+            raise serializers.ValidationError({
+                "username": "Username already exists."
+            })
     
 class MasterUserListSerializer(serializers.ModelSerializer):
     role_name = serializers.SerializerMethodField()

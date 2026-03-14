@@ -829,7 +829,7 @@ class MasterUserListView(generics.ListAPIView):
 # CRUD for Master User 
 class MasterUserCreateView(generics.CreateAPIView):
     permission_classes = (permissions.AllowAny,)
-    serializer_class = MasterUserSerializer
+    serializer_class = MasterUserCUDSerializer
     queryset = MasterUser.objects.all()    
     
 class MasterUserDetailView(generics.RetrieveUpdateDestroyAPIView):

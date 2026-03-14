@@ -23,6 +23,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.generics import ListAPIView
 
 from core.models import (
     MasterUser,
@@ -281,12 +283,12 @@ class UpsrlmShgListView(APIView):
         rows = _apply_list_search(
             rows,
             request.GET.get('search'),
-            ['shg_name', 'shg_code', 'village_name'],
+            ['name', 'code', 'nicCode', 'uuid'],
         )
         rows = _apply_list_ordering(
             rows,
             request.GET.get('ordering'),
-            allowed_fields={'shg_name', 'shg_code'},
+            allowed_fields={'name', 'code'},
         )
         grouped = _apply_list_group_by(rows, request.GET.get('group_by'))
         if grouped is not None:
@@ -455,6 +457,29 @@ class CRPEPViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
     search_fields = ['name', 'mobile_number', 'lokos_member_code', 'lokos_shg_code']
     ordering_fields = ['created_at', 'marks_obtained', 'id']
 
+    # 🔐 Only specific users can create CRP accounts
+    def perform_create(self, serializer):
+
+        auth_user = self.request.user
+
+        try:
+            master_user = MasterUser.objects.get(
+                username=auth_user.username
+            )
+        except MasterUser.DoesNotExist:
+            raise PermissionDenied("Invalid user")
+
+        allowed_ids = {1004, 3146}
+
+        if master_user.id not in allowed_ids:
+            raise PermissionDenied(
+                "Not authorized to create CRP accounts."
+            )
+
+        serializer.save(
+            created_by=master_user
+        )
+
     def get_queryset(self):
         qs = super().get_queryset()
         params = self.request.GET
@@ -464,6 +489,8 @@ class CRPEPViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
             qs = qs.filter(block_id=int(params['block_id']))
         if params.get('panchayat_id'):
             qs = qs.filter(panchayat_id=int(params['panchayat_id']))
+        if params.get('lokos_member_code'):
+            qs = qs.filter(lokos_shg_code=params['lokos_member_code'])            
         if params.get('lokos_shg_code'):
             qs = qs.filter(lokos_shg_code=params['lokos_shg_code'])
         if params.get('nodal_clf'):
@@ -958,6 +985,41 @@ class CRPListByClfView(APIView):
         result = _paginate_plain_list(request, rows)
         return Response(result)
 
+class CRPListAPIView(ListAPIView):
+
+    serializer_class = CRPListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+
+        queryset = CRPEP.objects.select_related(
+            "district",
+            "block",
+            "panchayat"
+        )
+
+        district = self.request.query_params.get("district")
+        block = self.request.query_params.get("block")
+        panchayat = self.request.query_params.get("panchayat")
+        search = self.request.query_params.get("search")
+
+        if district:
+            queryset = queryset.filter(district_id=district)
+
+        if block:
+            queryset = queryset.filter(block_id=block)
+
+        if panchayat:
+            queryset = queryset.filter(panchayat_id=panchayat)
+
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(lokos_shg_code__icontains=search) |
+                Q(lokos_member_code__icontains=search)
+            )
+
+        return queryset
 
 @method_decorator(cache_page(CACHE_TTL), name='get')
 class CRPDetailView(APIView):
@@ -988,7 +1050,7 @@ class CRPDetailView(APIView):
         return Response(data)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+# @method_decorator(cache_page(CACHE_TTL), name='get')
 class CRPDetailbyUserID(APIView):
     """
     GET /api/v1/epsakhi/crp-detail/id/<id>/
@@ -1448,3 +1510,50 @@ class EpsakhiDetailByMemberView(APIView):
         response["shared"]["training"] = training_data
 
         return Response(response)
+    
+
+# CRP-Panchayat mapping Form Views (NEW)
+class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
+    """
+    Bulk Linking of CRP to Multiple Panchayats
+    """
+
+    serializer_class = CRPPanchayatBulkSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return CRPEPToPanchayat.objects.filter(is_active=True)
+
+    def create(self, request):
+
+        auth_user = request.user
+
+        try:
+            master_user = MasterUser.objects.get(
+                username=auth_user.username
+            )
+        except MasterUser.DoesNotExist:
+            raise PermissionDenied("Invalid user")
+
+        # 🔐 ONLY recorder user allowed
+        if master_user.id != 3146:
+            raise PermissionDenied(
+                "Not Authorized. Only CRP Recorder can access this API."
+            )
+
+        serializer = self.get_serializer(
+            data=request.data,
+            context={"request": request}
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        rows = serializer.save()
+
+        return Response(
+            {
+                "message": "CRP Panchayats linked successfully",
+                "rows_created": len(rows),
+            },
+            status=status.HTTP_201_CREATED
+        )

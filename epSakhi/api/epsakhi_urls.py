@@ -100,6 +100,14 @@ router.register(
     basename="crp-panchayat"
 )
 
+# CRP-Panchayat mapping Form Views
+router.register(
+    r'crp-panchayat-bulk',
+    CRPPanchayatBulkViewSet,
+    basename='crp-panchayat-bulk'
+)
+
+
 mapping_urls = [
     path(
         'crp/<int:pk>/link-panchayats/',
@@ -131,6 +139,11 @@ custom_urls = [
     # epSakhi recorded-beneficiaries shortcuts
     path('epsakhi-list/<str:shg_code>/', EpsakhiListByShgView.as_view(), name='epsakhi-list'),
     path('epsakhi-detail/<str:member_code>/', EpsakhiDetailByMemberView.as_view(), name='epsakhi-detail'),
+    path(
+        "crp-panch-list/",
+        CRPListAPIView.as_view(),
+        name="crp-list",
+    )
 ]
 
 # Analytics

@@ -63,7 +63,7 @@ class CaptchaView(APIView):
         # Load Good Bold Font (IMPORTANT)
         try:
             font = ImageFont.truetype(
-                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 64
+                "/usr/share/fonts/truetype/firacode/FiraCode-Bold.ttf", 64
             )
         except:
             font = ImageFont.load_default()

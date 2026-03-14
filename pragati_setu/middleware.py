@@ -33,10 +33,10 @@ API_KEY_HEADER = "HTTP_X_API_KEY"
 # -------------------------------------------------
 
 # Roles allowed everywhere
-COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10}
+COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10, 12}
 
 # epSakhi-only roles
-EPSAKHI_ROLE_IDS = {6}
+EPSAKHI_ROLE_IDS = {6, 12}
 
 # TMS-only roles
 TMS_ROLE_IDS = {4, 7, 11}
