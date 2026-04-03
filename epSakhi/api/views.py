@@ -469,9 +469,9 @@ class CRPEPViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
         except MasterUser.DoesNotExist:
             raise PermissionDenied("Invalid user")
 
-        allowed_ids = {1004, 3146}
+        allowed_ids = {2, 12}
 
-        if master_user.id not in allowed_ids:
+        if master_user.role_id not in allowed_ids:
             raise PermissionDenied(
                 "Not authorized to create CRP accounts."
             )
@@ -1536,7 +1536,9 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
             raise PermissionDenied("Invalid user")
 
         # 🔐 ONLY recorder user allowed
-        if master_user.id != 3146:
+        allowed_ids = {2, 12}
+
+        if master_user.role_id not in allowed_ids:
             raise PermissionDenied(
                 "Not Authorized. Only CRP Recorder can access this API."
             )

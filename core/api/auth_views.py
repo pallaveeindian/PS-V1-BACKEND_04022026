@@ -15,6 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken, TokenErro
 from core.models import MasterUser
 from .serializers import MasterUserSerializer
 from django.contrib.auth.models import User
+from django.http import Http404
 
 # Cookie name for storing refresh token (httpOnly)
 REFRESH_COOKIE_NAME = 'ps_refresh'
