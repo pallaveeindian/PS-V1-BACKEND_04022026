@@ -74,7 +74,8 @@ INSTALLED_APPS = [
 # =========================
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'pragati_setu.middleware.ApiIdApiKeyMiddleware',  # <<-- Must be BEFORE auth middlewares
+    'pragati_setu.middleware.ResponseEncryptionMiddleware',
+    'pragati_setu.middleware.ApiIdApiKeyMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -209,6 +210,10 @@ REST_FRAMEWORK = {
         "user": "2500000/min",
         "anon": "2500000/min",
     },    
+    # VUN 3: Browser UI Render Blocked
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),    
 }
 
 JWT_PRIVATE_KEY = Path("/etc/pragati_setu/jwt/jwt_private.pem").read_text()
@@ -230,14 +235,28 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# CORS
-CORS_ALLOW_ALL_ORIGINS = True
+# VUN 13 : CORS Settings - allow only our frontend origins, and required headers
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True 
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://72.61.255.170:8080",
+]
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-api-id',
     'x-api-key',
     'x-app-client',
+]
+
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
 ]
 
 # Upload limits
@@ -261,3 +280,6 @@ ALLOWED_API_CREDENTIALS = {
 
 # Simple admin email
 DEFAULT_FROM_EMAIL = 'webmaster@localhost'
+
+# 32 BIT decryption key
+API_ENCRYPTION_KEY = os.getenv("API_ENCRYPTION_KEY", "U78WxabjlMPTECHNOPSV159INLZ7C64U")

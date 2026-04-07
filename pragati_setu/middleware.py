@@ -11,11 +11,17 @@ Rules implemented:
     -> Require valid JWT
     -> Allow access based on role + API namespace
 """
-
+import os
+import json
+import base64
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from django.contrib.auth import get_user_model
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 
 from rest_framework_simplejwt.tokens import AccessToken, TokenError
 
@@ -230,5 +236,59 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
                     )
             except Exception:
                 pass  # API is never blocked due to audit failure
+
+        return response
+
+# -------------------------------------------------
+# VUN 14 PATCH - AES ENCRYPTED API RESPONSES
+# -------------------------------------------------
+
+class ResponseEncryptionMiddleware:
+    """
+    Surgically intercepts outgoing JSON responses on /api/ paths and encrypts them.
+    Requires API_ENCRYPTION_KEY in settings (Must be exactly 32 characters).
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # 1. Get the generated response from the rest of the stack
+        response = self.get_response(request)
+
+        # 2. Skip encryption for Swagger, Health checks, and non-API routes
+        if not request.path.startswith('/api/') or '/swagger' in request.path:
+            return response
+
+        # 3. Only encrypt JSON responses (protects file downloads/media)
+        if 'application/json' in response.get('Content-Type', ''):
+            secret_key = getattr(settings, 'API_ENCRYPTION_KEY', None)
+            if not secret_key or len(secret_key) != 32:
+                raise ValueError("API_ENCRYPTION_KEY must be exactly 32 chars in settings.py")
+
+            # Setup AES-256-CBC
+            iv = os.urandom(16)
+            cipher = Cipher(
+                algorithms.AES(secret_key.encode('utf-8')),
+                modes.CBC(iv),
+                backend=default_backend()
+            )
+            encryptor = cipher.encryptor()
+
+            # Pad the JSON string to be AES compliant
+            padder = padding.PKCS7(128).padder()
+            padded_data = padder.update(response.content) + padder.finalize()
+            
+            # Encrypt
+            ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+
+            # Format the payload for React
+            encrypted_payload = {
+                "iv": base64.b64encode(iv).decode('utf-8'),
+                "data": base64.b64encode(ciphertext).decode('utf-8')
+            }
+
+            # Overwrite the response
+            response.content = json.dumps(encrypted_payload).encode('utf-8')
+            response['Content-Length'] = str(len(response.content))
 
         return response

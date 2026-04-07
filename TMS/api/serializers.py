@@ -1164,4 +1164,5 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'district_name',
             'block',
             'block_name',
+            'created_at',
         ]

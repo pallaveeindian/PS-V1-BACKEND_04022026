@@ -278,7 +278,6 @@ class MasterUserSerializer(serializers.ModelSerializer):
             'deleted_at',
         )
         exclude = (
-            "password",
             "pass_attempt_no",
             "pass_updated_at",
             "pass_updated_by",

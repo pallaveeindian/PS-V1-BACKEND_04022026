@@ -23,6 +23,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied
 
 from core.models import (
     MasterUser,
@@ -1149,36 +1150,34 @@ class CRPPanchayatViewSet(viewsets.ModelViewSet):
 
 @method_decorator(cache_page(CACHE_TTL), name='get')
 class CRPPanchayatsUnderCrpByID(APIView):
-    """
-    GET /api/v1/epsakhi/panchayats-under-crp/id/<id>/
-    id = master_user.id
-    """
     permission_classes = (IsAuthenticated,)
 
-    def get(self, request, id):
-        try:
-            user_id = int(id)
-        except ValueError:
-            return Response({'detail': 'Invalid user id'}, status=status.HTTP_400_BAD_REQUEST)
+    # VUN-1: Admin Roles with Ellivated privileges to view all CRP-Panchayat mapping.
+    # This is to support Admin Dashboard usecase where admin wants to view all mappings without restriction.
+    ALLOWED_ROLES = [12, 10, 8, 9, 3, 2, 1]
 
-        # Fetch panchayat mappings where crp_id == user_id (master_user_id semantics)
-        panchayat_ids = list(
-            CRPEPToPanchayat.objects.filter(
-                crp_id=user_id,
-                is_active=True
-            ).values_list('allocated_panchayat_id', flat=True)
-        )
+    def _get_master_user(self, request):
+        auth_user = request.user
 
-        if not panchayat_ids:
-            # Distinguish between "no such CRP user" vs "no mappings"
-            if not CRPEP.objects.filter(master_user_id=user_id).exists():
-                return Response(
-                    {'detail': 'CRP not found for given ID'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            rows = []
-        else:
-            qs = MasterPanchayat.objects.filter(panchayat_id__in=panchayat_ids).only(
+        master_user = MasterUser.objects.filter(
+            username=auth_user.username
+        ).first()
+
+        if not master_user:
+            raise PermissionDenied("Invalid user.")
+
+        return master_user
+
+    def get(self, request, id=None):
+        # VUN-1: ID here is master_user.id, NOT CRP ID. We will fetch CRP based on this master_user.id        
+        master_user = self._get_master_user(request)
+        role_id = getattr(master_user, "role_id", None)
+
+        # ----------------------------------
+        # VUN-1: CASE 1 - Admin / Higher Roles
+        # ----------------------------------
+        if role_id in self.ALLOWED_ROLES:
+            qs = MasterPanchayat.objects.all().only(
                 'panchayat_id',
                 'panchayat_name_en',
                 'panchayat_name_local',
@@ -1187,6 +1186,7 @@ class CRPPanchayatsUnderCrpByID(APIView):
                 'district_id',
                 'state_id',
             )
+
             rows = list(
                 qs.values(
                     'panchayat_id',
@@ -1199,7 +1199,55 @@ class CRPPanchayatsUnderCrpByID(APIView):
                 )
             )
 
+        # ----------------------------------
+        # VUN-1: CASE 2 - CRP User
+        # ----------------------------------
+        else:
+            # VUN-1: CRP Validtation | ONLY CRP whom the Panchayats are assigned to can view them            
+            crp = CRPEP.objects.filter(
+                master_user_id=master_user.id
+            ).first()
+
+            if not crp:
+                raise PermissionDenied("User not authorized to access panchayats.")
+
+            panchayat_ids = list(
+                CRPEPToPanchayat.objects.filter(
+                    crp_id=master_user.id,  
+                    is_active=True
+                ).values_list('allocated_panchayat_id', flat=True)
+            )
+
+            if not panchayat_ids:
+                rows = []
+            else:
+                qs = MasterPanchayat.objects.filter(
+                    panchayat_id__in=panchayat_ids
+                ).only(
+                    'panchayat_id',
+                    'panchayat_name_en',
+                    'panchayat_name_local',
+                    'panchayat_code',
+                    'block_id',
+                    'district_id',
+                    'state_id',
+                )
+
+                rows = list(
+                    qs.values(
+                        'panchayat_id',
+                        'panchayat_name_en',
+                        'panchayat_name_local',
+                        'panchayat_code',
+                        'block_id',
+                        'district_id',
+                        'state_id',
+                    )
+                )
+
+        # -----------------------------
         # Filters
+        # -----------------------------
         filter_map = {
             'block_id': 'block_id',
             'district_id': 'district_id',
@@ -1207,27 +1255,35 @@ class CRPPanchayatsUnderCrpByID(APIView):
         }
         rows = _apply_list_filters(rows, filter_map, request.GET)
 
+        # -----------------------------
         # Search
+        # -----------------------------
         rows = _apply_list_search(
             rows,
             request.GET.get('search'),
             ['panchayat_name_en', 'panchayat_name_local', 'panchayat_code'],
         )
 
+        # -----------------------------
         # Ordering
+        # -----------------------------
         rows = _apply_list_ordering(
             rows,
             request.GET.get('ordering'),
             allowed_fields={'panchayat_id', 'panchayat_name_en'},
         )
 
+        # -----------------------------
         # Grouping
+        # -----------------------------
         grouped = _apply_list_group_by(rows, request.GET.get('group_by'))
         if grouped is not None:
             grouped = _apply_fields_projection_list(grouped, request.GET.get('fields'))
             return Response(grouped)
 
-        # Fields projection (default subset)
+        # -----------------------------
+        # Fields projection
+        # -----------------------------
         fields_param = request.GET.get('fields')
         if fields_param:
             rows = _apply_fields_projection_list(rows, fields_param)
@@ -1245,7 +1301,6 @@ class CRPPanchayatsUnderCrpByID(APIView):
 
         result = _paginate_plain_list(request, rows)
         return Response(result)
-
 
 # -------------------------------------------------------------------
 # 4) epsakhi-list & epsakhi-detail helpers

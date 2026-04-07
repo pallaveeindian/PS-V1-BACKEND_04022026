@@ -596,7 +596,39 @@ def download_submission(request, pk):
     submission = get_object_or_404(
         tms_models.TrainingPartnerSubmission,
         pk=pk,
-        partner__master_user__username=request.user.username,
+        is_active=1,
+    )
+
+    safe_path = os.path.normpath(submission.file.name).lstrip("/")
+
+    # response = HttpResponse()
+    # response["X-Accel-Redirect"] = f"/media/{safe_path}"
+    # response["Content-Type"] = "application/octet-stream"
+    # response["Content-Disposition"] = (
+    #     f'attachment; filename="{os.path.basename(safe_path)}"'
+    # )
+    # response["X-Content-Type-Options"] = "nosniff"
+    # response["Cache-Control"] = "no-store"
+
+    # return response
+    file_path = os.path.join(settings.MEDIA_ROOT, safe_path)
+    
+    if not os.path.exists(file_path):
+        raise Http404("File not found")
+
+    return FileResponse(
+        open(file_path, "rb"),
+        as_attachment=True,
+        filename=os.path.basename(file_path),
+    )    
+    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def preview_submission(request, pk):
+    submission = get_object_or_404(
+        tms_models.TrainingPartnerSubmission,
+        pk=pk,
         is_active=1,
     )
 
@@ -604,13 +636,8 @@ def download_submission(request, pk):
 
     response = HttpResponse()
     response["X-Accel-Redirect"] = f"/media/{safe_path}"
-    response["Content-Type"] = "application/octet-stream"
-    response["Content-Disposition"] = (
-        f'attachment; filename="{os.path.basename(safe_path)}"'
-    )
+    response["Content-Type"] = submission.file.file.content_type
     response["X-Content-Type-Options"] = "nosniff"
-    response["Cache-Control"] = "no-store"
-
     return response
 
 # -------------------------------------------------------------------
@@ -1208,9 +1235,12 @@ class BatchCostViewSet(BaseTMSModelViewSet):
     queryset = tms_models.BatchCost.objects.select_related("training", "batch", "batch_expenses")
     @action(detail=True, methods=["get"], url_path="detail")
     def detail_view(self, request, pk=None):
-        batch = self.get_object()
-        serializer = BatchCostDetailSerializer(batch, context={"request": request})
-        return Response(serializer.data)    
+        batch_cost = get_object_or_404(
+            tms_models.BatchCost.objects.select_related("training", "batch", "batch_expenses"),
+            batch_id=pk
+        )
+        serializer = BatchCostDetailSerializer(batch_cost, context={"request": request})
+        return Response(serializer.data)
     serializer_class = BatchCostSerializer
     filterset_fields = ["batch", "training"]
 
@@ -1358,5 +1388,24 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
 
         if params.get('block_id'):
             qs = qs.filter(block_id=params['block_id'])
+
+        # --------------------------------------------------
+        # ✅ NEW: CREATED_AT FILTERS
+        # --------------------------------------------------
+
+        # Exact date
+        if params.get('created_at'):
+            qs = qs.filter(created_at__date=params['created_at'])
+
+        # Range filtering
+        if params.get('created_from'):
+            qs = qs.filter(
+                created_at__gte=datetime.strptime(params['created_from'], "%Y-%m-%d")
+            )
+
+        if params.get('created_to'):
+            qs = qs.filter(
+                created_at__lte=datetime.strptime(params['created_to'], "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            )
 
         return qs

@@ -2,6 +2,7 @@
 
 from django.db import transaction
 from rest_framework import serializers
+from epSakhi.utils.file_security import validate_and_rename
 
 from epSakhi.models import *
 
@@ -153,6 +154,11 @@ class EnterpriseLicensesSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'TH_urid', 'created_at', 'updated_at', 'deleted_at']
 
+    # VUN - 4 Fixes: File Upload Security Enhancements for License Files 
+    def validate(self, attrs):
+        attrs['license_file'] = validate_and_rename(attrs.get('license_file'))
+        return attrs        
+
 class EnterpriseLoanDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = EnterpriseLoanDetail
@@ -188,6 +194,13 @@ class ProductMediaSerializer(serializers.ModelSerializer):
         model = ProductMedia
         fields = '__all__'
         read_only_fields = ['id', 'TH_urid', 'created_at', 'updated_at', 'deleted_at']
+
+    # VUN-4 Fixes: File Upload Security Enhancements
+    def validate(self, attrs):
+        attrs['open_box_photo'] = validate_and_rename(attrs.get('open_box_photo'))
+        attrs['close_box_photo'] = validate_and_rename(attrs.get('close_box_photo'))
+        attrs['others'] = validate_and_rename(attrs.get('others'))
+        return attrs
 
 class EnterpriseMediaSerializer(serializers.ModelSerializer):
     class Meta:

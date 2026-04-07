@@ -233,4 +233,10 @@ urlpatterns = [
         tms_views.download_submission,
         name="download_submission",
     ),    
+
+    path(
+        "preview_submission/<int:pk>/",
+        tms_views.preview_submission,
+        name="preview_submission",
+    ),       
 ]
