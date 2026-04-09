@@ -925,7 +925,7 @@ class NoEnterpriseWageViewSet(viewsets.ModelViewSet):
 # (Logic kept same; only imports updated to new models)
 # -------------------------------------------------------------------
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class CRPListByClfView(APIView):
     """
     GET /api/v1/epsakhi/crp-list/<clf_code>/
@@ -960,7 +960,7 @@ class CRPListByClfView(APIView):
         return Response(result)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class CRPDetailView(APIView):
     """
     GET /api/v1/epsakhi/crp-detail/<member_code>/
@@ -989,7 +989,7 @@ class CRPDetailView(APIView):
         return Response(data)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class CRPDetailbyUserID(APIView):
     """
     GET /api/v1/epsakhi/crp-detail/id/<id>/
@@ -1010,7 +1010,7 @@ class CRPDetailbyUserID(APIView):
             data = {k: v for k, v in data.items() if k in allowed}
         return Response(data)
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class CRPPanchayatsUnderCrpView(APIView):
     """
     GET /api/v1/epsakhi/panchayats-under-crp/
@@ -1148,7 +1148,7 @@ class CRPPanchayatViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class CRPPanchayatsUnderCrpByID(APIView):
     permission_classes = (IsAuthenticated,)
 

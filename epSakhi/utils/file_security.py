@@ -21,9 +21,9 @@ def validate_and_rename(file):
     filename = file.name
 
     # Double extension (file.php.png) Validation
-    parts = filename.split('.')
-    if len(parts) > 2:
-        raise ValidationError("Invalid file: multiple extensions detected.")
+    # parts = filename.split('.')
+    # if len(parts) > 2:
+    #     raise ValidationError("Invalid file: multiple extensions detected.")
 
     # Extension check
     ext = os.path.splitext(filename)[1].lower()

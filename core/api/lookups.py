@@ -36,7 +36,7 @@ CACHE_TTL = getattr(settings, 'CACHE_TTL', 300)
 class FlexiblePagination(pagination.PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 5000
 
 
 # --------------------------
@@ -116,7 +116,7 @@ def apply_group_by(qs, request, allowed_group_by, id_field='id'):
 # ----------------------------
 # Mandals (list)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class MasterMandalView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterMandalSerializer
@@ -137,7 +137,7 @@ class MasterMandalView(generics.ListAPIView):
 # ----------------------------
 # District Categories (list)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class DistrictCategoryView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterDistrictCategorySerializer
@@ -158,7 +158,7 @@ class DistrictCategoryView(generics.ListAPIView):
 # ----------------------------
 # District Category Mapping (list)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class DistrictCategoryMappingView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterDistrictCategoryMappingSerializer
@@ -184,7 +184,7 @@ class DistrictCategoryMappingView(generics.ListAPIView):
 # ----------------------------
 # Districts (list + detail)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class DistrictListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterDistrictListSerializer
@@ -207,7 +207,7 @@ class DistrictListView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class DistrictDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -241,7 +241,7 @@ class DistrictDetailView(APIView):
 # ----------------------------
 # Blocks (list + detail)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class BlockListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterBlockListSerializer
@@ -268,7 +268,7 @@ class BlockListView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class BlockDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -302,7 +302,7 @@ class BlockDetailView(APIView):
 # ----------------------------
 # Panchayats (list + detail)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class PanchayatListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterPanchayatListSerializer
@@ -328,7 +328,7 @@ class PanchayatListView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class PanchayatDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -362,7 +362,7 @@ class PanchayatDetailView(APIView):
 # ----------------------------
 # Villages (list + detail)
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class VillageListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterVillageListSerializer
@@ -388,7 +388,7 @@ class VillageListView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class VillageDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -422,7 +422,7 @@ class VillageDetailView(APIView):
 # ----------------------------
 # SHG canonical list & detail
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class ShgListByBlockView(generics.ListAPIView):
     """
     Canonical SHG list endpoint: supports block_id,district_id,panchayat_id,village_id,state_id filters,
@@ -475,7 +475,7 @@ class ShgListByBlockView(generics.ListAPIView):
         return super().list(request, *args, **kwargs)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class ShgDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -522,7 +522,7 @@ class ShgDetailView(APIView):
 # ----------------------------
 # Beneficiaries - canonical list & detail
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class BeneficiaryListByShgView(generics.ListAPIView):
     """
     Unified beneficiaries endpoint:
@@ -584,7 +584,7 @@ class BeneficiaryListByShgView(generics.ListAPIView):
         return super().list(request, *args, **kwargs)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class BeneficiaryDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -626,7 +626,7 @@ class BeneficiaryDetailView(APIView):
 # ----------------------------
 # CLF list + detail + sublists
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class ClfListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterClfListSerializer
@@ -654,7 +654,7 @@ class ClfListView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class ClfDetailView(APIView):
     permission_classes = (permissions.AllowAny,)
 
@@ -694,7 +694,7 @@ class ClfDetailView(APIView):
         return Response(clf_data)
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class MembersUnderClfView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterMembersUnderClfListSerializer
@@ -717,7 +717,7 @@ class MembersUnderClfView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class PanchayatsUnderClfView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterPanchayatsUnderClfListSerializer
@@ -739,7 +739,7 @@ class PanchayatsUnderClfView(generics.ListAPIView):
         return qs
 
 
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class VillagesUnderClfView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterVillagesUnderClfListSerializer
@@ -764,7 +764,7 @@ class VillagesUnderClfView(generics.ListAPIView):
 # ----------------------------
 # Roles / Users / State / Mandal
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class MasterRolesView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterRolesSerializer
@@ -783,7 +783,7 @@ class MasterRolesView(generics.ListAPIView):
         return qs
 
 # Master User List View
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class MasterUserListView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterUserSerializer
@@ -853,7 +853,7 @@ class MasterUserDetailView(generics.RetrieveUpdateDestroyAPIView):
             status=status.HTTP_204_NO_CONTENT
         )   
     
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class MasterStateView(generics.ListAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = MasterStateSerializer
@@ -874,7 +874,7 @@ class MasterStateView(generics.ListAPIView):
 # ----------------------------
 # User GeoScope view
 # ----------------------------
-@method_decorator(cache_page(CACHE_TTL), name='get')
+
 class UserGeoScopeView(APIView):
     permission_classes = (permissions.AllowAny,)
 
