@@ -3,6 +3,10 @@ import random
 import string
 import io
 import base64
+import json
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from django.conf import settings
 from django.utils import timezone
@@ -119,14 +123,60 @@ class LoginView(APIView):
         raise Http404()
 
     def post(self, request):
-        username = request.data.get("username")
-        password = request.data.get("password")
+        # -------------------------------------------------
+        # VUN 14 PATCH - AES DECRYPTION OF INCOMING PAYLOAD
+        # -------------------------------------------------
+        payload = request.data
+        decrypted_data = payload  # Fallback to raw data if not encrypted
+
+        if 'iv' in payload and 'data' in payload:
+            try:
+                secret_key = getattr(settings, 'API_ENCRYPTION_KEY', None)
+                if not secret_key or len(secret_key) != 32:
+                    return Response(
+                        {"detail": "Server encryption key misconfigured."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+
+                # Decode base64 strings from frontend
+                iv = base64.b64decode(payload['iv'])
+                ciphertext = base64.b64decode(payload['data'])
+
+                # Setup AES-256-CBC Decryptor
+                cipher = Cipher(
+                    algorithms.AES(secret_key.encode('utf-8')),
+                    modes.CBC(iv),
+                    backend=default_backend()
+                )
+                decryptor = cipher.decryptor()
+                
+                # Decrypt
+                padded_data = decryptor.update(ciphertext) + decryptor.finalize()
+
+                # Remove PKCS7 padding
+                unpadder = padding.PKCS7(128).unpadder()
+                unpadded_data = unpadder.update(padded_data) + unpadder.finalize()
+
+                # Parse the unpadded JSON string back into a Python dictionary
+                decrypted_data = json.loads(unpadded_data.decode('utf-8'))
+
+            except Exception as e:
+                return Response(
+                    {"detail": "Failed to decrypt payload or invalid format."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # -------------------------------------------------
+        # Extract variables from the (now decrypted) data
+        # -------------------------------------------------
+        username = decrypted_data.get("username")
+        password = decrypted_data.get("password")
         
         app_client = request.headers.get("X-App-Client")
         CAPTCHA_ENABLED_APPS = {"TMS_WEB", "CRP-EP_APP"}
 
         if app_client in CAPTCHA_ENABLED_APPS:
-            captcha_input = request.data.get("captcha")
+            captcha_input = decrypted_data.get("captcha")
             captcha_data = request.session.get("login_captcha")
 
             if not captcha_input or not captcha_data:
@@ -263,7 +313,8 @@ class LoginView(APIView):
         )
 
         return response
-
+    
+    
 class RefreshTokenView(APIView):
     """
     Obtain a new access token by reading the refresh token from an HttpOnly cookie.
