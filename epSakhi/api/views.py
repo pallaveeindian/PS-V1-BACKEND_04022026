@@ -282,12 +282,12 @@ class UpsrlmShgListView(APIView):
         rows = _apply_list_search(
             rows,
             request.GET.get('search'),
-            ['shg_name', 'shg_code', 'village_name'],
+            ['name', 'code', 'nicCode', 'uuid'],
         )
         rows = _apply_list_ordering(
             rows,
             request.GET.get('ordering'),
-            allowed_fields={'shg_name', 'shg_code'},
+            allowed_fields={'name', 'code'},
         )
         grouped = _apply_list_group_by(rows, request.GET.get('group_by'))
         if grouped is not None:
