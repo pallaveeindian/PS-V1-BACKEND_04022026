@@ -157,11 +157,6 @@ router.register(
     basename="tms-batch-closure-request",
 )
 router.register(
-    r"tr-closures",
-    tms_views.TRClosureViewSet,
-    basename="tms-tr-closure",
-)
-router.register(
     r"batch-participant-certificates",
     tms_views.BatchParticipantCertificateViewSet,
     basename="tms-batch-participant-certificate",

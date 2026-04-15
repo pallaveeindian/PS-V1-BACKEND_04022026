@@ -228,7 +228,7 @@ class TrainingPlanViewSet(BaseTMSModelViewSet):
 class TenPerPagePagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"  # optional: allow clients to change page size
-    max_page_size = 100  # optional safeguard
+    max_page_size = 100000  # optional safeguard
 
 
     
@@ -649,10 +649,35 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
     Targets assigned by SMMU to Training Partners (Module/District/Theme).
     """
     swagger_schema = TargetsSchema
-    queryset = tms_models.TrainingPartnerTargets.objects.select_related("partner", "training_plan", "district")
-    serializer_class = TrainingPartnerTargetsSerializer
-    filterset_fields = ["partner", "target_type", "training_plan", "district", "theme", "financial_year"]
+    filterset_fields = ["partner", "target_type", "training_plan", "district", "theme", "financial_year", "created_by"]
     search_fields = ["theme", "financial_year"]
+
+    def get_queryset(self):
+        # Base Queryset with select_related for standard foreign keys
+        qs = tms_models.TrainingPartnerTargets.objects.select_related(
+            "partner", "training_plan", "district"
+        )
+
+        # --- SURGICAL ADDITION: Handle ach=1 and year param ---
+        if self.request.query_params.get('ach') == '1':
+            # Prefetch achievements to avoid N+1 database query crashing
+            qs = qs.prefetch_related('achievements', 'achievements__partner', 'achievements__training_plan', 'achievements__district')
+            
+            # Map the '?year=' query param to the 'financial_year' field
+            year = self.request.query_params.get('year')
+            if year:
+                qs = qs.filter(financial_year=year)
+        # ------------------------------------------------------
+
+        return qs
+
+    def get_serializer_class(self):
+        # --- SURGICAL ADDITION: Switch Serializers Dynamically ---
+        if self.request.query_params.get('ach') == '1':
+            return TrainingPartnerTargetsDetailedSerializer
+        # ---------------------------------------------------------
+        
+        return TrainingPartnerTargetsSerializer
 
 
 class TRPUserScopeViewSet(BaseTMSModelViewSet):
@@ -835,30 +860,59 @@ class BatchViewSet(BaseTMSModelViewSet):
     - Goes to DMMU for approval.
     """
     swagger_schema = BatchesSchema
-    queryset = (
-        tms_models.Batch.objects
-        .select_related("request", "centre")
-        .prefetch_related(
-            Prefetch(
-                "beneficiary_participations",
-                queryset=tms_models.BatchBeneficiary.objects.filter(is_active=True),
-            ),
-            Prefetch(
-                "trainer_participations",
-                queryset=tms_models.BatchTrainer.objects.filter(is_active=True),
-            ),
-            Prefetch(
-                "master_trainer_participations",
-                queryset=tms_models.BatchMasterTrainer.objects.filter(is_active=True),
-            ),
-        )
-    )
     serializer_class = BatchSerializer
     filterset_fields = ["request", "centre", "status", "start_date", "end_date", "created_by"]
     search_fields = ["code"]
 
+    def get_queryset(self):
+        # 1. select_related for ForeignKeys and OneToOne fields directly on Batch
+        qs = tms_models.Batch.objects.select_related(
+            "request", 
+            "centre", 
+            "request__training_plan",
+        )
+        
+        # 2. prefetch_related for reverse relations (only active on detail views to save memory)
+        if self.action in ['retrieve', 'detail_view']:
+            qs = qs.prefetch_related(
+                # --- SURGICAL FIX: Bulletproof prefetches ---
+                "batch_costing", # Moved here to prevent 500 if DB isn't perfectly migrated
+                "batch_closing", # Moved here to prevent 500 if DB isn't perfectly migrated
+                "beneficiary",
+                "trainer",
+                "master_trainers",                
+                # --------------------------------------------
+
+                # Participants
+                Prefetch("beneficiary_participations", queryset=tms_models.BatchBeneficiary.objects.filter(is_active=True).select_related('beneficiary')),
+                Prefetch("trainer_participations", queryset=tms_models.BatchTrainer.objects.filter(is_active=True).select_related('trainer')),
+                Prefetch("master_trainer_participations", queryset=tms_models.BatchMasterTrainer.objects.filter(is_active=True).select_related('master_trainer')),
+                
+                # Operations & eKYC
+                Prefetch("ekyc_verifications", queryset=tms_models.BatchEkycVerification.objects.filter(is_active=True)),
+                Prefetch("schedules", queryset=tms_models.BatchSchedule.objects.filter(is_active=True)),
+                
+                # Attendance (Raw & Summary)
+                Prefetch(
+                    "attendances",
+                    queryset=tms_models.BatchAttendance.objects.filter(is_active=True).prefetch_related(
+                        Prefetch("participant_records", queryset=tms_models.ParticipantAttendance.objects.filter(is_active=True))
+                    )
+                ),
+                Prefetch("beneficiary_summaries", queryset=tms_models.BeneficiaryAttendanceSummary.objects.filter(is_active=True)),
+
+                # Costing Breakdowns
+                Prefetch("participant_costs", queryset=tms_models.TPBatchCostBreakup.objects.filter(is_active=True)),
+
+                # Closure, Media, Certificates
+                Prefetch("batch_pictures", queryset=tms_models.BatchMedia.objects.filter(is_active=True)),
+                Prefetch("batch_report", queryset=tms_models.BatchReport.objects.filter(is_active=True)),
+                Prefetch("batch_certificates", queryset=tms_models.BatchParticipantCertificate.objects.filter(is_active=True)),
+            )
+        return qs
+
     @swagger_auto_schema(
-        operation_summary="Retrieve batch with nested participants and eKYC/attendance summary",
+        operation_summary="Retrieve absolutely everything related to the batch (Participants, Attendance, Costing, eKYC)",
         responses={200: BatchDetailSerializer},
     )
     @action(detail=True, methods=["get"], url_path="detail")
@@ -1206,13 +1260,23 @@ class ParticipantAttendanceViewSet(BaseTMSModelViewSet):
 
 class TPBatchCostBreakupViewSet(BaseTMSModelViewSet):
     """
-    Detailed partner-side batch cost breakup (centre, hostel, fooding, etc.).
-    Usually filled by Contact Person post-training.
+    Line-item cost for a SINGLE successful participant (HRA + TA/DA).
     """
     swagger_schema = ClosureSchema
     queryset = tms_models.TPBatchCostBreakup.objects.select_related("batch")
     serializer_class = TPBatchCostBreakupSerializer
-    filterset_fields = ["batch"]
+    filterset_fields = ["batch", "batch_beneficiary", "batch_trainer"]
+
+    # --- SURGICAL ADDITION: Auto-calculate line item total ---
+    def perform_create(self, serializer):
+        hra = serializer.validated_data.get('hra', 0)
+        ta_da = serializer.validated_data.get('ta_da', 0)
+        serializer.save(total_cost=hra + ta_da)
+
+    def perform_update(self, serializer):
+        hra = serializer.validated_data.get('hra', 0)
+        ta_da = serializer.validated_data.get('ta_da', 0)
+        serializer.save(total_cost=hra + ta_da)
 
 
 class BatchParticipantCertificateViewSet(BaseTMSModelViewSet):
@@ -1229,20 +1293,36 @@ class BatchParticipantCertificateViewSet(BaseTMSModelViewSet):
 
 class BatchCostViewSet(BaseTMSModelViewSet):
     """
-    Aggregated trainer + TP parts + detailed cost (TPBatchCostBreakup).
+    Master invoice for the entire Batch.
     """
     swagger_schema = ClosureSchema
-    queryset = tms_models.BatchCost.objects.select_related("training", "batch", "batch_expenses")
+    queryset = tms_models.BatchCost.objects.select_related("training", "batch")
+    serializer_class = BatchCostSerializer
+    filterset_fields = ["batch", "training"]
+
     @action(detail=True, methods=["get"], url_path="detail")
     def detail_view(self, request, pk=None):
         batch_cost = get_object_or_404(
-            tms_models.BatchCost.objects.select_related("training", "batch", "batch_expenses"),
+            tms_models.BatchCost.objects.select_related("training", "batch"),
             batch_id=pk
         )
         serializer = BatchCostDetailSerializer(batch_cost, context={"request": request})
         return Response(serializer.data)
-    serializer_class = BatchCostSerializer
-    filterset_fields = ["batch", "training"]
+
+    # --- SURGICAL ADDITION: Auto-calculate Master Invoice Total ---
+    def _calculate_grand_total(self, obj):
+        breakups = tms_models.TPBatchCostBreakup.objects.filter(batch=obj.batch, is_active=True)
+        total_breakups = sum(b.total_cost for b in breakups)
+        obj.grand_total_cost = total_breakups + obj.exposure_visit_cost + obj.field_visit_cost
+        obj.save(update_fields=['grand_total_cost'])
+
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        self._calculate_grand_total(obj)
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        self._calculate_grand_total(obj)
 
 
 class BatchMediaViewSet(BaseTMSModelViewSet):
@@ -1257,41 +1337,169 @@ class BatchMediaViewSet(BaseTMSModelViewSet):
 
 class BatchClosureRequestViewSet(BaseTMSModelViewSet):
     """
-    Batch-level closure request from Contact Person → Training Partner.
-    Later aggregated into Training Request closure by TP → DMMU.
+    Batch-level closure request: Training Partner → DMMU.
+
+    Standard CRUD operates on BatchClosureRequest rows.
+    The `submit` action is the entry point for TP to submit a full
+    closure package (costs + closure request) in a single atomic call.
+
+    When DMMU later sets certificates_issued=True via a PATCH/PUT,
+    perform_update auto-generates BatchParticipantCertificate rows.
     """
     swagger_schema = ClosureSchema
-    queryset = tms_models.BatchClosureRequest.objects.select_related("batch", "batch_costing")
+    queryset = tms_models.BatchClosureRequest.objects.select_related(
+        "batch", "batch_costing"
+    )
     serializer_class = BatchClosureRequestSerializer
     filterset_fields = ["batch", "certificates_issued"]
 
+    # ------------------------------------------------------------------
+    # EXISTING: Auto-Generate Certificates when DMMU approves
+    # ------------------------------------------------------------------
+    def perform_update(self, serializer):
+        original_instance = self.get_object()
+        was_issued = original_instance.certificates_issued
+
+        instance = serializer.save()
+
+        # TRIGGER: If certificates_issued flips to True
+        if instance.certificates_issued and not was_issued:
+            batch = instance.batch
+            training_plan = batch.request.training_plan if batch.request else None
+            theme = training_plan.theme if training_plan else None
+
+            # 1. Generate Certificates for SUCCESSFUL Beneficiaries
+            successful_bens = tms_models.BatchBeneficiary.objects.filter(
+                batch=batch,
+                attendance_summary__is_successful=True,
+                is_active=True
+            ).select_related('beneficiary')
+
+            for bb in successful_bens:
+                tms_models.BatchParticipantCertificate.objects.get_or_create(
+                    batch=batch,
+                    tr_beneficiary=bb.beneficiary,
+                    defaults={
+                        'training_plan': training_plan,
+                        'theme': theme,
+                    }
+                )
+
+            # 2. Generate Certificates for SUCCESSFUL Trainers (attended=True)
+            successful_trainers = tms_models.BatchTrainer.objects.filter(
+                batch=batch,
+                attended=True,
+                is_active=True
+            ).select_related('trainer')
+
+            for bt in successful_trainers:
+                tms_models.BatchParticipantCertificate.objects.get_or_create(
+                    batch=batch,
+                    tr_trainer=bt.trainer,
+                    defaults={
+                        'training_plan': training_plan,
+                        'theme': theme,
+                    }
+                )
+
+    # ------------------------------------------------------------------
+    # NEW: TP submits full closure package atomically
+    # ------------------------------------------------------------------
     @swagger_auto_schema(
         method="post",
-        operation_summary="CP → TP: submit batch closure request",
-        request_body=None,
-        responses={200: BatchClosureRequestSerializer},
+        operation_summary="TP → DMMU: Submit full batch closure package",
+        operation_description=(
+            "Training Partner submits participant cost breakups, "
+            "master batch cost, and creates the BatchClosureRequest "
+            "in a single atomic call. Batch status is flipped to REVIEW."
+        ),
+        request_body=BatchClosureSubmitSerializer,
+        responses={
+            201: openapi.Response(
+                description="Closure package created successfully.",
+                schema=BatchClosureSubmitResponseSerializer(),
+            ),
+            400: "Validation error or closure already submitted.",
+        },
     )
-    @action(detail=True, methods=["post"], url_path="submit")
-    def submit(self, request, pk=None):
+    @action(detail=False, methods=["post"], url_path="submit-closure")
+    def submit_closure(self, request):
         """
-        Minimal hook to mark a batch closure request as submitted.
-        (You can add fields like 'submitted_on' in model later.)
+        Atomic endpoint for Training Partner to submit a batch closure.
+
+        Steps performed inside a DB transaction:
+          1. Validate the full payload (see BatchClosureSubmitSerializer).
+          2. Bulk-create TPBatchCostBreakup rows (one per participant).
+          3. Create BatchCost (master invoice) linked to the batch.
+          4. Create BatchClosureRequest linked to both batch and BatchCost.
+          5. Flip Batch.status → REVIEW.
         """
-        obj = self.get_object()
-        # no special flags for now – just return current state
-        serializer = BatchClosureRequestSerializer(obj, context={"request": request})
-        return Response(serializer.data)
+        serializer = BatchClosureSubmitSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
 
+        batch = validated['batch_id']                          # Batch instance
+        training_request = validated['training_request_id']   # TrainingRequest instance
 
-class TRClosureViewSet(BaseTMSModelViewSet):
-    """
-    Training Request closure at DMMU level.
-    Links all batches in a training request with HRA / TA-DA docs.
-    """
-    swagger_schema = ClosureSchema
-    queryset = tms_models.TRClosure.objects.select_related("training")
-    serializer_class = TRClosureSerializer
-    filterset_fields = ["training"]
+        with transaction.atomic():
+            # ── STEP 1: Bulk-create TPBatchCostBreakup rows ──────────────
+            cost_breakup_objs = []
+            for item in validated['participant_costs']:
+                ben_obj     = item.get('batch_beneficiary_id')   # BatchBeneficiary | None
+                trainer_obj = item.get('batch_trainer_id')       # BatchTrainer     | None
+
+                participant_type = 'BENEFICIARY' if ben_obj else 'TRAINER'
+
+                cost_breakup_objs.append(
+                    tms_models.TPBatchCostBreakup(
+                        batch=batch,
+                        batch_beneficiary=ben_obj,
+                        batch_trainer=trainer_obj,
+                        participant_type=participant_type,
+                        hra=item['hra'],
+                        ta_da=item['ta_da'],
+                        total_cost=item['total_cost'],
+                    )
+                )
+
+            created_breakups = tms_models.TPBatchCostBreakup.objects.bulk_create(
+                cost_breakup_objs
+            )
+
+            # ── STEP 2: Create BatchCost (master invoice) ─────────────────
+            batch_cost = tms_models.BatchCost.objects.create(
+                batch=batch,
+                training=training_request,
+                is_exposure_visit=validated['is_exposure_visit'],
+                exposure_visit_cost=validated['exposure_visit_cost'],
+                is_field_visit=validated['is_field_visit'],
+                field_visit_cost=validated['field_visit_cost'],
+                grand_total_cost=validated['grand_total_cost'],
+            )
+
+            # ── STEP 3: Create BatchClosureRequest, linked to BatchCost ───
+            closure_request = tms_models.BatchClosureRequest.objects.create(
+                batch=batch,
+                batch_costing=batch_cost,
+                certificates_issued=False,
+            )
+
+            # ── STEP 4: Flip Batch.status → REVIEW ───────────────────────
+            batch.status = 'REVIEW'
+            batch.save(update_fields=['status', 'updated_at'])
+
+        # ── Build response ────────────────────────────────────────────────
+        response_data = BatchClosureSubmitResponseSerializer({
+            'participant_costs': created_breakups,
+            'batch_cost': batch_cost,
+            'closure_request': closure_request,
+            'batch_status': batch.status,
+        }).data
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
     
 class BatchReportViewSet(BaseTMSModelViewSet):
     """

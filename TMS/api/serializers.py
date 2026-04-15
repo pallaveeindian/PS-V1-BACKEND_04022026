@@ -11,6 +11,7 @@ from PIL import Image
 from PyPDF2 import PdfReader
 from django.core.exceptions import ValidationError
 from django.utils.text import get_valid_filename
+from django.db.models import Sum, Count
 
 class SoftDeleteModelSerializer(serializers.ModelSerializer):
     """
@@ -76,9 +77,24 @@ class TrainingThemeDetailSerializer(SoftDeleteModelSerializer):
 # ----------------------------
 
 class MasterTrainerSerializer(SoftDeleteModelSerializer):
+    block_name_en = serializers.SerializerMethodField()
+    district_name_en = serializers.SerializerMethodField()
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.MasterTrainer
-        fields = "__all__"
+        fields = "__all__"  
+
+    def get_block_name_en(self, obj):
+        try:
+            return obj.empanel_block.block_name_en if obj.empanel_block else None
+        except:
+            return None
+
+    def get_district_name_en(self, obj):
+        try:
+            return obj.empanel_district.district_name_en if obj.empanel_district else None
+        except:
+            return None
 
 
 class MasterTrainerCertificateSerializer(SoftDeleteModelSerializer):
@@ -444,6 +460,23 @@ class TrainingPartnerTargetsSerializer(SoftDeleteModelSerializer):
         model = tms_models.TrainingPartnerTargets
         fields = "__all__"
 
+class TrainingPartnerAchievementDetailedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = tms_models.TrainingPartnerAchievement
+        fields = "__all__"
+        depth = 1  
+
+class TrainingPartnerTargetsDetailedSerializer(SoftDeleteModelSerializer):
+    achievements = serializers.SerializerMethodField()
+
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.TrainingPartnerTargets
+        fields = "__all__"
+        depth = 1  
+
+    def get_achievements(self, obj):
+        achs = obj.achievements.all()
+        return TrainingPartnerAchievementDetailedSerializer(achs, many=True).data
 
 # ----------------------------
 # TRPUserScope
@@ -460,9 +493,24 @@ class TRPUserScopeSerializer(SoftDeleteModelSerializer):
 # ----------------------------
 
 class TrainingRequestSerializer(SoftDeleteModelSerializer):
+    district_name_en = serializers.SerializerMethodField()
+    block_name_en = serializers.SerializerMethodField()
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
-        fields = "__all__"
+        fields = "__all__" 
+
+    def get_district_name_en(self, obj):
+        try:
+            return obj.district.district_name_en if obj.district else None
+        except:
+            return None
+
+    def get_block_name_en(self, obj):
+        try:
+            return obj.block.block_name_en if obj.block else None
+        except:
+            return None
 
 
 class TRBeneficiarySerializer(SoftDeleteModelSerializer):
@@ -563,19 +611,76 @@ class BatchAttendanceDetailSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
         depth = 1
 
+class TPBatchCostBreakupSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.TPBatchCostBreakup
+        fields = "__all__"
+
+class BatchCostSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BatchCost
+        fields = "__all__"
+
+class BeneficiaryAttendanceSummarySerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BeneficiaryAttendanceSummary
+        fields = "__all__"
+
+class BatchClosureRequestSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BatchClosureRequest
+        fields = "__all__"
+
+class BatchMediaSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BatchMedia
+        fields = "__all__"
+
+class BatchReportSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BatchReport
+        fields = "__all__"
+
+class BatchParticipantCertificateSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.BatchParticipantCertificate
+        fields = "__all__"
+
+# --- UPDATED MASTER DETAIL SERIALIZER ---
 
 class BatchDetailSerializer(SoftDeleteModelSerializer):
+    # --- SURGICAL FIX: Explicitly map base relations so we don't need depth=2 ---
+    request = TrainingRequestDetailSerializer(read_only=True)
+    centre = TrainingPartnerCentreSerializer(read_only=True)
+    beneficiary = TRBeneficiarySerializer(many=True, read_only=True)
+    trainer = TRTrainerSerializer(many=True, read_only=True)
+    master_trainers = MasterTrainerSerializer(many=True, read_only=True)
+    # ---------------------------------------------------------------------------
+
+    # Participants
     master_trainer_participations = BatchMasterTrainerSerializer(many=True, read_only=True)
     trainer_participations = BatchTrainerSerializer(many=True, read_only=True)
     beneficiary_participations = BatchBeneficiarySerializer(many=True, read_only=True)
+    
+    # EKYC, Schedules, Raw Attendance
     ekyc_verifications = BatchEkycVerificationSerializer(many=True, read_only=True)
     attendances = BatchAttendanceDetailSerializer(many=True, read_only=True)
+    schedules = BatchScheduleSerializer(many=True, read_only=True) 
+
+    # Native Summaries & Costing
+    beneficiary_summaries = BeneficiaryAttendanceSummarySerializer(many=True, read_only=True)
+    batch_costing = BatchCostSerializer(read_only=True) # OneToOne
+    participant_costs = TPBatchCostBreakupSerializer(many=True, read_only=True)
+
+    # Media, Reports & Closure
+    batch_closing = BatchClosureRequestSerializer(read_only=True) # OneToOne
+    batch_pictures = BatchMediaSerializer(many=True, read_only=True)
+    batch_report = BatchReportSerializer(many=True, read_only=True)
+    batch_certificates = BatchParticipantCertificateSerializer(many=True, read_only=True)
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.Batch
         fields = "__all__"
-        depth = 1
-
 
 # ----------------------------
 # Batch Closure & Certificates
@@ -593,7 +698,6 @@ class BatchCostSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
 
 class BatchCostDetailSerializer(SoftDeleteModelSerializer):
-    batch_expenses = TPBatchCostBreakupSerializer(read_only=True)
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.BatchCost
         fields = "__all__"
@@ -619,13 +723,6 @@ class BatchClosureRequestDetailSerializer(SoftDeleteModelSerializer):
         model = tms_models.BatchClosureRequest
         fields = "__all__"
         depth = 1
-
-
-class TRClosureSerializer(SoftDeleteModelSerializer):
-    class Meta(SoftDeleteModelSerializer.Meta):
-        model = tms_models.TRClosure
-        fields = "__all__"
-
 
 class BatchParticipantCertificateSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
@@ -954,32 +1051,35 @@ class TPBatchCostBreakupReportSerializer(SoftDeleteModelSerializer):
         model = tms_models.TPBatchCostBreakup
         fields = [
             'id',
-            'centre_cost',
-            'hostel_cost',
-            'fooding_cost',
-            'dresses_cost',
-            'study_material_cost',
-            'total_cost',
             'batch',
+            'batch_beneficiary',
+            'batch_trainer',
+            'participant_type',
+            'hra',
+            'ta_da',
+            'total_cost',
         ]
 
 
 class BatchCostReportSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.BatchCost
-        fields = ['id', 'trainer_part_cost', 'tp_part_cost', 'batch']
+        fields = [
+            'id', 
+            'training', 
+            'batch', 
+            'is_exposure_visit', 
+            'exposure_visit_cost', 
+            'is_field_visit', 
+            'field_visit_cost', 
+            'grand_total_cost'
+        ]
 
 
 class BatchMediaReportSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.BatchMedia
         fields = ['id', 'date', 'category', 'file', 'notes', 'batch']
-
-
-class TRClosureReportSerializer(SoftDeleteModelSerializer):
-    class Meta(SoftDeleteModelSerializer.Meta):
-        model = tms_models.TRClosure
-        fields = ['id', 'hra', 'ta_da']
         
 class BatchCertificateSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
@@ -1013,11 +1113,6 @@ class TrainingRequestReportSerializer(SoftDeleteModelSerializer):
     batch_cost_breakup = serializers.SerializerMethodField()
     batch_overall_cost = serializers.SerializerMethodField()
     batch_media = serializers.SerializerMethodField()
-    closure_docs = TRClosureReportSerializer(
-        source='TR_closure',
-        many=True,
-        read_only=True
-    )
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
@@ -1042,7 +1137,6 @@ class TrainingRequestReportSerializer(SoftDeleteModelSerializer):
             'batch_cost_breakup',
             'batch_overall_cost',
             'batch_media',
-            'closure_docs',
         ]
 
     # ---------------------------
@@ -1166,3 +1260,162 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'block_name',
             'created_at',
         ]
+
+
+# ============================================================
+# SERIALIZERS
+# ============================================================
+
+class TPBatchCostBreakupInputSerializer(serializers.Serializer):
+    """
+    Represents ONE participant cost line-item.
+    Exactly one of batch_beneficiary_id or batch_trainer_id must be provided.
+    """
+    batch_beneficiary_id = serializers.PrimaryKeyRelatedField(
+        queryset=tms_models.BatchBeneficiary.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None
+    )
+    batch_trainer_id = serializers.PrimaryKeyRelatedField(
+        queryset=tms_models.BatchTrainer.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None
+    )
+    hra = serializers.DecimalField(max_digits=12, decimal_places=2)
+    ta_da = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    def validate(self, attrs):
+        ben = attrs.get('batch_beneficiary_id')
+        trainer = attrs.get('batch_trainer_id')
+        if ben and trainer:
+            raise serializers.ValidationError(
+                "Each cost line-item must reference either a batch_beneficiary_id "
+                "or a batch_trainer_id, not both."
+            )
+        if not ben and not trainer:
+            raise serializers.ValidationError(
+                "Each cost line-item must reference either a batch_beneficiary_id "
+                "or a batch_trainer_id."
+            )
+        return attrs
+
+
+class BatchClosureSubmitSerializer(serializers.Serializer):
+    """
+    Top-level payload sent by Training Partner to submit batch closure.
+    """
+    batch_id = serializers.PrimaryKeyRelatedField(
+        queryset=tms_models.Batch.objects.select_related('request__training_plan__theme')
+    )
+    training_request_id = serializers.PrimaryKeyRelatedField(
+        queryset=tms_models.TrainingRequest.objects.all()
+    )
+
+    # BatchCost fields
+    is_exposure_visit = serializers.BooleanField(default=False)
+    exposure_visit_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    is_field_visit = serializers.BooleanField(default=False)
+    field_visit_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    grand_total_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    # Participant cost line-items (multiple)
+    participant_costs = TPBatchCostBreakupInputSerializer(many=True, min_length=1)
+
+    def validate(self, attrs):
+        batch = attrs['batch_id']
+        training_request = attrs['training_request_id']
+
+        # Guard: batch must belong to the given training request
+        if batch.request_id != training_request.id:
+            raise serializers.ValidationError(
+                "The provided batch does not belong to the provided training_request_id."
+            )
+
+        # Guard: BatchClosureRequest must not already exist for this batch
+        if tms_models.BatchClosureRequest.objects.filter(batch=batch).exists():
+            raise serializers.ValidationError(
+                f"Closure Request for Batch '{batch.code or batch.id}' is already submitted."
+            )
+
+        # Guard: BatchCost must not already exist for this batch
+        if tms_models.BatchCost.objects.filter(batch=batch).exists():
+            raise serializers.ValidationError(
+                f"Batch Cost for Batch '{batch.code or batch.id}' is already submitted."
+            )
+
+        # Validate all participant line-items belong to this batch
+        costs = attrs['participant_costs']
+        for idx, item in enumerate(costs):
+            ben = item.get('batch_beneficiary_id')
+            trainer = item.get('batch_trainer_id')
+            if ben and ben.batch_id != batch.id:
+                raise serializers.ValidationError(
+                    f"participant_costs[{idx}]: BatchBeneficiary id={ben.id} "
+                    f"does not belong to batch id={batch.id}."
+                )
+            if trainer and trainer.batch_id != batch.id:
+                raise serializers.ValidationError(
+                    f"participant_costs[{idx}]: BatchTrainer id={trainer.id} "
+                    f"does not belong to batch id={batch.id}."
+                )
+
+        # Validate participant_type consistency: all must be same type
+        types_in_payload = set()
+        for item in costs:
+            if item.get('batch_beneficiary_id'):
+                types_in_payload.add('BENEFICIARY')
+            else:
+                types_in_payload.add('TRAINER')
+        if len(types_in_payload) > 1:
+            raise serializers.ValidationError(
+                "participant_costs must be all BENEFICIARY or all TRAINER — never mixed."
+            )
+
+        return attrs
+
+
+class TPBatchCostBreakupOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = tms_models.TPBatchCostBreakup
+        fields = [
+            'id', 'batch', 'batch_beneficiary', 'batch_trainer',
+            'participant_type', 'hra', 'ta_da', 'total_cost',
+            'created_at', 'updated_at',
+        ]
+
+
+class BatchCostOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = tms_models.BatchCost
+        fields = [
+            'id', 'batch', 'training',
+            'is_exposure_visit', 'exposure_visit_cost',
+            'is_field_visit', 'field_visit_cost',
+            'grand_total_cost',
+            'created_at', 'updated_at',
+        ]
+
+
+class BatchClosureRequestOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = tms_models.BatchClosureRequest
+        fields = [
+            'id', 'batch', 'batch_costing',
+            'certificates_issued',
+            'created_at', 'updated_at',
+        ]
+
+
+class BatchClosureSubmitResponseSerializer(serializers.Serializer):
+    """Combined response showing all created rows."""
+    participant_costs = TPBatchCostBreakupOutputSerializer(many=True)
+    batch_cost = BatchCostOutputSerializer()
+    closure_request = BatchClosureRequestOutputSerializer()
+    batch_status = serializers.CharField()
