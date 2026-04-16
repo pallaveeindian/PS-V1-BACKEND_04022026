@@ -97,7 +97,9 @@ class Command(BaseCommand):
         batch_beneficiaries = BatchBeneficiary.objects.filter(batch=batch).select_related('beneficiary')
 
         for bb in batch_beneficiaries:
-            p_id = str(bb.beneficiary.id)
+            # --- SURGICAL FIX: Use the BatchBeneficiary ID to match ParticipantAttendance ---
+            p_id = str(bb.id)
+            # ------------------------------------------------------------------------------
             is_dropout = False
             
             # 1. Check for DROP-OUT in eKYC

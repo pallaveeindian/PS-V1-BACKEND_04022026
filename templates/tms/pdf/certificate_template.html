@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            /* Narrowed Margins */
+            margin: 1.2cm;
+            /* Creates your Double Border */
+            border: 2.8pt solid #1a3a6b;
+            padding: 3mm;
+            outline: 0.9pt solid #b8860b;
+        }
+        
+        body {
+            font-family: 'Noto Sans Devanagari', sans-serif;
+            color: #1a1a2e;
+            font-size: 10pt;
+            line-height: 1.6;
+        }
+
+        /* Your Diagonal Watermark */
+        .watermark {
+            position: fixed;
+            top: 40%;
+            left: 15%;
+            font-size: 58pt;
+            color: rgba(191, 209, 237, 0.25);
+            transform: rotate(42deg);
+            z-index: -1;
+            text-align: center;
+        }
+
+        /* Header Card */
+        .header-card {
+            background-color: #eaf0fb;
+            border: 2pt solid #1a3a6b;
+            border-bottom: 3pt solid #b8860b;
+            text-align: center;
+            padding: 12pt;
+            margin-bottom: 15pt;
+        }
+        .header-org { color: #b8860b; font-weight: bold; font-size: 10pt; }
+        .header-title { color: #1a3a6b; font-weight: bold; font-size: 24pt; margin: 5pt 0; }
+        .header-sub { color: #4a5568; font-size: 9pt; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10pt;
+            font-size: 8.5pt;
+        }
+        th {
+            background-color: #1a3a6b;
+            color: white;
+            border: 1.5pt solid #2e5da6;
+            border-bottom: 1.8pt solid #b8860b;
+            padding: 5pt;
+        }
+        td {
+            border: 0.4pt solid #c0cfe0;
+            padding: 5pt;
+        }
+        tr:nth-child(even) td { background-color: #eaf0fb; }
+        tr:nth-child(odd) td { background-color: #fafcff; }
+
+        /* Helpers */
+        .hr-gold { border-top: 1.2pt solid #b8860b; margin: 8pt 0; }
+        .hr-blue { border-top: 0.6pt solid #2e5da6; margin: 4pt 0; }
+        .flex-between { display: flex; justify-content: space-between; }
+        .text-navy { color: #1a3a6b; font-weight: bold; }
+        
+        /* Signatories */
+        .sig-container { display: flex; justify-content: space-between; margin-top: 20pt; }
+        .sig-box {
+            width: 47%;
+            border: 1.2pt solid #2e5da6;
+            background-color: #fafcff;
+            padding-bottom: 8pt;
+        }
+        .sig-header {
+            background-color: #1a3a6b;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            padding: 7pt;
+            border-bottom: 1.5pt solid #b8860b;
+            margin-bottom: 6pt;
+        }
+        .sig-line { font-size: 9pt; padding: 0 5pt; margin-bottom: 4pt; }
+        .footer { text-align: center; font-size: 8pt; color: #4a5568; margin-top: 10pt; }
+    </style>
+</head>
+<body>
+
+    <div class="watermark">प्रगति सेतु<br>UPSRLM</div>
+
+    <div class="header-card">
+        <div class="header-org">उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन (UPSRLM)</div>
+        <div class="header-title">प्रमाण पत्र</div>
+        <div class="header-sub">प्रगति सेतु – प्रशिक्षण प्रबंधन प्रणाली</div>
+    </div>
+
+    <div class="flex-between">
+        <div>
+            <b>प्रेषक,</b><br>
+            {{ username }}<br>
+            {% if role_label == 'bmmu' %}ब्लॉक: {{ block_name }}{% else %}जिला: {{ district_name }}{% endif %}
+        </div>
+        <div style="text-align: right;">
+            <b>दिनांक:</b> {{ end_str }}
+        </div>
+    </div>
+
+    <div class="hr-blue"></div>
+    <div class="text-navy" style="text-align: justify; margin: 4pt 0;">
+        विषय: वित्तीय वर्ष {{ financial_year }} के अंतर्गत {{ theme_name }} थीम – {{ plan_name }} मॉड्यूल के अंतर्गत प्रशिक्षण कराये जाने के संबंध में।
+    </div>
+    <div class="hr-gold"></div>
+
+    <p style="text-align: justify;">
+        यह प्रमाणित किया जाता है कि संबंधित प्रतिभागियों ने <b>{{ type_hi }}</b> के स्तर <b>{{ level_hi }}</b> के अंतर्गत, <b>{{ plan_name }}</b> शीर्षक से आयोजित <b>{{ no_of_days }} दिवसीय</b> प्रशिक्षण कार्यक्रम में वित्तीय वर्ष <b>{{ financial_year }}</b> के अंतर्गत सफलतापूर्वक सहभागिता की है।
+    </p>
+    <p style="text-align: justify;">
+        उक्त प्रशिक्षण कार्यक्रम का आयोजन <b>{{ start_str }}</b> से <b>{{ end_str }}</b> तक 
+        {% if role_label == 'bmmu' %}ब्लॉक <b>{{ block_name }}</b>{% else %}जिला <b>{{ district_name }}</b>{% endif %} में किया गया।
+    </p>
+    <p style="text-align: justify;">
+        यह प्रशिक्षण उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन (UPSRLM) के दिशा-निर्देशों के अंतर्गत आयोजित किया गया, जिसमें नेतृत्व क्षमता विकास, संस्थागत सुदृढ़ीकरण एवं सामुदायिक विकास से संबंधित विषयों पर प्रशिक्षण प्रदान किया गया।
+    </p>
+    <p>प्रशिक्षण के दौरान प्रतिभागियों द्वारा संतोषजनक सहभागिता एवं सक्रिय योगदान किया गया।</p>
+    <p>यह प्रमाण पत्र प्रशिक्षण में सफल सहभागिता के उपरांत निर्गत किया जा रहा है।</p>
+
+    <div class="hr-gold"></div>
+    <div class="text-navy">कुल प्रतिभागियों की संख्या: {{ participants|length }}</div>
+
+    {% if not participants %}
+        <p>कोई सफल प्रतिभागी इस बैच में नहीं मिला।</p>
+    {% elif training_type == 'BENEFICIARY' %}
+        <table>
+            <tr><th>क्र.</th><th>नाम</th><th>आयु</th><th>पदनाम</th><th>PLD स्थिति</th><th>सामाजिक श्रेणी</th><th>धर्म</th><th>मोबाइल</th><th>उपस्थिति (%)</th></tr>
+            {% for p in participants %}
+            <tr>
+                <td style="text-align: center;">{{ forloop.counter }}</td>
+                <td>{{ p.member_name|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.age|default:"—" }}</td>
+                <td>{{ p.designation|default:"सदस्य" }}</td>
+                <td>{{ p.pld_status|default:"—" }}</td>
+                <td>{{ p.social_category|default:"—" }}</td>
+                <td>{{ p.religion|default:"—" }}</td>
+                <td>{{ p.mobile|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.attendance_pct }}%</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <table>
+            <tr><th>क्र.</th><th>नाम</th><th>मोबाइल</th><th>उपस्थिति (%)</th></tr>
+            {% for p in participants %}
+            <tr>
+                <td style="text-align: center;">{{ forloop.counter }}</td>
+                <td>{{ p.full_name|default:"—" }}</td>
+                <td>{{ p.mobile_no|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.attendance_pct }}%</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    {% if master_trainers %}
+    <div class="hr-blue"></div>
+    <div class="text-navy">प्रशिक्षण बैच के मास्टर ट्रेनर:</div>
+    <table>
+        <tr><th>क्र.</th><th>नाम</th><th>मोबाइल</th><th>पदनाम</th></tr>
+        {% for mt in master_trainers %}
+        <tr>
+            <td style="text-align: center;">{{ forloop.counter }}</td>
+            <td>{{ mt.full_name|default:"—" }}</td>
+            <td>{{ mt.mobile_no|default:"—" }}</td>
+            <td style="text-align: center;">{{ mt.designation|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <div class="sig-container">
+        <div class="sig-box">
+            <div class="sig-header">प्रथम जारीकर्ता</div>
+            <div class="sig-line">स्तर: {% if role_label == 'bmmu' %}ब्लॉक{% else %}जिला{% endif %} स्तर</div>
+            <div class="sig-line">पदनाम: _______________________________</div>
+            <div class="sig-line">कार्यालय: _______________________________</div>
+            <div class="sig-line">निर्गमन तिथि: ____________________________</div>
+            <div class="sig-line" style="margin-top: 40pt;">___________________________________</div>
+            <div class="sig-line">अधिकृत हस्ताक्षरकर्ता<br><span style="font-size: 8pt; color: #4a5568;">अधिकृत अधिकारी, UPSRLM / जिला प्रशासन</span></div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-header">द्वितीय जारीकर्ता</div>
+            <div class="sig-line">स्तर: {% if role_label == 'bmmu' %}जिला{% else %}राज्य{% endif %} स्तर</div>
+            <div class="sig-line">पदनाम: _______________________________</div>
+            <div class="sig-line">कार्यालय: _______________________________</div>
+            <div class="sig-line">निर्गमन तिथि: ____________________________</div>
+            <div class="sig-line" style="margin-top: 40pt;">___________________________________</div>
+            <div class="sig-line">अधिकृत हस्ताक्षरकर्ता<br><span style="font-size: 8pt; color: #4a5568;">अधिकृत अधिकारी, UPSRLM / जिला प्रशासन</span></div>
+        </div>
+    </div>
+
+    <div class="hr-blue" style="margin-top: 15pt;"></div>
+    <div class="footer">
+        प्रगति सेतु – प्रशिक्षण प्रबंधन प्रणाली द्वारा जनरेटेड<br>
+        प्रेरणा पहल | उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन (UPSRLM)
+    </div>
+
+</body>
+</html>

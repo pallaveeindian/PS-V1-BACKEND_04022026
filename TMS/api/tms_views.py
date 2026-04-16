@@ -1509,11 +1509,7 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
             for bb in successful_bens:
                 tms_models.BatchParticipantCertificate.objects.get_or_create(
                     batch=batch,
-                    tr_beneficiary=bb.beneficiary,
-                    defaults={
-                        'training_plan': training_plan,
-                        'theme': theme,
-                    }
+                    tr_beneficiary=bb.beneficiary
                 )
 
             # 2. Generate Certificates for SUCCESSFUL Trainers (attended=True)
@@ -1526,11 +1522,7 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
             for bt in successful_trainers:
                 tms_models.BatchParticipantCertificate.objects.get_or_create(
                     batch=batch,
-                    tr_trainer=bt.trainer,
-                    defaults={
-                        'training_plan': training_plan,
-                        'theme': theme,
-                    }
+                    tr_trainer=bt.trainer
                 )
 
     # ------------------------------------------------------------------
