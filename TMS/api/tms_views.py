@@ -44,6 +44,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, NotFound
 
+# Certificate
+from .certificate_gen import generate_batch_certificate_pdf
+
 # -------------------------------------------------------------------
 # Common helpers
 # -------------------------------------------------------------------
@@ -1015,6 +1018,134 @@ class BatchViewSet(BaseTMSModelViewSet):
         batch.status = "PENDING"
         batch.save(update_fields=["status"])
         return Response(BatchSerializer(batch, context={"request": request}).data)
+
+    @swagger_auto_schema(
+        method="get",
+        operation_summary="Generate batch certificate PDF in Hindi (BMMU/DMMU/SMMU only)",
+        manual_parameters=[
+            openapi.Parameter(
+                "financial_year",
+                openapi.IN_QUERY,
+                description="वित्तीय वर्ष, e.g. 2024-25",
+                type=openapi.TYPE_STRING,
+                required=True,
+            )
+        ],
+        responses={
+            200: openapi.Response(description="PDF file download"),
+            400: "Batch not eligible — not CLOSED or certificates not issued.",
+            500: "Font file missing — see server logs.",
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="gen-cert")
+    def gen_cert(self, request, pk=None):
+        """
+        Generate and stream a Hindi certificate PDF for a closed batch.
+        Guards:
+        - batch.status must be 'CLOSED'
+        - BatchClosureRequest.certificates_issued must be True
+
+        Query param:
+        - financial_year (required) e.g. 2024-25
+        """
+        financial_year = request.query_params.get("financial_year", "").strip()
+        if not financial_year:
+            return Response(
+                {"detail": "'financial_year' query parameter is required (उदाहरण: 2024-25)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Fetch batch with ALL required relations ──
+        try:
+            batch = (
+                tms_models.Batch.objects
+                .select_related(
+                    "request",
+                    "request__training_plan",
+                    "request__training_plan__theme",
+                    "request__district",
+                    "request__block",
+                    "centre",
+                    "batch_closing",   # OneToOne
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "beneficiary_participations",
+                        queryset=tms_models.BatchBeneficiary.objects.filter(is_active=True)
+                        .select_related(
+                            "beneficiary",
+                            "beneficiary__district",
+                            "beneficiary__block",
+                            "attendance_summary",
+                        ),
+                    ),
+                    Prefetch(
+                        "trainer_participations",
+                        queryset=tms_models.BatchTrainer.objects.filter(is_active=True)
+                        .select_related("trainer", "trainer__trainer"),
+                    ),
+                    Prefetch(
+                        "master_trainer_participations",
+                        queryset=tms_models.BatchMasterTrainer.objects.filter(is_active=True)
+                        .select_related("master_trainer"),
+                    ),
+                )
+                .get(pk=pk)
+            )
+        except tms_models.Batch.DoesNotExist:
+            return Response({"detail": "Batch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # ── Guard 1: CLOSED status ──
+        if batch.status != "CLOSED":
+            return Response(
+                {
+                    "detail": (
+                        f"प्रमाण पत्र केवल 'CLOSED' स्थिति वाले बैच के लिए उत्पन्न होता है। "
+                        f"वर्तमान स्थिति: {batch.status}"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Guard 2: certificates_issued = True ──
+        try:
+            closure = batch.batch_closing
+            if not closure.certificates_issued:
+                return Response(
+                    {
+                        "detail": (
+                            "DMMU द्वारा certificates_issued=True किए जाने के बाद "
+                            "ही प्रमाण पत्र जनरेट किया जा सकता है।"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except tms_models.BatchClosureRequest.DoesNotExist:
+            return Response(
+                {"detail": "इस बैच के लिए कोई Closure Request नहीं मिली।"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Determine role ──
+        master_user = get_master_user_from_request(request)
+        role_id = getattr(master_user.role, "id", None) if master_user and master_user.role else None
+        role_label = {1: "bmmu", 2: "dmmu", 3: "smmu"}.get(role_id, "dmmu")
+
+        # ── Generate PDF ──
+        try:
+            pdf_buffer = generate_batch_certificate_pdf(
+                batch=batch,
+                financial_year=financial_year,
+                master_user=master_user,
+                role_label=role_label,
+            )
+        except RuntimeError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        filename = f"pragati_setu_certificate_batch_{batch.code or batch.id}.pdf"
+        response = HttpResponse(pdf_buffer.read(), content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response        
 
 class BatchListPagination(PageNumberPagination):
     page_size = 10

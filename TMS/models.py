@@ -812,6 +812,8 @@ class Batch(SoftDeleteMixin):
         max_length=30, choices=STATUS, default='DRAFT'
     )
 
+    rejection_reason = models.CharField(max_length=500, blank=True, null=True)
+
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
 
