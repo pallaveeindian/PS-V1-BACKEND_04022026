@@ -16,9 +16,15 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
     
     LEVEL_HI = {"BLOCK": "ब्लॉक", "DISTRICT": "जिला", "STATE": "राज्य", "VILLAGE": "ग्राम"}
     TYPE_HI = {"BENEFICIARY": "लाभार्थी", "TRAINER": "मास्टर ट्रेनर"}
+    PLAN_TYPE_HI = {
+        "RES": "आवासीय",
+        "NON RES": "गैर-आवासीय",
+        "OTHER": "अन्य",
+    }
     
     level_hi = LEVEL_HI.get(tr.level if tr else "BLOCK", tr.level if tr else "BLOCK")
     type_hi = TYPE_HI.get(training_type, training_type)
+    plan_type_hi = PLAN_TYPE_HI.get(plan.type_of_training if plan else None, "—")
     
     # Participant Logic (With Attendance Percentage added)
     participants = []
@@ -53,6 +59,7 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
         'type_hi': type_hi,
         'theme_name': theme.theme_name if theme else "—",
         'plan_name': plan.training_name if plan else "—",
+        'plan_type_hi': plan_type_hi,
         'no_of_days': plan.no_of_days if plan else "—",
         'start_str': batch.start_date.strftime("%d/%m/%Y") if batch.start_date else "—",
         'end_str': batch.end_date.strftime("%d/%m/%Y") if batch.end_date else "—",

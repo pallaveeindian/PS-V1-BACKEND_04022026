@@ -3,17 +3,7 @@
 from django.urls import path
 
 from .lookups import *
-from .upsrlm import (
-    UpsrlmClfListView,
-    UpsrlmClfDetailView,
-    UpsrlmClfVoListView,
-    UpsrlmClfPanchayatListView,
-    UpsrlmClfMembersView,
-    UpsrlmVoListView,
-    UpsrlmVoDetailView,
-    UpsrlmVoShgListView,
-    UpsrlmVoMembersView,
-)
+from .upsrlm import *
 
 app_name = "core_lookups"
 
@@ -150,7 +140,11 @@ urlpatterns = [
         UpsrlmClfMembersView.as_view(),
         name="upsrlm-clf-members",
     ),
-
+    path(
+        "find-clf-by-member/",
+        FindClfByMemberView.as_view(),
+    ),
+    
     # VO
     path(
         "upsrlm-vo-list/<int:block_id>/",

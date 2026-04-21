@@ -10,6 +10,7 @@ from TMS.models import (
     BatchEkycVerification, 
     ParticipantAttendance, 
     BeneficiaryAttendanceSummary,
+    BatchMasterTrainer,
     TrainingPartnerAchievement
 )
 
@@ -82,7 +83,13 @@ class Command(BaseCommand):
                     achievement.date_achieved = today
                     achievement.save(update_fields=['batches_completed', 'date_achieved'])
                     self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.request.partner.name}."))
-            
+
+            # --- SURGICAL FIX: FLIP MASTER TRAINER STATUS TO AVAILABLE ---
+            # Using .update() directly hits the DB without needing to iterate over instances, making it extremely fast.
+            trainers_updated = BatchMasterTrainer.objects.filter(batch=batch).update(status='AVAILABLE')
+            if trainers_updated > 0:
+                self.stdout.write(self.style.SUCCESS(f"Flipped {trainers_updated} Master Trainer(s) to AVAILABLE for Batch {batch.code or batch.id}."))
+
             # --- TRIGGER ATTENDANCE CALCULATION ---
             self.calculate_batch_attendance(batch)
 

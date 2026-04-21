@@ -1740,3 +1740,99 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
             )
 
         return qs
+
+# Check if participants are engaged in ongoing trainings (bulk API for TP onboarding)
+class BulkTrainingEngagementCheckAPI(APIView):
+    """
+    Bulk check if participants are engaged in ongoing trainings.
+
+    Input:
+    {
+        "participant_type": "BENEFICIARY" | "TRAINER",
+        "ids": ["id1", "id2", ...]
+    }
+
+    Output:
+    {
+        "eligible_ids": [...],
+        "engaged_ids": [...]
+    }
+    """
+
+    def post(self, request):
+        participant_type = request.data.get("participant_type")
+        ids = request.data.get("ids", [])
+
+        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+            return Response(
+                {"error": "Invalid participant_type"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {"error": "ids must be a non-empty list"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        engaged_ids = set()
+
+        # -------------------------------
+        # BENEFICIARY CASE
+        # -------------------------------
+        if participant_type == "BENEFICIARY":
+            # Rule 1: Check TRBeneficiary (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
+            engaged_tr_bens = tms_models.TRBeneficiary.objects.exclude(
+                training__status__in=["COMPLETED"]
+            ).filter(
+                lokos_member_code__in=ids
+            ).values_list("lokos_member_code", flat=True)
+
+            # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            engaged_batch_bens = tms_models.BatchBeneficiary.objects.exclude(
+                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+            ).filter(
+                beneficiary__lokos_member_code__in=ids
+            ).values_list("beneficiary__lokos_member_code", flat=True)
+
+            engaged_ids = set(map(str, engaged_tr_bens)).union(set(map(str, engaged_batch_bens)))
+
+        # -------------------------------
+        # TRAINER CASE
+        # -------------------------------
+        elif participant_type == "TRAINER":
+            # Rule 3: Check TRTrainer (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
+            engaged_tr_trainers = tms_models.TRTrainer.objects.exclude(
+                training__status__in=["COMPLETED"]
+            ).filter(
+                trainer_id__in=ids
+            ).values_list("trainer_id", flat=True)
+
+            # Rule 4: Check BatchMasterTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            engaged_batch_master_trainers = tms_models.BatchMasterTrainer.objects.exclude(
+                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+            ).filter(
+                master_trainer_id__in=ids
+            ).values_list("master_trainer_id", flat=True)
+
+            # Rule 5: Check BatchTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            engaged_batch_trainers = tms_models.BatchTrainer.objects.exclude(
+                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+            ).filter(
+                trainer__trainer_id__in=ids
+            ).values_list("trainer__trainer_id", flat=True)
+
+            engaged_ids = set(map(str, engaged_tr_trainers)) \
+                .union(set(map(str, engaged_batch_master_trainers))) \
+                .union(set(map(str, engaged_batch_trainers)))
+
+        # -------------------------------
+        # FINAL RESPONSE
+        # -------------------------------
+        input_ids_set = set(map(str, ids))
+        eligible_ids = list(input_ids_set - engaged_ids)
+
+        return Response({
+            "eligible_ids": eligible_ids,
+            "engaged_ids": list(engaged_ids)
+        }, status=status.HTTP_200_OK)

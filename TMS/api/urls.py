@@ -234,4 +234,12 @@ urlpatterns = [
         tms_views.preview_submission,
         name="preview_submission",
     ),       
+
+    # Check if participants are engaged in ongoing trainings (bulk API for TP onboarding)
+    path(
+        "check-training-engagement/",
+        tms_views.BulkTrainingEngagementCheckAPI.as_view(),
+        name="bulk-check-training-engagement"
+    ),
+
 ]

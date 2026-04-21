@@ -1128,3 +1128,74 @@ class UpsrlmVoMembersView(BaseUpsrlmView):
 
         data = project_fields_json_list(data, request)
         return self.paginate_list(request, data)
+
+# EPSMS CRP Registration Find CLF by MemberCode
+class FindClfByMemberView(BaseUpsrlmView):
+    """
+    GET /api/v1/lookups/find-clf-by-member/?block_id=XXX&member_code=YYY
+    """
+
+    def get(self, request):
+        block_id = request.GET.get("block_id")
+        member_code = request.GET.get("member_code")
+
+        if not block_id or not member_code:
+            return Response(
+                {"detail": "block_id and member_code are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # 1️⃣ Get CLFs of block
+            clf_list_key = f"upsrlm:clf-list:{block_id}"
+            raw = self.fetch_from_apisetu(
+                clf_list_key,
+                "clf/block",
+                params={"block_id": block_id},
+            )
+
+            clfs = _as_list(raw)
+
+            # 2️⃣ LOOP CLFs
+            for clf in clfs:
+                clf_code = clf.get("code")
+                if not clf_code:
+                    continue
+
+                try:
+                    # 3️⃣ Use cached CLF detail
+                    detail_key = f"upsrlm:clf-detail:{clf_code}"
+                    detail = self.fetch_from_apisetu(
+                        detail_key,
+                        "clf",
+                        params={"clf_code": clf_code},
+                    )
+
+                    members = detail.get("member_designations") or []
+
+                    # 4️⃣ SEARCH MEMBER
+                    for m in members:
+                        if str(m.get("member_code")) == str(member_code):
+                            return Response(
+                                {
+                                    "clf_code": clf_code,
+                                    "name": clf.get("name"),
+                                    "clfCategory": clf.get("clfCategory"),
+                                }
+                            )
+
+                except Exception:
+                    logger.exception("Error checking CLF %s", clf_code)
+                    continue
+
+            # ❌ NOT FOUND
+            return Response(
+                {"detail": "No CLF found for this member"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except RuntimeError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
