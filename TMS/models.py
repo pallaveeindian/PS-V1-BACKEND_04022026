@@ -632,6 +632,8 @@ class TrainingRequest(SoftDeleteMixin):
         MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
     )    
 
+    remarks = models.TextField(blank=True, null=True)
+
     class Meta:
         db_table = 'tms_trainingrequest'
         managed = True
@@ -1281,7 +1283,13 @@ class BeneficiaryAttendanceSummary(SoftDeleteMixin):
     
     # Traceability Foreign Keys
     batch_beneficiary = models.OneToOneField(
-        'BatchBeneficiary', on_delete=models.CASCADE, related_name='attendance_summary'
+        'BatchBeneficiary', on_delete=models.CASCADE, related_name='attendance_summary',
+        null=True, blank=True
+    )
+    # NEW: Added batch_trainer
+    batch_trainer = models.OneToOneField(
+        'BatchTrainer', on_delete=models.CASCADE, related_name='attendance_summary',
+        null=True, blank=True
     )
     batch = models.ForeignKey(
         'Batch', on_delete=models.CASCADE, related_name='beneficiary_summaries'
@@ -1312,9 +1320,23 @@ class BeneficiaryAttendanceSummary(SoftDeleteMixin):
             models.Index(fields=['is_successful']),
         ]
 
-    def __str__(self):
-        return f"Summary: {self.batch_beneficiary.beneficiary.member_name} - {self.attendance_percentage}%"        
+    def clean(self):
+        # Validation to ensure exactly ONE participant type is linked
+        if self.batch_beneficiary and self.batch_trainer:
+            raise ValidationError("Only one of batch_beneficiary or batch_trainer can be set.")
+        if not self.batch_beneficiary and not self.batch_trainer:
+            raise ValidationError("Either batch_beneficiary or batch_trainer must be set.")
 
+    def __str__(self):
+        # Safely fetch the name depending on which participant is linked
+        if self.batch_beneficiary:
+            name = getattr(self.batch_beneficiary.beneficiary, 'member_name', 'Unknown')
+        elif self.batch_trainer:
+            name = getattr(self.batch_trainer.trainer, 'full_name', getattr(self.batch_trainer.trainer, 'member_name', 'Unknown'))
+        else:
+            name = "Unknown"
+            
+        return f"Summary: {name} - {self.attendance_percentage}%"
 
 class TrainingPartnerAchievement(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)

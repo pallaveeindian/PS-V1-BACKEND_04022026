@@ -1836,3 +1836,56 @@ class BulkTrainingEngagementCheckAPI(APIView):
             "eligible_ids": eligible_ids,
             "engaged_ids": list(engaged_ids)
         }, status=status.HTTP_200_OK)
+
+# -------------------------------------------------------------------
+# Deleted Participants & Related TRs View
+# -------------------------------------------------------------------
+class DeletedParticipantsView(APIView):
+    """
+    API View to retrieve soft-deleted participants (TRBeneficiary or TRTrainer) 
+    for a given TrainingRequest, and parse the `remarks` to fetch related TrainingRequests.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, tr_id):
+        # Use _base_manager in case the target TR itself is soft-deleted
+        tr = get_object_or_404(tms_models.TrainingRequest._base_manager, id=tr_id)
+        
+        # 1. Fetch deleted participants based on training_type
+        deleted_participants_data = []
+        if tr.training_type == 'BENEFICIARY':
+            # is_active=False identifies the soft-deleted rows
+            participants = tms_models.TRBeneficiary._base_manager.filter(training=tr, is_active=False)
+            deleted_participants_data = TRBeneficiarySerializer(participants, many=True).data
+        elif tr.training_type == 'TRAINER':
+            participants = tms_models.TRTrainer._base_manager.filter(training=tr, is_active=False)
+            deleted_participants_data = TRTrainerSerializer(participants, many=True).data
+
+        # 2. Parse remarks for related TrainingRequest IDs
+        related_tr_ids = set()
+        if tr.remarks:
+            # Regex to find IDs from "MOVED TO <id> ," pattern
+            moved_to_ids = re.findall(r'MOVED TO\s+(\d+)\s*,', tr.remarks)
+            
+            # Regex to find IDs from "COMBINED from <id>-<district>-<block> ," pattern
+            combined_from_ids = re.findall(r'COMBINED from\s+(\d+)-', tr.remarks)
+            
+            for tid in moved_to_ids + combined_from_ids:
+                try:
+                    related_tr_ids.add(int(tid))
+                except ValueError:
+                    continue
+
+        # 3. Fetch related TrainingRequests
+        related_trs_data = []
+        if related_tr_ids:
+            related_trs = tms_models.TrainingRequest._base_manager.filter(id__in=related_tr_ids)
+            related_trs_data = TrainingRequestSerializer(related_trs, many=True).data
+
+        return Response({
+            "training_request_id": tr.id,
+            "training_type": tr.training_type,
+            "remarks": tr.remarks,
+            "deleted_participants": deleted_participants_data,
+            "related_training_requests": related_trs_data
+        }, status=status.HTTP_200_OK)        

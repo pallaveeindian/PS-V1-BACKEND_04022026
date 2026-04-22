@@ -242,4 +242,11 @@ urlpatterns = [
         name="bulk-check-training-engagement"
     ),
 
+    # To get list of deleted participants for a training request (for audit trail and data integrity purposes)
+    path(
+            'training-requests/<int:tr_id>/deleted-participants/', 
+            tms_views.DeletedParticipantsView.as_view(), 
+            name='tr-deleted-participants'
+        ),
+
 ]

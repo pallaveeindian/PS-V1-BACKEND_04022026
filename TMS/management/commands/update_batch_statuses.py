@@ -7,6 +7,7 @@ from django.utils import timezone
 from TMS.models import (
     Batch, 
     BatchBeneficiary, 
+    BatchTrainer,
     BatchEkycVerification, 
     ParticipantAttendance, 
     BeneficiaryAttendanceSummary,
@@ -158,4 +159,61 @@ class Command(BaseCommand):
                 }
             )
             
+        # ------------------------------------------------------
+        # NEW: PROCESS TRAINERS (ACTING AS TRAINEES IN TOT BATCHES)
+        # ------------------------------------------------------
+        batch_trainers = BatchTrainer.objects.filter(batch=batch).select_related('trainer')
+
+        for bt in batch_trainers:
+            p_id = str(bt.id)
+            is_dropout = False
+            
+            # 1. Check for DROP-OUT in eKYC
+            ekyc = BatchEkycVerification.objects.filter(
+                batch=batch, 
+                participant_role='trainee', 
+                participant_id=p_id
+            ).first()
+
+            if ekyc and ekyc.remarks and 'DROP-OUT' in ekyc.remarks.upper():
+                is_dropout = True
+
+            # 2. Calculate Present Days
+            present_days = ParticipantAttendance.objects.filter(
+                attendance__batch=batch,
+                participant_role='trainee',
+                participant_id=p_id,
+                present=True
+            ).count()
+
+            # 3. Calculate Percentage
+            attendance_percentage = (present_days / total_days) * 100
+            
+            if attendance_percentage > 100.0:
+                attendance_percentage = 100.0
+
+            # 4. Determine Success (>= 80% AND not a dropout)
+            is_successful = (attendance_percentage >= 80.0) and not is_dropout
+
+            # 5. Update the base TRTrainer / BatchTrainer logic
+            bt.attended = is_successful
+            bt.save(update_fields=['attended'])
+            
+            bt.trainer.attended = is_successful
+            bt.trainer.save(update_fields=['attended'])
+
+            # 6. AUTO-POPULATE THE NEW SUMMARY MODEL
+            BeneficiaryAttendanceSummary.objects.update_or_create(
+                batch_trainer=bt,
+                defaults={
+                    'batch': batch,
+                    'training_request': batch.request,
+                    'total_training_days': total_days,
+                    'days_present': present_days,
+                    'attendance_percentage': attendance_percentage,
+                    'is_dropout': is_dropout,
+                    'is_successful': is_successful
+                }
+            )
+
         self.stdout.write(self.style.SUCCESS(f"Successfully calculated and populated summary models for Batch {batch.code or batch.id}."))
