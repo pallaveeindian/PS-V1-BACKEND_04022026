@@ -543,14 +543,26 @@ class TRTrainerDetailSerializer(SoftDeleteModelSerializer):
 
 
 class TrainingRequestDetailSerializer(SoftDeleteModelSerializer):
-    beneficiary_registrations = TRBeneficiarySerializer(many=True, read_only=True)
-    trainer_registrations = TRTrainerSerializer(many=True, read_only=True)
-    batches = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    beneficiary_registrations = serializers.SerializerMethodField()
+    trainer_registrations = serializers.SerializerMethodField()
+    batches = serializers.SerializerMethodField()
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
         fields = "__all__"
         depth = 1
+
+    def get_beneficiary_registrations(self, obj):
+        qs = obj.beneficiary_registrations.filter(is_active=True)
+        return TRBeneficiarySerializer(qs, many=True, context=self.context).data
+
+    def get_trainer_registrations(self, obj):
+        qs = obj.trainer_registrations.filter(is_active=True)
+        return TRTrainerSerializer(qs, many=True, context=self.context).data
+
+    def get_batches(self, obj):
+        qs = obj.batches.filter(is_active=True)
+        return [b.id for b in qs]
 
 
 # ----------------------------
@@ -561,6 +573,7 @@ class BatchSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.Batch
         fields = "__all__"
+        read_only_fields = ["code"]
 
 class BatchScheduleSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):

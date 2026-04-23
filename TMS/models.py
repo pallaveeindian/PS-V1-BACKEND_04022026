@@ -2,10 +2,11 @@
 import uuid
 import random
 import string
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from core.models import MasterUser, MasterDistrict, MasterBlock, MasterPanchayat, MasterVillage
+from django.db.models import Max
 
 def generate_custom_th_urid():
     # Example generator for format like: TH_1AN33KN221 (prefix TH_ + 11 alnum)
@@ -259,6 +260,8 @@ class TrainingPartner(SoftDeleteMixin):
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
+
+    tp_short_name = models.CharField("Short Name", max_length=100, blank=True, null=True)
 
     tpm_registration_no = models.CharField(
         "Registration No (TPM/Org)", max_length=128, blank=True, null=True
@@ -820,6 +823,55 @@ class Batch(SoftDeleteMixin):
     end_date = models.DateField(blank=True, null=True)
 
     time_of_training = models.CharField(max_length=255, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            # 1. Access related data through TrainingRequest (self.request)
+            req = self.request
+            
+            # Extract names or fallback to "XXX"
+            district = "XXX"
+            if req and req.district:
+                district = req.district.district_short_name_en or "XXX"
+                
+            block = "XXX"
+            if req and req.block:
+                block = req.block.block_name_local or "XXX"
+                
+            tp = "XXX"
+            if req and req.partner:
+                tp = req.partner.tp_short_name or "XXX"
+                
+            plan_id = 0
+            if req and req.training_plan:
+                plan_id = req.training_plan.id or 0
+
+            # 2. Construct the prefix
+            prefix = f"{district}-{block}-{tp}-{plan_id}"
+
+            # 3. Sequence Generation with Race-Condition Protection
+            with transaction.atomic():
+                # select_for_update() locks these rows until the save is complete
+                last_batch = Batch.objects.select_for_update().filter(
+                    code__startswith=prefix
+                ).aggregate(max_seq=Max("code"))
+
+                last_code = last_batch["max_seq"]
+
+                if last_code:
+                    try:
+                        # Split by hyphen and take the last part (the sequence)
+                        parts = last_code.split("-")
+                        last_seq = int(parts[-1])
+                    except (ValueError, IndexError):
+                        last_seq = 0
+                else:
+                    last_seq = 0
+
+                new_seq = str(last_seq + 1).zfill(4)
+                self.code = f"{prefix}-{new_seq}"
+
+        super(Batch, self).save(*args, **kwargs)
 
     class Meta:
         db_table = 'tms_batch'
