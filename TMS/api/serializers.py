@@ -455,7 +455,16 @@ class TrainingPartnerDetailSerializer(SoftDeleteModelSerializer):
 # TrainingPartnerTargets
 # ----------------------------
 
+class MasterDistrictTargetSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = core_models.MasterDistrict
+        fields = ['district_id', 'district_name_en', 'district_short_name_en']
+
 class TrainingPartnerTargetsSerializer(SoftDeleteModelSerializer):
+    partner_full = TrainingPartnerSerializer(source='partner', read_only=True)
+    training_plan_full = TrainingPlanSerializer(source='training_plan', read_only=True)
+    district_full = MasterDistrictTargetSerializer(source='district', read_only=True)
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingPartnerTargets
         fields = "__all__"
