@@ -1889,3 +1889,54 @@ class DeletedParticipantsView(APIView):
             "deleted_participants": deleted_participants_data,
             "related_training_requests": related_trs_data
         }, status=status.HTTP_200_OK)        
+
+
+# First Login Password Change API
+class TMSFirstLoginPasswordChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        master_user = get_master_user_from_request(request)
+        if not master_user:
+            return Response(
+                {"detail": "Master user not found."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 1. Verify the First Login Tracker exists and requires a password change
+        try:
+            tracker = tms_models.TMSFirstLoginTracker.objects.get(master_user=master_user)
+        except tms_models.TMSFirstLoginTracker.DoesNotExist:
+            return Response(
+                {"detail": "No TMS login record found for this user."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not tracker.must_change_password:
+            return Response(
+                {"detail": "Password change is not required or has already been completed."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. Extract ONLY the new password
+        new_password = request.data.get("new_password")
+        if not new_password:
+            return Response(
+                {"detail": "The 'new_password' parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Store the password in CLEARTEXT and update MasterUser audit fields
+        master_user.password = new_password
+        master_user.pass_updated_at = timezone.now()
+        master_user.pass_updated_by = master_user
+        master_user.save(update_fields=["password", "pass_updated_at", "pass_updated_by"])
+
+        # 4. Clear the must_change_password flag so they can't hit this API again
+        tracker.must_change_password = False
+        tracker.save(update_fields=["must_change_password"])
+
+        return Response(
+            {"detail": "Password updated successfully."}, 
+            status=status.HTTP_200_OK
+        )

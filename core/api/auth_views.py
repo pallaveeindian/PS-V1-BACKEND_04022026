@@ -26,31 +26,25 @@ REFRESH_COOKIE_NAME = 'ps_refresh'
 
 # Calculate cookie max_age from SIMPLE_JWT setting if present (seconds)
 def _get_refresh_cookie_max_age():
-    # SIMPLE_JWT 'REFRESH_TOKEN_LIFETIME' is a datetime.timedelta
     delta = getattr(settings, 'SIMPLE_JWT', {}).get('REFRESH_TOKEN_LIFETIME', None)
     if delta:
         try:
-            # may be timedelta
             return int(delta.total_seconds())
         except Exception:
             pass
-    # fallback: 7 days
     return 7 * 24 * 3600
 
 # Captcha for Login
 class CaptchaView(APIView):
     permission_classes = (permissions.AllowAny,)
-
     CAPTCHA_SESSION_KEY = "login_captcha"
     CAPTCHA_EXPIRY_SECONDS = 180  # 3 minutes
 
     def get(self, request):
-        # Generate random text
         captcha_text = "".join(
             random.choices(string.ascii_uppercase + string.digits, k=6)
         )
 
-        # Save to session
         request.session[self.CAPTCHA_SESSION_KEY] = {
             "value": captcha_text,
             "expires": (
@@ -58,14 +52,10 @@ class CaptchaView(APIView):
             ).timestamp(),
         }
 
-        # ----------------------------
-        # Create Clean Professional CAPTCHA
-        # ----------------------------
         width, height = 300, 100
         image = Image.new("RGB", (width, height), (255, 255, 255))
         draw = ImageDraw.Draw(image)
 
-        # Load Good Bold Font (IMPORTANT)
         try:
             font = ImageFont.truetype(
                 "/usr/share/fonts/fira-code/FiraCode-Bold.ttf", 64
@@ -73,14 +63,11 @@ class CaptchaView(APIView):
         except:
             font = ImageFont.load_default()
 
-        # Calculate spacing
         char_width = width // 8
         x = 25
 
         for char in captcha_text:
             y_offset = random.randint(-5, 5)
-
-            # Slight rotation per character
             char_image = Image.new("RGBA", (80, 80), (255, 255, 255, 0))
             char_draw = ImageDraw.Draw(char_image)
             char_draw.text((10, 5), char, font=font, fill=(20, 20, 20))
@@ -90,23 +77,18 @@ class CaptchaView(APIView):
 
             x += char_width
 
-        # ----------------------------
-        # Add LIGHT noise dots only
-        # ----------------------------
         for _ in range(150):
             draw.point(
                 (random.randint(0, width), random.randint(0, height)),
                 fill=(180, 180, 180),
             )
 
-        # Very light decorative line (optional)
         draw.line(
             (0, random.randint(30, 70), width, random.randint(30, 70)),
             fill=(200, 200, 200),
             width=2,
         )
         
-        # Slight blur for smooth look
         image = image.filter(ImageFilter.SMOOTH)
 
         buffer = io.BytesIO()
@@ -118,6 +100,16 @@ class CaptchaView(APIView):
 class LoginView(APIView):
     permission_classes = (permissions.AllowAny,)
     MAX_LOGIN_ATTEMPTS = 4
+
+    @staticmethod
+    def get_client_ip(request):
+        """Accurately extract client IP, handling proxies like Nginx."""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
 
     def get(self, request):
         raise Http404()
@@ -138,11 +130,9 @@ class LoginView(APIView):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
 
-                # Decode base64 strings from frontend
                 iv = base64.b64decode(payload['iv'])
                 ciphertext = base64.b64decode(payload['data'])
 
-                # Setup AES-256-CBC Decryptor
                 cipher = Cipher(
                     algorithms.AES(secret_key.encode('utf-8')),
                     modes.CBC(iv),
@@ -150,14 +140,11 @@ class LoginView(APIView):
                 )
                 decryptor = cipher.decryptor()
                 
-                # Decrypt
                 padded_data = decryptor.update(ciphertext) + decryptor.finalize()
 
-                # Remove PKCS7 padding
                 unpadder = padding.PKCS7(128).unpadder()
                 unpadded_data = unpadder.update(padded_data) + unpadder.finalize()
 
-                # Parse the unpadded JSON string back into a Python dictionary
                 decrypted_data = json.loads(unpadded_data.decode('utf-8'))
 
             except Exception as e:
@@ -166,9 +153,6 @@ class LoginView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # -------------------------------------------------
-        # Extract variables from the (now decrypted) data
-        # -------------------------------------------------
         username = decrypted_data.get("username")
         password = decrypted_data.get("password")
         
@@ -185,7 +169,6 @@ class LoginView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # expiry check
             if timezone.now().timestamp() > captcha_data.get("expires", 0):
                 return Response(
                     {"detail": "Captcha expired"},
@@ -198,7 +181,6 @@ class LoginView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # one-time use
             request.session.pop("login_captcha", None)
 
         if not username or not password:
@@ -207,21 +189,14 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ---------------------------------
-        # Resolve MasterUser first
-        # ---------------------------------
         try:
             mu = MasterUser.objects.get(username=username)
         except MasterUser.DoesNotExist:
-            # Do not reveal user existence
             return Response(
                 {"detail": "invalid credentials"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # ---------------------------------
-        # Hard account blocks
-        # ---------------------------------
         if mu.is_active != 1:
             return Response(
                 {"detail": "account inactive"},
@@ -240,9 +215,6 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ---------------------------------
-        # Authenticate credentials
-        # ---------------------------------
         user = authenticate(request, username=username, password=password)
 
         if not user:
@@ -280,9 +252,25 @@ class LoginView(APIView):
         mu.save(update_fields=["pass_attempt_no", "last_active_on"])
 
         # ---------------------------------
+        # TMS First Login Tracking
+        # ---------------------------------
+        if app_client == "TMS_WEB":
+            # Inline import prevents circular dependency between core & tms
+            from TMS.models import TMSFirstLoginTracker 
+            ip_addr = self.get_client_ip(request)
+            
+            # get_or_create ensures this runs ONLY if it doesn't already exist
+            TMSFirstLoginTracker.objects.get_or_create(
+                master_user=mu,
+                defaults={
+                    'ip_address': ip_addr,
+                    'must_change_password': True
+                }
+            )
+
+        # ---------------------------------
         # Issue JWT tokens
         # ---------------------------------
-
         auth_user, _ = User.objects.get_or_create(
             username=mu.username,
             defaults={"is_active": True},
@@ -296,7 +284,7 @@ class LoginView(APIView):
         response = Response(
             {
                 "access": str(access_token),
-                "refresh": str(refresh),  # backward compatibility
+                "refresh": str(refresh), 
                 "user": serializer.data,
             },
             status=status.HTTP_200_OK,

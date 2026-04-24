@@ -1420,3 +1420,21 @@ class TrainingPartnerAchievement(SoftDeleteMixin):
 
     def __str__(self):
         return f"{self.partner.name} - {self.title}"
+
+
+class TMSFirstLoginTracker(models.Model):
+    master_user = models.OneToOneField(
+        MasterUser, 
+        on_delete=models.CASCADE, 
+        related_name='tms_first_login'
+    )
+    first_login_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    must_change_password = models.BooleanField(default=True)
+
+    class Meta:
+        managed = True
+        db_table = 'tms_first_login_tracker'
+
+    def __str__(self):
+        return f"{self.master_user.username} - First TMS Login"

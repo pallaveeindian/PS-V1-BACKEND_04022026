@@ -249,4 +249,10 @@ urlpatterns = [
             name='tr-deleted-participants'
         ),
 
+    # To change password of user on First login
+    path(
+        'first-login/change-password/', 
+        tms_views.TMSFirstLoginPasswordChangeView.as_view(), 
+        name='tms-first-login-change-password'
+    ),
 ]
