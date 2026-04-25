@@ -1892,8 +1892,79 @@ class DeletedParticipantsView(APIView):
 
 
 # First Login Password Change API
+class TMSFirstLoginVerifyOldPasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        master_user = get_master_user_from_request(request)
+        if not master_user:
+            return Response(
+                {"detail": "Master user not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 1. Verify the First Login Tracker exists and requires a password change
+        try:
+            tracker = tms_models.TMSFirstLoginTracker.objects.get(master_user=master_user)
+            if not tracker.must_change_password:
+                return Response(
+                    {"detail": "Password change is not required or has already been completed."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except tms_models.TMSFirstLoginTracker.DoesNotExist:
+            return Response(
+                {"detail": "No TMS login record found for this user."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Extract and verify the old password
+        old_password = request.data.get("old_password")
+        if not old_password:
+            return Response(
+                {"detail": "The 'old_password' parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Cleartext comparison
+        if master_user.password != old_password:
+            return Response(
+                {"detail": "Incorrect old password."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response(
+            {"detail": "Old password verified successfully."},
+            status=status.HTTP_200_OK
+        )
+        
+
 class TMSFirstLoginPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Check if the current user needs to change their password 
+        for their first TMS login.
+        """
+        master_user = get_master_user_from_request(request)
+        if not master_user:
+            return Response(
+                {"detail": "Master user not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            tracker = tms_models.TMSFirstLoginTracker.objects.get(master_user=master_user)
+            return Response(
+                {"must_change_password": tracker.must_change_password},
+                status=status.HTTP_200_OK
+            )
+        except tms_models.TMSFirstLoginTracker.DoesNotExist:
+            # If the tracker doesn't exist, they don't have a pending first-login mandate
+            return Response(
+                {"must_change_password": False},
+                status=status.HTTP_200_OK
+            )
 
     def post(self, request):
         master_user = get_master_user_from_request(request)
@@ -1918,7 +1989,7 @@ class TMSFirstLoginPasswordChangeView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # 2. Extract ONLY the new password
+        # 2. Extract the new password
         new_password = request.data.get("new_password")
         if not new_password:
             return Response(
@@ -1926,13 +1997,50 @@ class TMSFirstLoginPasswordChangeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 3. Store the password in CLEARTEXT and update MasterUser audit fields
+        # 3. Validations
+        if new_password == master_user.password:
+            return Response(
+                {"detail": "New password cannot be the same as the old password."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(new_password) < 8:
+            return Response(
+                {"detail": "Password must be at least 8 characters long."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not re.search(r"[A-Z]", new_password):
+            return Response(
+                {"detail": "Password must contain at least one uppercase letter."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not re.search(r"[a-z]", new_password):
+            return Response(
+                {"detail": "Password must contain at least one lowercase letter."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not re.search(r"\d", new_password):
+            return Response(
+                {"detail": "Password must contain at least one digit."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", new_password):
+            return Response(
+                {"detail": "Password must contain at least one special character."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. Store the password in CLEARTEXT and update MasterUser audit fields
         master_user.password = new_password
         master_user.pass_updated_at = timezone.now()
         master_user.pass_updated_by = master_user
         master_user.save(update_fields=["password", "pass_updated_at", "pass_updated_by"])
 
-        # 4. Clear the must_change_password flag so they can't hit this API again
+        # 5. Clear the must_change_password flag so they can't hit this API again
         tracker.must_change_password = False
         tracker.save(update_fields=["must_change_password"])
 

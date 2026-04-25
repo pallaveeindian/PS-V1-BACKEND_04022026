@@ -156,7 +156,7 @@ def _get_apisetu_headers():
         "X-APISETU-CLIENTID": client_id,
         "X-APISETU-APIKEY": api_key,
         "accept": "application/json",
-        # "scope": "members",
+        "scope": "members",
     }
 
 

@@ -251,6 +251,11 @@ urlpatterns = [
 
     # To change password of user on First login
     path(
+        'first-login/password-verify/', 
+        tms_views.TMSFirstLoginVerifyOldPasswordView.as_view(), 
+        name='tms-first-login-verify-password'
+    ),    
+    path(
         'first-login/change-password/', 
         tms_views.TMSFirstLoginPasswordChangeView.as_view(), 
         name='tms-first-login-change-password'
