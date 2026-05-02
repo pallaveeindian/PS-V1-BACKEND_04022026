@@ -106,28 +106,11 @@ class Block_Analytics(SoftDeleteMixin):
         verbose_name_plural = 'Block Analytics Records'        
 
 # DLCC and BLCC Meeting Models
-class DLCC_Meeting_List(SoftDeleteMixin):
-    id = models.AutoField(primary_key=True, db_column='dlcc_meeting_list_id')
-    # Data Recieved from Google Sheet
-    notif_date = models.TextField(db_column='meeting_notification_date')
+class DLCC_Meeting(SoftDeleteMixin):
+    id = models.AutoField(primary_key=True, db_column='dlcc_meeting_id')
     district = models.ForeignKey(
         MasterDistrict, on_delete=models.PROTECT,
         db_column='district_id', db_constraint=False
-    )
-    # Month format (YYYY-MM)
-    meeting_month = models.TextField(db_column='meeting_month')
-    no_of_meetings = models.IntegerField(db_column='number_of_meetings')
-
-    class Meta:
-        db_table = 'ldms_dlcc_meeting_list'
-        verbose_name = 'DLCC Meeting List'
-        verbose_name_plural = 'DLCC Meeting Lists'
-        
-class DLCC_Meeting(SoftDeleteMixin):
-    id = models.AutoField(primary_key=True, db_column='dlcc_meeting_id')
-    dlcc_meeting_list = models.ForeignKey(
-        DLCC_Meeting_List, on_delete=models.CASCADE,
-        db_column='dlcc_meeting_list_id', db_constraint=False
     )
     meeting_date = models.DateField(db_column='meeting_date', blank=True, null=True)
     mom = models.FileField(
@@ -145,30 +128,11 @@ class DLCC_Meeting(SoftDeleteMixin):
         if self.meeting_date > timezone.now().date():
             raise ValidationError("Meeting date cannot be in the future.")        
 
-class BLCC_Meeting_List(SoftDeleteMixin):
-    id = models.AutoField(primary_key=True, db_column='blcc_meeting_list_id')
-    # Data Recieved from Google Sheet
-    notif_date = models.TextField(db_column='meeting_notification_date')
+class BLCC_Meeting(SoftDeleteMixin):
+    id = models.AutoField(primary_key=True, db_column='blcc_meeting_id')
     district = models.ForeignKey(
         MasterDistrict, on_delete=models.PROTECT,
         db_column='district_id', db_constraint=False, blank=True, null=True
-    )
-    blocks_notif_issued = models.IntegerField(
-        db_column='blocks_notified', blank=True, null=True
-    )    
-    meeting_month = models.TextField(db_column='meeting_month')
-    no_of_meetings = models.IntegerField(db_column='number_of_meetings')
-    
-    class Meta:
-        db_table = 'ldms_blcc_meeting_list'
-        verbose_name = 'BLCC Meeting List'
-        verbose_name_plural = 'BLCC Meeting Lists'
-
-class BLCC_Meeting(SoftDeleteMixin):
-    id = models.AutoField(primary_key=True, db_column='blcc_meeting_id')
-    blcc_meeting_list = models.ForeignKey(
-        BLCC_Meeting_List, on_delete=models.CASCADE,
-        db_column='blcc_meeting_list_id', db_constraint=False
     )
     block = models.ForeignKey(
         MasterBlock, on_delete=models.PROTECT,
@@ -405,3 +369,32 @@ class VPRP_Plan(SoftDeleteMixin):
         verbose_name = 'VPRP Plan'
         verbose_name_plural = 'VPRP Plans'        
         
+# Notification System Models
+class Notification(SoftDeleteMixin):
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ]
+
+    id = models.BigAutoField(primary_key=True, db_column='notification_id')
+    recipient = models.ForeignKey(
+        MasterUser, on_delete=models.CASCADE, 
+        related_name='notifications', db_column='recipient_id'
+    )
+    title = models.CharField(max_length=255, db_column='title')
+    message = models.TextField(db_column='message')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM', db_column='priority')
+    is_read = models.BooleanField(default=False, db_column='is_read')
+    notification_type = models.CharField(max_length=50, db_column='notification_type') 
+    # Types: 'MEETING_COMPLIANCE', 'APPROVAL_PENDING', 'APPROVAL_REJECTED'
+
+    class Meta:
+        db_table = 'ldms_notification'
+        verbose_name = 'Notification'
+        verbose_name_plural = 'Notifications'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.recipient.username} - {self.title}"

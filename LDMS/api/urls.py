@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from .analytics_views import *
 from .ldms_views import *
 from .report_views import *
+from .meet_views import *
 
 router = DefaultRouter()
 
@@ -59,6 +60,10 @@ router.register(
     basename="ldms-recorded-beneficiary-report",
 )
 
+# DLCC and BLCC Meeting URLs
+router.register(r'dlcc-meetings', DLCCMeetingViewSet, basename='dlcc-meetings')
+router.register(r'blcc-meetings', BLCCMeetingViewSet, basename='blcc-meetings')
+
 urlpatterns = [
     path("", include(router.urls)),
     path(
@@ -66,4 +71,9 @@ urlpatterns = [
         UpsrlmAnalyticsView.as_view(),
         name="map-analytics",
     ),
+
+    # Notifications URLs
+    path('notifications/', NotificationListAPIView.as_view(), name='notification-list'),
+    path('notifications/<int:id>/read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-read'),    
+
 ]

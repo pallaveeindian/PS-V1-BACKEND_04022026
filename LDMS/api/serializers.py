@@ -1,7 +1,8 @@
 # LDMS/api/serializers.py
-
+import os
 from rest_framework import serializers
 from django.apps import apps
+from django.utils import timezone
 from datetime import datetime
 from LDMS import models as ldms_models
 from core import models as core_models
@@ -184,3 +185,82 @@ class BucketApprovalDetailSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = ldms_models.Bucket_Approval
         fields = "__all__"
+
+# Notification Serializer
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ldms_models.Notification
+        fields = [
+            'id', 
+            'title', 
+            'message', 
+            'priority', 
+            'is_read', 
+            'notification_type', 
+            'created_at'
+        ]        
+
+# Base Meeting Serializer (for MOM upload validation)
+class BaseMeetingSerializer(serializers.ModelSerializer):
+    """Base serializer containing the strict MoM validation logic."""
+    class Meta:
+        abstract = True
+        
+    def validate_meeting_date(self, value):
+        if value and value > timezone.now().date():
+            raise serializers.ValidationError("Meeting date cannot be in the future.")
+        return value
+
+    def validate_mom(self, file_obj):
+        if not file_obj:
+            return file_obj
+
+        max_size = 20 * 1024 * 1024
+        if file_obj.size > max_size:
+            raise serializers.ValidationError("File size cannot exceed 20MB.")
+
+        ext = os.path.splitext(file_obj.name)[1].lower()
+        allowed_extensions = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg']
+        
+        if ext not in allowed_extensions:
+            raise serializers.ValidationError(
+                f"Unsupported file format. Allowed formats: {', '.join(allowed_extensions)}"
+            )
+
+        magic_bytes_signatures = {
+            '.pdf': b'%PDF',
+            '.jpeg': b'\xff\xd8\xff',
+            '.jpg': b'\xff\xd8\xff',
+            '.png': b'\x89PNG\r\n\x1a\n',
+            '.doc': b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',
+            '.docx': b'PK\x03\x04',
+        }
+
+        file_obj.seek(0)
+        file_header = file_obj.read(8)
+        file_obj.seek(0)
+
+        expected_signature = magic_bytes_signatures.get(ext)
+        if expected_signature and not file_header.startswith(expected_signature):
+            raise serializers.ValidationError(
+                "SECURITY ALERT: File content does not match its extension. Upload rejected."
+            )
+        return file_obj
+
+# ----------------------------------------
+# DLCC Serializer
+# ----------------------------------------
+class DLCCMeetingSerializer(BaseMeetingSerializer):
+    class Meta:
+        model = ldms_models.DLCC_Meeting
+        fields = ['id', 'district', 'meeting_date', 'mom', 'is_uploaded', 'TH_urid', 'created_at']
+        read_only_fields = ['id', 'district', 'is_uploaded', 'TH_urid', 'created_at']
+
+# ----------------------------------------
+# BLCC Serializer
+# ----------------------------------------
+class BLCCMeetingSerializer(BaseMeetingSerializer):
+    class Meta:
+        model = ldms_models.BLCC_Meeting
+        fields = ['id', 'district', 'block', 'meeting_date', 'mom', 'is_uploaded', 'TH_urid', 'created_at']
+        read_only_fields = ['id', 'district', 'block', 'is_uploaded', 'TH_urid', 'created_at']

@@ -40,7 +40,6 @@ from core.models import *
 from LDMS.models import *
 from LDMS.api.serializers import *
 
-
 # -------------------------------------------------------------------
 # Common helpers
 # -------------------------------------------------------------------
@@ -64,6 +63,15 @@ def parse_csv_param(val):
     if not val:
         return []
     return [p.strip() for p in val.split(',') if p.strip()]
+
+# -------------------------------------------------------------------
+# Pagination
+# -------------------------------------------------------------------
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
 
 # -------------------------------------------------------------------
 # Swagger tagging helpers (drf_yasg)
@@ -358,3 +366,61 @@ class BucketApprovalViewset (BaseLDMSModelViewSet):
             context={"request": request}
         )
         return Response(serializer.data)      
+
+
+# Notifications Views    
+class NotificationListAPIView(generics.ListAPIView):
+    """
+    GET /ldms/notifications/?page=1
+    Fetches paginated notifications for the EXACT logged-in user, newest first.
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+    serializer_class = NotificationSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        django_user = self.request.user
+
+        if not django_user or not django_user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
+
+        master_user = MasterUser.objects.filter(username=django_user.username).first()
+        if not master_user:
+            raise PermissionDenied("Master user not found.")
+
+        # STRICT FILTERING: 
+        # 1. recipient=master_user (ONLY their notifications)
+        # 2. is_active=True (Soft delete check)
+        # 3. order_by('-created_at') (Latest first)
+        return Notification.objects.filter(
+            recipient=master_user,
+            is_active=True
+        ).order_by('-created_at')
+
+
+class NotificationMarkReadAPIView(generics.UpdateAPIView):
+    """
+    PATCH /ldms/notifications/<id>/read/
+    Marks a specific notification as read.
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+    serializer_class = NotificationSerializer
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        # We enforce the same strict filtering here so a user cannot 
+        # maliciously guess an ID and mark someone else's notification as read.
+        django_user = self.request.user
+        master_user = MasterUser.objects.filter(username=django_user.username).first()
+        
+        if not master_user:
+            raise PermissionDenied("Master user not found.")
+
+        return Notification.objects.filter(recipient=master_user, is_active=True)
+
+    def patch(self, request, *args, **kwargs):
+        # Override patch to bypass serializer validation for a simple internal state toggle
+        instance = self.get_object()
+        instance.is_read = True
+        instance.save()
+        return Response({"message": "Notification marked as read."}, status=status.HTTP_200_OK)
