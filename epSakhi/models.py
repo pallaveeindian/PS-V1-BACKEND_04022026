@@ -263,7 +263,7 @@ class ExistingEnterprise(SoftDeleteMixin):
     industry_loc = models.CharField(max_length=255, null=True, blank=True)
     
     # 7) Support Section
-    is_support_required = models.CharField(max_length=255, null=True, blank=True)
+    is_support_required = models.TextField(null=True, blank=True)
 
     # 8) Enterprise Media
 
@@ -314,8 +314,8 @@ class EnterpriseLoanDetail(SoftDeleteMixin):
     )  
 
     form_type = models.CharField(max_length=20, null=True, blank=True, help_text='existing/new/other')
-    department = models.CharField(max_length=255, null=True, blank=True)
-    institution_name = models.CharField(max_length=255, null=True, blank=True)
+    department = models.TextField(null=True, blank=True)
+    institution_name = models.TextField(null=True, blank=True)
     bank_name = models.CharField(max_length=255, null=True, blank=True)
     bank_branch = models.CharField(max_length=255, null=True, blank=True)
     loan_amount = models.CharField(max_length=255, null=True, blank=True)
@@ -337,8 +337,8 @@ class EnterpriseSubsidyDetail(SoftDeleteMixin):
         null=True,
     )  
     
-    subsidy_type = models.CharField(max_length=255, null=True, blank=True)
-    subsidy_name = models.CharField(max_length=255, null=True, blank=True)
+    subsidy_type = models.TextField(null=True, blank=True)
+    subsidy_name = models.TextField(null=True, blank=True)
     subsidy_detail = models.TextField(null=True, blank=True)
 
     class Meta:
@@ -360,13 +360,13 @@ class EnterpriseShop(SoftDeleteMixin):
         blank=True,
         null=True,
     )  
-    shop_category = models.CharField(max_length=255, null=True, blank=True)
-    shop_type = models.CharField(max_length=255, null=True, blank=True)
-    source_of_inventory = models.CharField(max_length=255, null=True, blank=True)
-    
+    shop_category = models.TextField(null=True, blank=True)
+    shop_type = models.TextField(null=True, blank=True)
+    source_of_inventory = models.TextField(null=True, blank=True)
+
     # Migrate from EnterpriseProduct
     target_customers = models.TextField(null=True, blank=True)
-    sales_area = models.CharField(max_length=255, null=True, blank=True)
+    sales_area = models.TextField(null=True, blank=True)
     marketing_strategy = models.TextField(null=True, blank=True)
     marketing_channels = models.TextField(null=True, blank=True)
     marketing_challenges = models.TextField(null=True, blank=True)
@@ -415,7 +415,7 @@ class EnterpriseProduct(SoftDeleteMixin):
     )  
 
     main_product_name = models.CharField(max_length=255, null=True, blank=True)
-    activity_or_product_type = models.CharField(max_length=255, null=True, blank=True)
+    activity_or_product_type = models.TextField(null=True, blank=True)
     product_features = models.TextField(null=True, blank=True)
     production_capacity = models.CharField(max_length=255, null=True, blank=True)
     raw_material = models.TextField(null=True, blank=True)
@@ -424,7 +424,7 @@ class EnterpriseProduct(SoftDeleteMixin):
     source_machinery = models.TextField(null=True, blank=True)
     product_mrp = models.CharField(max_length=255, null=True, blank=True)
 
-    sales_area = models.CharField(max_length=255, null=True, blank=True)
+    sales_area = models.TextField(null=True, blank=True)
     target_customers = models.TextField(null=True, blank=True)
     packaging_branding_status = models.CharField(max_length=255, null=True, blank=True)
 
@@ -509,10 +509,10 @@ class EnterpriseSupport(SoftDeleteMixin):
         help_text='TH_urid of enterprise form (existing/new)',
     )     
     form_type = models.CharField(max_length=20, null=True, blank=True, help_text='existing/new')
-    support_category = models.CharField(max_length=255, null=True, blank=True)
-    support_sub_category = models.CharField(max_length=255, null=True, blank=True)
-    support_description = models.CharField(max_length=255, null=True, blank=True)
-    other_support = models.CharField(max_length=255, null=True, blank=True)
+    support_category = models.TextField(null=True, blank=True)
+    support_sub_category = models.TextField(null=True, blank=True)
+    support_description = models.TextField(null=True, blank=True)
+    other_support = models.TextField(null=True, blank=True)
     
     class Meta:
         db_table = 'epSakhi_epSupport'
@@ -560,13 +560,13 @@ class EnterpriseTrainingReq(SoftDeleteMixin):
 
     form_type = models.CharField(max_length=20, null=True, blank=True, help_text='rec/req')
     
-    sector_type = models.CharField(max_length=255, null=True, blank=True)
-    sector = models.CharField(max_length=255, null=True, blank=True)
-    department = models.CharField(max_length=255, null=True, blank=True)
-    training_type = models.CharField(max_length=255, null=True, blank=True) 
-    duration = models.CharField(max_length=100, null=True, blank=True)
-    location = models.CharField(max_length=255, null=True, blank=True)
-    expected_income = models.CharField(max_length=255, null=True, blank=True)
+    sector_type = models.TextField(null=True, blank=True)
+    sector = models.TextField(null=True, blank=True)
+    department = models.TextField(null=True, blank=True)
+    training_type = models.TextField(null=True, blank=True)
+    duration = models.TextField(null=True, blank=True)
+    location = models.TextField(null=True, blank=True)
+    expected_income = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'epSakhi_epTraining'

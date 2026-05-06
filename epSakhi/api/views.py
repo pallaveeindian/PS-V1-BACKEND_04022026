@@ -284,7 +284,7 @@ class UpsrlmShgListView(APIView):
         rows = _apply_list_search(
             rows,
             request.GET.get('search'),
-            ['name', 'code', 'nicCode', 'uuid'],
+            ['name', 'code', 'nicCode', 'uuid' , 'panchayatId' , 'villageId'],
         )
         rows = _apply_list_ordering(
             rows,
