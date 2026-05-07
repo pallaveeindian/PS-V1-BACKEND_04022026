@@ -15,6 +15,7 @@ import tempfile
 import zipfile
 from io import BytesIO
 
+import pandas as pd
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.db.models import QuerySet
@@ -36,7 +37,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg.inspectors import SwaggerAutoSchema
 from drf_yasg import openapi
 
-from core.models import MasterUser, MasterDistrictCategoryMapping
+from core.models import MasterUser, MasterDistrictCategoryMapping, MasterDistrict
 from TMS import models as tms_models
 from TMS.api.serializers import *
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -681,6 +682,133 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
         # ---------------------------------------------------------
         
         return TrainingPartnerTargetsSerializer
+
+
+class BulkAssignTargetsAPIView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 1. Read file in memory
+            if file_obj.name.endswith('.csv'):
+                df = pd.read_csv(file_obj)
+            elif file_obj.name.endswith(('.xls', '.xlsx')):
+                df = pd.read_excel(file_obj)
+            else:
+                return Response(
+                    {"error": "Invalid file format. Please upload a CSV or Excel file."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            success_count = 0
+            errors = []
+
+            # 2. Open an atomic transaction
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    row_number = index + 2  # +2 accounts for 0-index and header row
+
+                    try:
+                        # --- SAFE EXTRACTION: Handle pandas NaN explicitly ---
+                        partner_id = row.get('partner_id')
+                        if pd.isna(partner_id):
+                            raise ValueError("partner_id is required.")
+
+                        target_type = row.get('target_type')
+                        target_type = "MODULE" if pd.isna(target_type) else str(target_type).strip().upper()
+                        
+                        training_plan_id = row.get('training_plan_id')
+                        training_plan_id = None if pd.isna(training_plan_id) else training_plan_id
+                        
+                        # Fix for the NaN issue
+                        district_id = row.get('district_id')
+                        district_id = None if pd.isna(district_id) else int(district_id)
+                        
+                        district_name_en = row.get('district_name_en')
+                        district_name_en = None if pd.isna(district_name_en) else str(district_name_en).strip()
+                        
+                        target_count = row.get('target_count', 0)
+                        target_count = 0 if pd.isna(target_count) else int(target_count)
+                        
+                        financial_year = row.get('financial_year')
+                        financial_year = None if pd.isna(financial_year) else str(financial_year).strip()
+                        
+                        notes = row.get('notes')
+                        notes = None if pd.isna(notes) else str(notes).strip()
+
+                        # --- Validation: Either ID or Name MUST exist ---
+                        if not district_id and not district_name_en:
+                            raise ValueError("Either 'district_id' or 'district_name_en' must be provided.")
+
+                        # Fetch Partner
+                        partner = tms_models.TrainingPartner.objects.filter(id=partner_id).first()
+                        if not partner:
+                            raise ValueError(f"TrainingPartner with ID {partner_id} not found.")
+
+                        # Fetch Training Plan
+                        training_plan = tms_models.TrainingPlan.objects.filter(id=training_plan_id).first() if training_plan_id else None
+
+                        # --- Fetch District by ID or Name ---
+                        district = None
+                        if district_id:
+                            district = MasterDistrict.objects.filter(pk=district_id).first()
+                            if not district:
+                                raise ValueError(f"District with ID {district_id} not found.")
+                        elif district_name_en:
+                            district = MasterDistrict.objects.filter(district_name_en__iexact=district_name_en).first()
+                            if not district:
+                                raise ValueError(f"District with name '{district_name_en}' not found.")
+
+                        # 3. Constraint Check
+                        exists = tms_models.TrainingPartnerTargets.objects.filter(
+                            partner=partner,
+                            target_type=target_type,
+                            training_plan=training_plan,
+                            district=district,
+                            financial_year=financial_year
+                        ).exists()
+
+                        if exists:
+                            raise ValueError(f"Target already exists for this Partner, Module, District, and FY ({financial_year}).")
+
+                        # 4. Create Instance
+                        target = tms_models.TrainingPartnerTargets(
+                            partner=partner,
+                            target_type=target_type,
+                            training_plan=training_plan,
+                            district=district,
+                            target_count=target_count,
+                            financial_year=financial_year,
+                            notes=notes
+                        )
+                        
+                        target.save()
+                        success_count += 1
+
+                    except Exception as e:
+                        errors.append(f"Row {row_number}: {str(e)}")
+
+                # Rollback if errors exist
+                if errors:
+                    raise Exception("Validation errors occurred. Transaction rolled back.")
+
+            return Response(
+                {"message": f"Successfully created {success_count} targets."}, 
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            if errors:
+                return Response({
+                    "error": "Upload failed due to data errors.",
+                    "details": errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TRPUserScopeViewSet(BaseTMSModelViewSet):
