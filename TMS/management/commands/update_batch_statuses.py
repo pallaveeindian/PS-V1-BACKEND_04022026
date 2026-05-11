@@ -18,11 +18,11 @@ from TMS.models import (
 logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = 'Continuously updates batch statuses, tracks achievements, and calculates 80% attendance upon completion.'
+    help = 'Continuously updates batch statuses, tracks achievements on closure, and calculates attendance.'
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Memory set to prevent double-processing completed batches
+        # Memory set for attendance to prevent double-processing within the same uptime
         self.processed_completed_batches = set()
 
     def handle(self, *args, **options):
@@ -43,7 +43,6 @@ class Command(BaseCommand):
         
         # ------------------------------------------------------
         # 1. AUTO-START BATCHES
-        # Mark batches as ONGOING if start_date is today or earlier
         # ------------------------------------------------------
         batches_to_start = Batch.objects.filter(
             status='SCHEDULED',
@@ -56,9 +55,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Marked Batch {batch.code or batch.id} as ONGOING."))
 
         # ------------------------------------------------------
-        # 2. PROCESS COMPLETED BATCHES (LISTENER MODE)
-        # Find batches the frontend has marked as COMPLETED.
-        # Exclude those already processed (in memory or in DB) to prevent double-counting.
+        # 2. PROCESS COMPLETED BATCHES (ATTENDANCE & TRAINERS ONLY)
         # ------------------------------------------------------
         completed_batches = Batch.objects.filter(
             status='COMPLETED'
@@ -69,9 +66,28 @@ class Command(BaseCommand):
         )
 
         for batch in completed_batches:
-            # Immediately mark as processed in memory so we don't process it again in the next 5-second tick
             self.processed_completed_batches.add(batch.id)
             
+            # --- FLIP MASTER TRAINER STATUS TO AVAILABLE ---
+            trainers_updated = BatchMasterTrainer.objects.filter(batch=batch).update(status='AVAILABLE')
+            if trainers_updated > 0:
+                self.stdout.write(self.style.SUCCESS(f"Flipped {trainers_updated} Master Trainer(s) to AVAILABLE for Batch {batch.code or batch.id}."))
+
+            # --- TRIGGER ATTENDANCE CALCULATION ---
+            self.calculate_batch_attendance(batch)
+
+
+        # ------------------------------------------------------
+        # 3. PROCESS CLOSED BATCHES (ACHIEVEMENTS)
+        # ------------------------------------------------------
+        # Requires: Batch is CLOSED, Report is DMM_SIGNED, and we haven't counted it yet.
+        closed_batches = Batch.objects.filter(
+            status='CLOSED',
+            batch_report__status='DMM_SIGNED', # Follows the reverse relation to BatchReport
+            is_achievement_counted=False
+        )
+
+        for batch in closed_batches:
             # --- AUTO-INCREMENT ACHIEVEMENT ---
             if batch.request and getattr(batch.request, 'partner', None) and batch.request.training_plan:
                 achievement = TrainingPartnerAchievement.objects.filter(
@@ -85,14 +101,10 @@ class Command(BaseCommand):
                     achievement.save(update_fields=['batches_completed', 'date_achieved'])
                     self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.request.partner.name}."))
 
-            # --- SURGICAL FIX: FLIP MASTER TRAINER STATUS TO AVAILABLE ---
-            # Using .update() directly hits the DB without needing to iterate over instances, making it extremely fast.
-            trainers_updated = BatchMasterTrainer.objects.filter(batch=batch).update(status='AVAILABLE')
-            if trainers_updated > 0:
-                self.stdout.write(self.style.SUCCESS(f"Flipped {trainers_updated} Master Trainer(s) to AVAILABLE for Batch {batch.code or batch.id}."))
+            # Permanently flag as counted to survive daemon restarts
+            batch.is_achievement_counted = True
+            batch.save(update_fields=['is_achievement_counted'])
 
-            # --- TRIGGER ATTENDANCE CALCULATION ---
-            self.calculate_batch_attendance(batch)
 
     def calculate_batch_attendance(self, batch):        
         training_plan = batch.request.training_plan if batch.request else None
@@ -102,117 +114,74 @@ class Command(BaseCommand):
             return
 
         total_days = training_plan.no_of_days
+        
+        # --- TRAINEES ---
         batch_beneficiaries = BatchBeneficiary.objects.filter(batch=batch).select_related('beneficiary')
-
         for bb in batch_beneficiaries:
-            # --- SURGICAL FIX: Use the BatchBeneficiary ID to match ParticipantAttendance ---
             p_id = str(bb.id)
-            # ------------------------------------------------------------------------------
             is_dropout = False
             
-            # 1. Check for DROP-OUT in eKYC
             ekyc = BatchEkycVerification.objects.filter(
-                batch=batch, 
-                participant_role='trainee', 
-                participant_id=p_id
+                batch=batch, participant_role='trainee', participant_id=p_id
             ).first()
 
             if ekyc and ekyc.remarks and 'DROP-OUT' in ekyc.remarks.upper():
                 is_dropout = True
 
-            # 2. Calculate Present Days
             present_days = ParticipantAttendance.objects.filter(
-                attendance__batch=batch,
-                participant_role='trainee',
-                participant_id=p_id,
-                present=True
+                attendance__batch=batch, participant_role='trainee', participant_id=p_id, present=True
             ).count()
 
-            # 3. Calculate Percentage
-            attendance_percentage = (present_days / total_days) * 100
-            
-            # Ensure percentage doesn't exceed 100 if extra attendance was accidentally marked
-            if attendance_percentage > 100.0:
-                attendance_percentage = 100.0
-
-            # 4. Determine Success (>= 80% AND not a dropout)
+            attendance_percentage = min((present_days / total_days) * 100, 100.0)
             is_successful = (attendance_percentage >= 80.0) and not is_dropout
 
-            # 5. Update the base TRBeneficiary / BatchBeneficiary logic
             bb.attended = is_successful
             bb.save(update_fields=['attended'])
             
             bb.beneficiary.attended = is_successful
             bb.beneficiary.save(update_fields=['attended'])
 
-            # 6. AUTO-POPULATE THE NEW SUMMARY MODEL
             BeneficiaryAttendanceSummary.objects.update_or_create(
                 batch_beneficiary=bb,
                 defaults={
-                    'batch': batch,
-                    'training_request': batch.request,
-                    'total_training_days': total_days,
-                    'days_present': present_days,
-                    'attendance_percentage': attendance_percentage,
-                    'is_dropout': is_dropout,
-                    'is_successful': is_successful
+                    'batch': batch, 'training_request': batch.request, 'total_training_days': total_days,
+                    'days_present': present_days, 'attendance_percentage': attendance_percentage,
+                    'is_dropout': is_dropout, 'is_successful': is_successful
                 }
             )
             
-        # ------------------------------------------------------
-        # NEW: PROCESS TRAINERS (ACTING AS TRAINEES IN TOT BATCHES)
-        # ------------------------------------------------------
+        # --- TRAINERS (TOT) ---
         batch_trainers = BatchTrainer.objects.filter(batch=batch).select_related('trainer')
-
         for bt in batch_trainers:
             p_id = str(bt.id)
             is_dropout = False
             
-            # 1. Check for DROP-OUT in eKYC
             ekyc = BatchEkycVerification.objects.filter(
-                batch=batch, 
-                participant_role='trainee', 
-                participant_id=p_id
+                batch=batch, participant_role='trainee', participant_id=p_id
             ).first()
 
             if ekyc and ekyc.remarks and 'DROP-OUT' in ekyc.remarks.upper():
                 is_dropout = True
 
-            # 2. Calculate Present Days
             present_days = ParticipantAttendance.objects.filter(
-                attendance__batch=batch,
-                participant_role='trainee',
-                participant_id=p_id,
-                present=True
+                attendance__batch=batch, participant_role='trainee', participant_id=p_id, present=True
             ).count()
 
-            # 3. Calculate Percentage
-            attendance_percentage = (present_days / total_days) * 100
-            
-            if attendance_percentage > 100.0:
-                attendance_percentage = 100.0
-
-            # 4. Determine Success (>= 80% AND not a dropout)
+            attendance_percentage = min((present_days / total_days) * 100, 100.0)
             is_successful = (attendance_percentage >= 80.0) and not is_dropout
 
-            # 5. Update the base TRTrainer / BatchTrainer logic
             bt.attended = is_successful
             bt.save(update_fields=['attended'])
             
             bt.trainer.attended = is_successful
             bt.trainer.save(update_fields=['attended'])
 
-            # 6. AUTO-POPULATE THE NEW SUMMARY MODEL
             BeneficiaryAttendanceSummary.objects.update_or_create(
                 batch_trainer=bt,
                 defaults={
-                    'batch': batch,
-                    'training_request': batch.request,
-                    'total_training_days': total_days,
-                    'days_present': present_days,
-                    'attendance_percentage': attendance_percentage,
-                    'is_dropout': is_dropout,
-                    'is_successful': is_successful
+                    'batch': batch, 'training_request': batch.request, 'total_training_days': total_days,
+                    'days_present': present_days, 'attendance_percentage': attendance_percentage,
+                    'is_dropout': is_dropout, 'is_successful': is_successful
                 }
             )
 

@@ -3,6 +3,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
+from .exep_oneshot import *
+from .newep_oneshot import *
+
 from .views import *
 from .analytics_views import *
 
@@ -152,9 +155,18 @@ analytics_urls = [
     path('eps-admin-crp/', CRPBeneficiaryAnalyticsView.as_view(), name='eps-admin-crp-recorded'),
 ]
 
+# One-shot APIs
+oneshot_urls = [
+    path('exep-form/create/', ExistingEnterpriseCreateAPIView.as_view(), name='existing-enterprise-create'),
+    path('exep-form/delete/', ExistingEnterpriseDeleteAPIView.as_view(), name='existing-enterprise-delete'),
+    path('newep-form/create/', NewEnterpriseCreateAPIView.as_view(), name='newep-form-create'),
+    path('newep-form/delete/', NewEnterpriseDeleteAPIView.as_view(), name='newep-form-delete'),
+]
+
 urlpatterns = [
     path('', include(router.urls)),
     *mapping_urls,
     *custom_urls,
     *analytics_urls,
+    *oneshot_urls
 ]

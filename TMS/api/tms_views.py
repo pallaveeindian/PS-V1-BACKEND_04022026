@@ -45,6 +45,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, NotFound
 
+from django.db.models import F
+import xlsxwriter
+
 # Certificate
 from .certificate_gen import generate_batch_certificate_pdf
 
@@ -167,6 +170,11 @@ class BaseTMSModelViewSet(viewsets.ModelViewSet):
         else:
             super().perform_destroy(instance)
 
+# Targets pagination class (for listing targets with achievements)
+class TargetsPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 # -------------------------------------------------------------------
 # Masters & Themes
@@ -655,6 +663,10 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
     swagger_schema = TargetsSchema
     filterset_fields = ["partner", "target_type", "training_plan", "district", "theme", "financial_year", "created_by"]
     search_fields = ["theme", "financial_year"]
+    
+    # --- SURGICAL ADDITION: 25 items per page pagination ---
+    pagination_class = TargetsPagination
+    # -------------------------------------------------------
 
     def get_queryset(self):
         # Base Queryset with select_related for standard foreign keys
@@ -683,6 +695,76 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
         
         return TrainingPartnerTargetsSerializer
 
+    # =====================================================
+    # SURGICAL ADDITION: LIST OVERRIDE FOR EXPORT
+    # =====================================================
+    def list(self, request, *args, **kwargs):
+        if request.query_params.get("export") == "excel":
+            # Apply all filters/search to the export queryset
+            queryset = self.filter_queryset(self.get_queryset())
+            return self._export_excel(queryset)
+        
+        # Standard default DRF behavior handles the 25-item JSON pagination
+        return super().list(request, *args, **kwargs)
+
+    # =====================================================
+    # SURGICAL ADDITION: EXCEL STREAMER (FIXED)
+    # =====================================================
+    def _export_excel(self, queryset):
+        output = BytesIO()
+        workbook = xlsxwriter.Workbook(output, {"constant_memory": True})
+        worksheet = workbook.add_worksheet("Targets")
+
+        # Blue background and white text as requested
+        header_format = workbook.add_format({
+            "bold": True,
+            "bg_color": "#1565C0",  # Deep Blue
+            "color": "#FFFFFF",     # White Text
+            "border": 1,
+        })
+
+        columns = [
+            ("partner_name", "Training Partner"),
+            ("target_type", "Target Type"),
+            ("plan_name", "Training Plan"),
+            ("district_name", "District"),
+            ("theme", "Theme"),
+            ("financial_year", "Financial Year"),
+        ]
+
+        # Header
+        for col, (_, title) in enumerate(columns):
+            worksheet.write(0, col, title, header_format)
+
+        # EXACT MODEL FIELD MAPPING FIXES
+        values_qs = queryset.values(
+            "target_type",
+            "theme",
+            "financial_year",
+            partner_name=F("partner__name"),                   # Matches TrainingPartner.name
+            plan_name=F("training_plan__training_name"),       # Matches TrainingPlan.training_name
+            district_name=F("district__district_name_en")      # Matches MasterDistrict.district_name_en
+        )
+
+        row = 1
+        for record in values_qs.iterator(chunk_size=5000):
+            for col, (key, _) in enumerate(columns):
+                worksheet.write(row, col, record.get(key) or "")
+            row += 1
+
+        workbook.close()
+        # Ensure we are reading from the start of the BytesIO buffer
+        output.seek(0)
+
+        filename = f"Training_Partner_Targets_{datetime.now().date()}.xlsx"
+
+        # SURGICAL FIX: Use HttpResponse and output.getvalue() to prevent binary corruption
+        response = HttpResponse(
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 class BulkAssignTargetsAPIView(APIView):
     parser_classes = (MultiPartParser, FormParser)

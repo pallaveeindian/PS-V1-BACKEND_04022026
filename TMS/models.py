@@ -824,6 +824,8 @@ class Batch(SoftDeleteMixin):
 
     time_of_training = models.CharField(max_length=255, blank=True, null=True)
 
+    is_achievement_counted = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
         if not self.code:
             # 1. Access related data through TrainingRequest (self.request)
