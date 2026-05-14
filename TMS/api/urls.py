@@ -262,5 +262,5 @@ urlpatterns = [
     ),
 
     # SMMU TP Targets bulk upload
-    path('tp-targets/bulk-upload/', tms_views.BulkAssignTargetsAPIView.as_view(), name='bulk-upload-targets'),
+    path('tp-targets/bulk-upload/', tms_views.BulkAssignTargetsAPIView.as_view(), name='bulk-upload-targets'),   
 ]

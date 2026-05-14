@@ -58,7 +58,7 @@ class NewEnterpriseCreateAPIView(APIView):
                     mobile=benef_data.get('mobile'),
                     email=benef_data.get('email'),
                     lokos_shg_code=benef_data.get('lokos_shg_code'),
-                    created_by=benef_data.get('created_by')                    
+                    created_by_id=benef_data.get('created_by')                    
                 )
 
                 # --- B. CREATE NEW ENTERPRISE ---
@@ -88,7 +88,7 @@ class NewEnterpriseCreateAPIView(APIView):
                     declaration_confirmed=ep_data.get('declaration_confirmed', False),
                     declaration_date=ep_data.get('declaration_date'),
                     applicant_signature=files.get(signature_key) if signature_key else None,
-                    created_by=ep_data.get('created_by')
+                    created_by_id=ep_data.get('created_by')
                 )
                 
                 # Assign a TH_urid if your model relies on generating it manually
@@ -116,7 +116,7 @@ class NewEnterpriseCreateAPIView(APIView):
                         form_type='newep',
                         parent_category=type_data.get('parent_category'),
                         sub_category=type_data.get('sub_category'),
-                        created_by=type_data.get('created_by')
+                        created_by_id=type_data.get('created_by')
                     )
 
                 # --- E. SUPPORT ---
@@ -128,7 +128,7 @@ class NewEnterpriseCreateAPIView(APIView):
                         support_sub_category=support.get('sub_category'),
                         support_description=support.get('support_description'),
                         other_support=support.get('other_support'),
-                        created_by=support.get('created_by')
+                        created_by_id=support.get('created_by')
                     )
 
                 # --- F. MANDATORY FUNDS ---
@@ -141,7 +141,7 @@ class NewEnterpriseCreateAPIView(APIView):
                         amount_received=fund.get('amount_received'),
                         amount_repaid=fund.get('amount_repaid'),
                         repayment_status=fund.get('repayment_status', 'NOT PAID'),
-                        created_by=fund.get('created_by')
+                        created_by_id=fund.get('created_by')
                     )
 
                 # --- G. TRAINING REQUIRED / RECEIVED & CERTIFICATES ---
@@ -159,7 +159,7 @@ class NewEnterpriseCreateAPIView(APIView):
                         duration=tr_req.get('duration'),
                         location=tr_req.get('location'),
                         expected_income=tr_req.get('expected_income'),
-                        created_by=tr_req.get('created_by')
+                        created_by_id=tr_req.get('created_by')
                     )
 
                     # If received, process certificates
@@ -171,7 +171,7 @@ class NewEnterpriseCreateAPIView(APIView):
                                     enterprise_id=final_th_urid,
                                     training_id=training,
                                     certificates=files.get(cert_key),
-                                    created_by=tr_req.get('created_by')
+                                    created_by_id=tr_req.get('created_by')
                                 )
 
             # If execution reaches here, the transaction is completely committed.

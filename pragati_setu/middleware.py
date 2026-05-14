@@ -152,6 +152,10 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
         if not path.startswith("/api/"):
             return None
 
+        # PUBLIC APIs (Open for Homepage without JWT or Headers)
+        if path.startswith("/api/v1/public/"):
+            return None
+
         # Auth APIs
         if path.startswith("/api/v1/auth/"):
             return None

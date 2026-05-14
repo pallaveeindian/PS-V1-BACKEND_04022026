@@ -6,6 +6,13 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from core.views_health import health
 
+# Public VIEWS ALL
+from TMS.api.homepage_apis.up_at_a_glance import UPAtAGlanceView
+
+# Public VIEWS TMS
+from TMS.api.homepage_apis.cadre_select import PublicCadreSelectionSummaryView
+from TMS.api.homepage_apis.login_status import PublicFirstLoginSummaryView
+
 schema_view = get_schema_view(
    openapi.Info(
       title="Pragati Setu API",
@@ -39,4 +46,11 @@ urlpatterns += [
         schema_view.without_ui(cache_timeout=0),
         name="schema-yaml",
     ),
+
+    # Public API for Homepage Cadre Selection Summary
+    path('api/v1/public/cadre-selection-summary/', PublicCadreSelectionSummaryView.as_view(), name='public-cadre-selection-summary'),    
+    # Public API for Homepage First Login & Password Change Summary
+    path('api/v1/public/first-login-summary/', PublicFirstLoginSummaryView.as_view(), name='public-first-login-summary'),    
+    # Public API for Homepage UP At A Glance Summary
+    path('api/v1/public/up-at-a-glance/', UPAtAGlanceView.as_view(), name='public-up-at-a-glance'),
 ]
