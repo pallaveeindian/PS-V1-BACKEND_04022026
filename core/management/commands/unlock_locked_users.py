@@ -20,6 +20,7 @@ class Command(BaseCommand):
         count = locked_users.update(
             is_locked=0,
             locked_on=None,
+            pass_attempt_no=0,
             updated_at=now
         )
 

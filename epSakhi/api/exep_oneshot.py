@@ -16,6 +16,39 @@ class ExistingEnterpriseCreateAPIView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request, *args, **kwargs):
+        from django.core.files.storage import default_storage
+        from datetime import datetime
+
+        def transpose_media_data(media_data, keys, folder):
+            """
+            Organizes flat files into rows. 
+            Example: open_box_key='p1,p2', close_box_key='p3' -> 
+            Rows: [{'open': 'p1', 'close': 'p3'}, {'open': 'p2', 'close': None}]
+            """
+            rows = []
+            # Gather all files per category
+            data_map = {}
+            for field in keys:
+                key_str = media_data.get(field, "")
+                paths = []
+                for k in str(key_str).split(','):
+                    k = k.strip()
+                    file_obj = request.FILES.get(k)
+                    if file_obj:
+                        now = datetime.now()
+                        save_path = f"{folder}/{now.year}/{now.strftime('%m')}/{file_obj.name}"
+                        paths.append(default_storage.save(save_path, file_obj))
+                data_map[field] = paths
+
+            # Determine max rows needed
+            max_len = max([len(p) for p in data_map.values()] or [0])
+            for i in range(max_len):
+                row = {}
+                for field in keys:
+                    row[field] = data_map[field][i] if i < len(data_map[field]) else None
+                rows.append(row)
+            return rows
+
         # 1. Parse the JSON payload
         raw_payload = request.data.get('data_payload')
         if not raw_payload:
@@ -190,13 +223,16 @@ class ExistingEnterpriseCreateAPIView(APIView):
                     
                     # Shop Media
                     media_data = shop_data.get('media', {})
-                    if media_data:
+                    media_rows = transpose_media_data(
+                        media_data, ['front_key', 'inside_key', 'others_key'], 'epSakhi/media/shops'
+                    )
+                    for m in media_rows:
                         ShopMedia.objects.create(
-                            product_id=shop, 
-                            front_photo=files.get(media_data.get('front_key')),
-                            inside_photo=files.get(media_data.get('inside_key')),
-                            others=files.get(media_data.get('others_key')),
-                            created_by_id=media_data.get('created_by'), # CHANGED
+                            product_id=shop,
+                            front_photo=m.get('front_key'),
+                            inside_photo=m.get('inside_key'),
+                            others=m.get('others_key'),
+                            created_by_id=shop_data.get('created_by'),
                         )
 
                 # --- G. PRODUCTS & PRODUCT MEDIA ---
@@ -206,6 +242,7 @@ class ExistingEnterpriseCreateAPIView(APIView):
                         main_product_name=prod_data.get('main_product_name'),
                         activity_or_product_type=prod_data.get('activity_or_product_type'),
                         product_features=prod_data.get('product_features'),
+                        production_capacity=prod_data.get('production_capacity'),
                         raw_material=prod_data.get('raw_material'),
                         raw_material_source=prod_data.get('raw_material_source'),
                         machinery_equipment=prod_data.get('machinery_equipment'),
@@ -229,25 +266,32 @@ class ExistingEnterpriseCreateAPIView(APIView):
                     )
                     
                     media_data = prod_data.get('media', {})
-                    if media_data:
+                    media_rows = transpose_media_data(
+                        media_data, ['open_box_key', 'close_box_key', 'others_key'], 'epSakhi/media/products'
+                    )
+                    for m in media_rows:
                         ProductMedia.objects.create(
                             product_id=product,
-                            open_box_photo=files.get(media_data.get('open_box_key')),
-                            close_box_photo=files.get(media_data.get('close_box_key')),
-                            others=files.get(media_data.get('others_key')),
-                            created_by_id=media_data.get('created_by'), # CHANGED
+                            open_box_photo=m.get('open_box_key'),
+                            close_box_photo=m.get('close_box_key'),
+                            others=m.get('others_key'),
+                            created_by_id=prod_data.get('created_by'),
                         )
 
                 # --- H. ENTERPRISE MEDIA (Standalone) ---
                 ep_media = payload.get('enterprise_media', {})
                 if ep_media:
-                    EnterpriseMedia.objects.create(
-                        enterprise_id=enterprise,
-                        photo_entrepreneur=files.get(ep_media.get('entrepreneur_key')),
-                        photo_enterprise=files.get(ep_media.get('enterprise_key')),
-                        others=files.get(ep_media.get('others_key')),
-                        created_by_id=ep_media.get('created_by'), # CHANGED
+                    media_rows = transpose_media_data(
+                        ep_media, ['entrepreneur_key', 'enterprise_key', 'others_key'], 'epSakhi/media/enterprise'
                     )
+                    for m in media_rows:
+                        EnterpriseMedia.objects.create(
+                            enterprise_id=enterprise,
+                            photo_entrepreneur=m.get('entrepreneur_key'),
+                            photo_enterprise=m.get('enterprise_key'),
+                            others=m.get('others_key'),
+                            created_by_id=ep_media.get('created_by'),
+                        )
 
                 # ==========================================
                 # SHARED TABLES (Linked via string TH_urid)

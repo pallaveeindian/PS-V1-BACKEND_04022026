@@ -40,7 +40,7 @@ class Command(BaseCommand):
                 Notification.objects.create(
                     recipient=dmmu,
                     title="URGENT: Monthly DLCC MoM Missing",
-                    message="You have not scheduled or uploaded the Minutes of Meeting (MoM) for this month's DLCC Meeting. Please complete this immediately to ensure compliance.",
+                    message=f"You have not scheduled or uploaded the Minutes of Meeting (MoM) for {current_month}/{current_year} DLCC Meeting. Please complete this immediately to ensure compliance.",
                     priority='CRITICAL',
                     notification_type='MEETING_COMPLIANCE'
                 )
@@ -70,7 +70,7 @@ class Command(BaseCommand):
                 Notification.objects.create(
                     recipient=bmmu,
                     title="URGENT: Monthly BLCC MoM Missing",
-                    message="You have not scheduled or uploaded the Minutes of Meeting (MoM) for this month's BLCC Meeting. Please complete this immediately to ensure compliance.",
+                    message=f"You have not scheduled or uploaded the Minutes of Meeting (MoM) for {current_month}/{current_year} BLCC Meeting. Please complete this immediately to ensure compliance.",
                     priority='CRITICAL',
                     notification_type='MEETING_COMPLIANCE'
                 )

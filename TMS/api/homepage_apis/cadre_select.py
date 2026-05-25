@@ -58,7 +58,7 @@ class PublicCadreSelectionSummaryView(APIView):
         ).annotate(
             beneficiary_count=Count('beneficiary_registrations', distinct=True),
             trainer_count=Count('trainer_registrations', distinct=True)
-        ).order_by('-created_at')[:100] # Limiting to 100 for the homepage to maintain speed
+        ).order_by('-created_at')
 
         # 5. Return JSON directly (Bypassing DRF Serializer overhead)
         return Response({

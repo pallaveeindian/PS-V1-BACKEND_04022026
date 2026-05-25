@@ -696,6 +696,37 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
         return TrainingPartnerTargetsSerializer
 
     # =====================================================
+    # SURGICAL ADDITION: PATCH OVERRIDE FOR ACHIEVEMENT
+    # =====================================================
+    def partial_update(self, request, *args, **kwargs):
+        # 1. Intercept the custom payload from the frontend
+        if "achieved_count" in request.data:
+            target = self.get_object()
+            new_count = int(request.data.get("achieved_count", 0))
+
+            # 2. Get the auto-created achievement record (from your save override)
+            achievement = target.achievements.first()
+
+            if achievement:
+                # Update existing
+                achievement.batches_completed = new_count
+                achievement.save()
+            else:
+                # Failsafe: Create if it somehow doesn't exist
+                target.achievements.create(
+                    partner=target.partner,
+                    batches_completed=new_count,
+                    financial_year=target.financial_year,
+                    training_plan=target.training_plan,
+                    district=target.district,
+                )
+            
+            return Response({"detail": "Achievement updated successfully."}, status=status.HTTP_200_OK)
+            
+        # 3. Fallback to default DRF behavior for other normal target updates
+        return super().partial_update(request, *args, **kwargs)
+
+    # =====================================================
     # SURGICAL ADDITION: LIST OVERRIDE FOR EXPORT
     # =====================================================
     def list(self, request, *args, **kwargs):
