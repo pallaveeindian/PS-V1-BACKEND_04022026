@@ -53,6 +53,18 @@ class SoftDeleteMixin(models.Model):
         super().delete()
 
 # -------------------------
+# Error DB
+# -------------------------
+class ErrorDB(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    error_code = models.CharField(max_length=255)
+    error_message = models.TextField()
+    additional_info = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_errorDB'
+
+# -------------------------
 # CRP Data
 # -------------------------
 class CRPEP(SoftDeleteMixin):
@@ -692,3 +704,171 @@ class NoEnterpriseWage(SoftDeleteMixin):
 
     class Meta:
         db_table = 'epSakhi_noEpWage'
+
+# MOU survey integration
+
+# EXISTING METDATA USAGE
+class MOUEnterprise(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    # Location Data
+    district = models.ForeignKey(
+        MasterDistrict,
+        on_delete=models.PROTECT,
+        db_column='district_id',
+        db_constraint=False,
+        null=True,
+        blank=True,
+    )
+    block = models.ForeignKey(
+        MasterBlock,
+        on_delete=models.PROTECT,
+        db_column='block_id',
+        db_constraint=False,        
+        null=True,
+        blank=True,
+    )
+    panchayat = models.ForeignKey(
+        MasterPanchayat,
+        on_delete=models.PROTECT,
+        db_column='panchayat_id',
+        db_constraint=False,
+        null=True,
+        blank=True,
+    )
+
+    # LokOS carry-overs
+    lokos_shg_code = models.CharField(max_length=100, null=True, blank=True, db_column='lokos_shg_code')
+    lokos_shg_name = models.CharField(max_length=255, null=True, blank=True, db_column='lokos_shg_name')
+
+    lokos_clf_code = models.CharField(max_length=100, null=True, blank=True, db_column='lokos_clf_code')
+    lokos_clf_name = models.CharField(max_length=255, null=True, blank=True, db_column='lokos_clf_name')
+
+    # Enterprise Details
+    enterprise_name = models.CharField(max_length=255, null=True, blank=True)
+    entrepreneur_name = models.CharField(max_length=255, null=True, blank=True)
+    entrepreneur_contact = models.CharField(max_length=20, null=True, blank=True)
+    entrepeneur_picture = models.ImageField(upload_to='epSakhi/media/mou/entrepreneurs/%Y/%m/', null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouEnterprise'
+
+# SURVEY FORM FIELDS
+class MOU(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    
+    enterprise = models.ForeignKey(
+        MOUEnterprise,
+        on_delete=models.CASCADE,
+        related_name='mous',
+        null=True,
+        blank=True,
+    )
+
+    mou_status = models.CharField(max_length=255, null=True, blank=True)
+    mou_date = models.DateField(null=True, blank=True)
+    mou_duration = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mou'
+
+class MOUDocs(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    mou_id = models.ForeignKey(
+        MOU,
+        on_delete=models.CASCADE,
+        related_name='mou_docs',
+        blank=True,
+        null=True,
+    )  
+    doc_name = models.CharField(max_length=255, null=True, blank=True)
+    doc_file = models.FileField(upload_to='epSakhi/media/mou/docs/%Y/%m/', null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouDocs'
+
+class MOUOrg(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    enterprise = models.ForeignKey(
+        MOUEnterprise,
+        on_delete=models.CASCADE,
+        related_name='buyer_orgs',
+        null=True,
+        blank=True,
+    )
+
+    buyer_org_name = models.CharField(max_length=255, null=True, blank=True)
+    org_address = models.TextField(null=True, blank=True)
+    org_contact = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouProdBuyOrg'
+ 
+class MOUTraders(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    enterprise = models.ForeignKey(
+        MOUEnterprise,
+        on_delete=models.CASCADE,
+        related_name='traders',
+        null=True,
+        blank=True,
+    )
+
+    trader_name = models.CharField(max_length=255, null=True, blank=True)
+    trader_contact = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouTraders'
+
+class MOUProducts(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    enterprise = models.ForeignKey(
+        MOUEnterprise,
+        on_delete=models.CASCADE,
+        related_name='products',
+        blank=True,
+        null=True,
+    )    
+
+    product_name = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouProducts'
+
+class MOUProdCategories(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    MOUProdID = models.ForeignKey(
+        MOUProducts,
+        on_delete=models.CASCADE,
+        related_name='prod_categories',
+        blank=True,
+        null=True,
+    )    
+    parent_category = models.CharField(max_length=255, null=True, blank=True)
+    child_category = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouProdCategories'        
+
+class MOUSales(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    enterprise = models.ForeignKey(
+        MOUEnterprise,
+        on_delete=models.CASCADE,
+        related_name='sales',
+        null=True,
+        blank=True,
+    )
+
+    est_monthly_sales = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    est_annual_sales = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    supply_frequency = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_mouSales'

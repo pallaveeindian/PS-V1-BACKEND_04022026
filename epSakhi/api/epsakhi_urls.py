@@ -9,6 +9,8 @@ from .newep_oneshot import *
 from .views import *
 from .analytics_views import *
 
+from .MOU.views import *
+
 router = DefaultRouter()
 router.register('crp', CRPEPViewSet, basename='crp')
 router.register('recorded-beneficiaries', BeneficiaryRecordedViewSet, basename='recorded-beneficiaries')
@@ -145,8 +147,14 @@ custom_urls = [
         "crp-panch-list/",
         CRPListAPIView.as_view(),
         name="crp-list",
-    )
+    ),
 
+    # MOU Listing API
+    path(
+        "mou-enterprise/list/",
+        MOUEnterpriseListingAPI.as_view(),
+        name="mou-enterprise-list"
+    ),
 ]
 
 # Analytics
@@ -161,6 +169,9 @@ oneshot_urls = [
     path('exep-form/delete/', ExistingEnterpriseDeleteAPIView.as_view(), name='existing-enterprise-delete'),
     path('newep-form/create/', NewEnterpriseCreateAPIView.as_view(), name='newep-form-create'),
     path('newep-form/delete/', NewEnterpriseDeleteAPIView.as_view(), name='newep-form-delete'),
+
+    # MOU one-shot API
+    path('mou-form/create/', MOUOneShotCreateView.as_view(), name='mou-form-create'),
 ]
 
 urlpatterns = [
