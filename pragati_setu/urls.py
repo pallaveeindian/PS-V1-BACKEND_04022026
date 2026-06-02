@@ -12,6 +12,7 @@ from TMS.api.homepage_apis.up_at_a_glance import UPAtAGlanceView
 # Public VIEWS TMS
 from TMS.api.homepage_apis.cadre_select import PublicCadreSelectionSummaryView
 from TMS.api.homepage_apis.login_status import PublicFirstLoginSummaryView
+from epSakhi.api.homepage_apis.mou_form import PublicDistrictMOUAnalyticsAPIView
 
 schema_view = get_schema_view(
    openapi.Info(
@@ -53,4 +54,10 @@ urlpatterns += [
     path('api/v1/public/first-login-summary/', PublicFirstLoginSummaryView.as_view(), name='public-first-login-summary'),    
     # Public API for Homepage UP At A Glance Summary
     path('api/v1/public/up-at-a-glance/', UPAtAGlanceView.as_view(), name='public-up-at-a-glance'),
+    # Public API for Homepage MOU Analytics
+    path(
+        "api/v1/public/mou-analytics/",
+        PublicDistrictMOUAnalyticsAPIView.as_view(),
+        name="public-mou-analytics",
+    ),       
 ]

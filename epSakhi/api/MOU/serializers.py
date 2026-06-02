@@ -3,6 +3,7 @@ from datetime import date
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from epSakhi.models import *
+import json
 
 # --- REUSABLE VALIDATORS ---
 
@@ -19,14 +20,16 @@ def validate_file_size(value):
         raise ValidationError('File size cannot exceed 5 MB.')
     return value
 
-# --- SERIALIZERS ---
+# --- VALIDATION BASED SERIALIZERS ---
 
 class MOUEnterpriseSerializer(serializers.ModelSerializer):
     entrepreneur_contact = serializers.CharField(
         validators=[validate_indian_phone], 
         required=False, 
-        allow_blank=True
+        allow_blank=True,
+        allow_null=True
     )
+    # SURGICAL FIX: Use exact DB column spelling (entrepeneur_picture without 'r')
     entrepeneur_picture = serializers.ImageField(
         validators=[validate_file_size], 
         required=False, 
@@ -53,6 +56,14 @@ class MOUEnterpriseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"lokos_clf": "Both LokOS CLF Code and Name must be provided together."}
             )
+
+        # Validation: Same rule for VO
+        vo_code = data.get('lokos_vo_code')
+        vo_name = data.get('lokos_vo_name')
+        if bool(vo_code) != bool(vo_name):
+            raise serializers.ValidationError(
+                {"lokos_vo": "Both LokOS VO Code and Name must be provided together."}
+            )            
             
         return data
 
@@ -200,8 +211,95 @@ class MOUEnterpriseListSerializer(serializers.ModelSerializer):
             "lokos_clf_code",
             "lokos_clf_name",
 
+            "lokos_vo_code",
+            "lokos_vo_name",
+
             "enterprise_name",
             "entrepreneur_name",
             "entrepreneur_contact",
             "entrepeneur_picture",
         ]
+
+# Enterprise Detail Serializer with nested serializers for related MOU data 
+# --- NESTED READ SERIALIZERS ---
+
+class MOUProdCategoriesReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUProdCategories
+        fields = '__all__'
+
+class MOUProductsReadSerializer(serializers.ModelSerializer):
+    # Traverses the related_name='prod_categories' on MOUProdCategories
+    prod_categories = MOUProdCategoriesReadSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MOUProducts
+        fields = '__all__'
+
+class MOUDocsReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUDocs
+        fields = '__all__'
+
+class MOUReadSerializer(serializers.ModelSerializer):
+    # Traverses the related_name='mou_docs' on MOUDocs
+    mou_docs = MOUDocsReadSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MOU
+        fields = '__all__'
+
+class MOUOrgReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUOrg
+        fields = '__all__'
+
+class MOUTradersReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUTraders
+        fields = '__all__'
+
+class MOUSalesReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUSales
+        fields = '__all__'
+
+
+# --- MASTER DETAIL SERIALIZER ---
+
+class MOUEnterpriseDetailSerializer(serializers.ModelSerializer):
+    # Master Location Details
+    district_name = serializers.CharField(source="district.district_name_en", read_only=True)
+    block_name = serializers.CharField(source="block.block_name_en", read_only=True)
+    panchayat_name = serializers.CharField(source="panchayat.panchayat_name_en", read_only=True)
+    village_name = serializers.CharField(source="village.village_name_english", read_only=True)
+
+    # 1-to-Many Reverse Relations (using your precise related_names)
+    mous = MOUReadSerializer(many=True, read_only=True)
+    buyer_orgs = MOUOrgReadSerializer(many=True, read_only=True)
+    traders = MOUTradersReadSerializer(many=True, read_only=True)
+    products = MOUProductsReadSerializer(many=True, read_only=True)
+    sales = MOUSalesReadSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = MOUEnterprise
+        fields = [
+            "id",
+            "district", "district_name",
+            "block", "block_name",
+            "panchayat", "panchayat_name",
+            "village_name",
+            "lokos_shg_code", "lokos_shg_name",
+            "lokos_clf_code", "lokos_clf_name",
+            "lokos_vo_code", "lokos_vo_name",
+            "enterprise_name", "entrepreneur_name",
+            "entrepreneur_contact", "entrepeneur_picture",
+            "enterprise_type",
+
+            # Appended Nested Arrays
+            "mous",
+            "buyer_orgs",
+            "traders",
+            "products",
+            "sales"
+        ]        

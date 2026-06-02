@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enterprise Form PDF</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm 15mm 15mm 15mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: Arial, sans-serif;
+                font-size: 10px;
+                color: #555;
+            }
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #222;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .header h1 { font-size: 22px; color: #2c3e50; margin: 0; text-transform: uppercase; }
+        .header p { font-size: 12px; margin: 5px 0 0 0; color: #555; }
+        
+        .header-table {
+            width: 100%;
+            border: none;
+            margin: 0;
+            table-layout: fixed; /* Ensures logos stay locked in place */
+        }
+        .header-table td {
+            border: none;
+            vertical-align: middle;
+            padding: 0;
+        }
+        .header-logo-left,
+        .header-logo-right {
+            width: 80px;
+            text-align: center;
+        }
+        .header-logo-left img,
+        .header-logo-right img {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            object-fit: contain;
+        }
+        .header-content {
+            text-align: center;
+        }       
+        
+        h2 { 
+            font-size: 14px; 
+            background-color: #2c3e50; 
+            color: white; 
+            padding: 6px 10px; 
+            margin-top: 15px; 
+            margin-bottom: 10px;
+            border-radius: 3px;
+        }
+        h3 {
+            font-size: 13px;
+            color: #2c3e50;
+            border-bottom: 1px solid #bdc3c7;
+            padding-bottom: 3px;
+            margin-top: 10px;
+            margin-bottom: 8px;
+        }
+        h4 {
+            font-size: 12px;
+            color: #333;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            text-decoration: underline;
+        }
+        
+        /* SURGICAL FIX: Global Table Layout */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th, td { 
+            border: 1px solid #bdc3c7; 
+            padding: 4px 6px; 
+            vertical-align: middle; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
+            word-break: break-word; 
+        }
+        th { background-color: #ecf0f1; font-weight: bold; color: #333; text-align: left; }
+
+        /* Unified Grid Columns for Basic Info Section */
+        .col-label { width: 17%; }
+        .col-value { width: 24%; }
+        .col-photo { 
+            width: 18%; 
+            text-align: center; 
+            vertical-align: middle; 
+            background-color: #f9f9f9; 
+            padding: 8px !important; 
+        }
+        .col-photo img { 
+            max-width: 100%; 
+            max-height: 120px; 
+            border-radius: 4px; 
+            border: 1px solid #ccc; 
+        }
+        .photo-label { 
+            font-size: 10px; 
+            font-weight: bold; 
+            margin-top: 5px; 
+            color: #555; 
+            text-transform: uppercase; 
+        }
+
+        .page-break { page-break-before: always; }
+        
+        .image-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; margin-bottom: 15px; }
+        .image-card { width: 48%; text-align: center; vertical-align: top; page-break-inside: avoid; }
+        .image-card img { max-width: 90%; max-height: 200px; border: 1px solid #ccc; border-radius: 4px; }
+        .image-title { font-size: 10px; font-weight: bold; margin-top: 3px; background: #ecf0f1; padding: 3px; display: inline-block; width: 85%; }
+        
+        .signature-box { text-align: right; margin-top: 30px; page-break-inside: avoid; }
+        .signature-box img { max-width: 150px; max-height: 80px; border-bottom: 1px solid #333; }
+        .pdf-note { font-size: 10px; color: #e74c3c; font-style: italic; margin-top: -5px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <table class="header-table">
+            <tr>
+                <td class="header-logo-left">
+                    <img src="{{ prena_logo }}" alt="PRENA Logo">
+                </td>
+                <td class="header-content">
+                    <h1>Beneficiary Enterprise Form</h1>
+                    <p>
+                        Record ID: <strong>{{ beneficiary.id }}</strong> |
+                        LOKOS Member Code: <strong>{{ beneficiary.lokos_member_code|default:"-" }}</strong>
+                    </p>
+                </td>
+                <td class="header-logo-right">
+                    <img src="{{ upgov_logo }}" alt="UP Government Logo">
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <h2>1. Beneficiary Basic Information</h2>
+    
+    <table>
+        <tr>
+            <th class="col-label">Applicant Name</th><td class="col-value">{{ beneficiary.applicant_name|default:"-" }}</td>
+            <th class="col-label">Father/Husband</th><td class="col-value">{{ beneficiary.father_husband_name|default:"-" }}</td>
+            <td rowspan="7" class="col-photo">
+                {% if entrepreneur_photo_url %}
+                    <img src="{{ entrepreneur_photo_url }}" alt="Entrepreneur Photo">
+                {% else %}
+                    <div style="height: 100px; display: table-cell; vertical-align: middle; color: #999;">No Photo Provided</div>
+                {% endif %}
+                <div class="photo-label">Entrepreneur Profile</div>
+            </td>
+        </tr>
+        <tr>
+            <th>Age</th><td>{{ beneficiary.age|default:"-" }}</td>
+            <th>Gender</th><td>{{ beneficiary.gender|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Marital Status</th><td>{{ beneficiary.marital_status|default:"-" }}</td>
+            <th>Category</th><td>{{ beneficiary.category|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Special Category</th><td>{{ beneficiary.special_category|default:"-" }}</td>
+            <th>PLD Status</th><td>{{ beneficiary.pld_status|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Education</th><td>{{ beneficiary.education|default:"-" }}</td>
+            <th>Mobile</th><td>{{ beneficiary.mobile|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Email</th><td>{{ beneficiary.email|default:"-" }}</td>
+            <th>LOKOS SHG Code</th><td>{{ beneficiary.lokos_shg_code|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Enterprise Type</th>
+                <td>
+                    {% if beneficiary.enterprise_type == "exep" %}
+                        Existing Enterprise
+                    {% elif beneficiary.enterprise_type == "newep" %}
+                        Interested in Opening New Enterprise
+                    {% else %}
+                        {{ beneficiary.enterprise_type|default:"-" }}
+                    {% endif %}
+                </td>
+            <th>Enterprise ID</th><td>{{ beneficiary.enterprise_id|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Address</th>
+            <td colspan="4">{{ beneficiary.address|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Village</th><td>{{ beneficiary.village_id.village_name_english|default:"-" }}</td>
+            <th>Panchayat</th><td colspan="2">{{ beneficiary.panchayat_id.panchayat_name_en|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Block</th><td>{{ beneficiary.block_id.block_name_en|default:"-" }}</td>
+            <th>District</th><td colspan="2">{{ beneficiary.district_id.district_name_en|default:"-" }}</td>
+        </tr>
+    </table>
+
+
+    {% if is_existing and enterprise %}
+    <h2>2. Existing Enterprise Details</h2>
+    
+    <h3>1) Basic Information Section</h3>
+    <table>
+        <tr>
+            <th>Enterprise Name</th><td colspan="3"><strong>{{ enterprise.enterprise_name|default:"-" }}</strong></td>
+        </tr>
+        <tr>
+            <th>Ownership Type</th><td>{{ enterprise.ownership_type|default:"-" }}</td>
+            <th>Owner Cadre</th><td>{{ enterprise.owner_cadre|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Owner Designation</th><td>{{ enterprise.owner_designation|default:"-" }}</td>
+            <th>Owner Special Category</th><td>{{ enterprise.owner_special_category|default:"-" }}</td>
+        </tr>
+    </table>
+
+    {% if categories %}
+    <h4>Enterprise Categories</h4>
+    <table>
+        <tr>
+            <th>Parent Category</th><th>Sub Category</th>
+        </tr>
+        {% for item in categories %}
+        <tr>
+            <td>{{ item.parent_category|default:"-" }}</td>
+            <td>{{ item.sub_category|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if enterprise.exep_licenses.all %}
+    <h4>Licenses</h4>
+    <p class="pdf-note">* Attached PDF licenses are appended to the last page of this document.</p>
+    <table>
+        <tr>
+            <th>License Category</th><th>License Name</th><th>License No.</th>
+        </tr>
+        {% for item in enterprise.exep_licenses.all %}
+        <tr>
+            <td>{{ item.license_category|default:"-" }}</td>
+            <td>{{ item.license_name|default:"-" }}</td>
+            <td>{{ item.license_no|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <div class="image-grid">
+        {% for img in image_attachments %}
+            {% if "License" in img.title %}
+                <div class="image-card">
+                    <img src="{{ img.url }}" alt="{{ img.title }}">
+                    <div class="image-title">{{ img.title }}</div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3>2) Enterprise Details Section</h3>
+    <table>
+        <tr>
+            <th>Year Established</th><td>{{ enterprise.year_of_establishment|default:"-" }}</td>
+            <th>Workplace Type</th><td>{{ enterprise.workplace_type|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Total Employees</th><td>{{ enterprise.total_emp|default:"0" }}</td>
+            <th>SHG Employees</th><td>{{ enterprise.number_of_shg_emp|default:"0" }}</td>
+        </tr>
+        <tr>
+            <th>Electricity Avail.</th><td>{{ enterprise.electricity_available|default:"-" }}</td>
+            <th>Water Avail.</th><td>{{ enterprise.water_available|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Transport Avail.</th><td>{{ enterprise.transportation_availability|default:"-" }}</td>
+            <th>Can Send to Bijnor?</th><td>{{ enterprise.can_send_to_bijnor|yesno:"Yes,No" }}</td>
+        </tr>
+        <tr>
+            <th>Need Transport Help?</th><td colspan="3">{{ enterprise.need_transport_help|default:"-" }}</td>
+        </tr>
+    </table>
+
+    <h3>3) Product / Shop Section</h3>
+    <table>
+        <tr>
+            <th>Have Shop Based Product?</th>
+            <td colspan="3"><strong>{{ enterprise.have_shop_based_prod|yesno:"Yes,No" }}</strong></td>
+        </tr>
+    </table>
+
+    {% if enterprise.have_shop_based_prod %}
+        {% for item in shops %}
+        <h4>Shop Details</h4>
+        <table>
+            <tr>
+                <th>Category / Type</th><td>{{ item.shop_category|default:"-" }} / {{ item.shop_type|default:"-" }}</td>
+                <th>Inventory Source</th><td>{{ item.source_of_inventory|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Target Customers</th><td>{{ item.target_customers|default:"-" }}</td>
+                <th>Sales Area</th><td>{{ item.sales_area|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Marketing Strategy</th><td>{{ item.marketing_strategy|default:"-" }}</td>
+                <th>Marketing Channels</th><td>{{ item.marketing_channels|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Market Challenges</th><td>{{ item.marketing_challenges|default:"-" }}</td>
+                <th>Market Linkage</th><td>{{ item.market_linkage|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Accepts Digital Pay?</th><td>{{ item.accept_digital_payment|yesno:"Yes,No" }}</td>
+                <th>Monthly/Annual Sales</th><td>₹{{ item.avg_monthly_sales|default:"0" }} / ₹{{ item.avg_annual_sales|default:"0" }}</td>
+            </tr>
+        </table>
+        
+        <div class="image-grid">
+            {% for img in image_attachments %}
+                {% if "Shop" in img.title %}
+                    <div class="image-card">
+                        <img src="{{ img.url }}" alt="{{ img.title }}">
+                        <div class="image-title">{{ img.title }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+        
+    {% else %}
+    
+        {% for item in products %}
+        <div class="page-break"></div>
+        <h4>Product Details</h4>
+        <table>
+            <tr>
+                <th>Main Product Name</th><td colspan="3"><strong>{{ item.main_product_name|default:"-" }}</strong></td>
+            </tr>
+            <tr>
+                <th>Activity / Type</th><td>{{ item.activity_or_product_type|default:"-" }}</td>
+                <th>Product Features</th><td>{{ item.product_features|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Prod. Capacity</th><td>{{ item.production_capacity|default:"-" }}</td>
+                <th>Product MRP</th><td>{{ item.product_mrp|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Raw Material</th><td>{{ item.raw_material|default:"-" }}</td>
+                <th>Material Source</th><td>{{ item.raw_material_source|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Machinery/Equip.</th><td>{{ item.machinery_equipment|default:"-" }}</td>
+                <th>Machinery Source</th><td>{{ item.source_machinery|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Target Customers</th><td>{{ item.target_customers|default:"-" }}</td>
+                <th>Sales Area</th><td>{{ item.sales_area|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Packaging/Brand</th><td>{{ item.packaging_branding_status|default:"-" }}</td>
+                <th>Digital Pay?</th><td>{{ item.accept_digital_payment|yesno:"Yes,No" }}</td>
+            </tr>
+            <tr>
+                <th>Marketing Strategy</th><td>{{ item.marketing_strategy|default:"-" }}</td>
+                <th>Marketing Channels</th><td>{{ item.marketing_channels|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Market Challenges</th><td>{{ item.marketing_challenges|default:"-" }}</td>
+                <th>Market Linkage</th><td>{{ item.market_linkage|default:"-" }}</td>
+            </tr>
+            <tr>
+                <th>Avg Monthly Sales</th><td>₹{{ item.avg_monthly_sales|default:"0.00" }}</td>
+                <th>Avg Annual Sales</th><td>₹{{ item.avg_annual_sales|default:"0.00" }}</td>
+            </tr>
+        </table>
+        
+        <div class="image-grid">
+            {% for img in image_attachments %}
+                {% if "Product" in img.title %}
+                    <div class="image-card">
+                        <img src="{{ img.url }}" alt="{{ img.title }}">
+                        <div class="image-title">{{ img.title }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="page-break"></div>
+    <h3>4) Investment Section</h3>
+    <table>
+        <tr>
+            <th>Monthly Income</th><td>₹{{ enterprise.monthly_income_estimate|default:"0.00" }}</td>
+            <th>Annual Turnover</th><td>₹{{ enterprise.annual_turnover|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <th>Gross Profit</th><td>₹{{ enterprise.gross_profit|default:"0.00" }}</td>
+            <th>Working Cap. (Monthly)</th><td>₹{{ enterprise.working_capital_monthly|default:"0.00" }}</td>
+        </tr>
+        <tr>
+            <th>Initial Investment</th><td>₹{{ enterprise.initial_investment|default:"0.00" }}</td>
+            <th>Source of Investment</th><td>{{ enterprise.source_of_investment|default:"-" }}</td>
+        </tr>
+    </table>
+
+    <h3>5) Loan/Subsidy & Funds Section</h3>
+    <table>
+        <tr>
+            <th>Taken Loan?</th><td>{{ enterprise.has_taken_loan|yesno:"Yes,No" }}</td>
+            <th>Received Subsidy?</th><td>{{ enterprise.has_receieved_subsidy|yesno:"Yes,No" }}</td>
+            <th>SHG Mandatory Fund?</th><td>{{ enterprise.has_shg_receieved_man_fund|yesno:"Yes,No" }}</td>
+        </tr>
+    </table>
+
+    {% if enterprise.has_taken_loan and loans %}
+        <h4>Loan Details</h4>
+        <table>
+            <tr>
+                <th>Form Type</th><th>Dept / Inst.</th><th>Bank & Branch</th><th>Amount / Repaid</th><th>Date</th><th>Status</th>
+            </tr>
+            {% for item in loans %}
+            <tr>
+                <td>{{ item.form_type|default:"-" }}</td>
+                <td>{{ item.department|default:"-" }} <br> {{ item.institution_name|default:"-" }}</td>
+                <td>{{ item.bank_name|default:"-" }} <br> ({{ item.bank_branch|default:"-" }})</td>
+                <td>Amt: {{ item.loan_amount|default:"0" }} <br> Repaid: {{ item.repaid_amount|default:"0" }}</td>
+                <td>{{ item.date_taken|default:"-" }}</td>
+                <td>{{ item.repayment_status|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    {% if enterprise.has_receieved_subsidy and subsidies %}
+        <h4>Subsidy Details</h4>
+        <table>
+            <tr>
+                <th>Type</th><th>Name</th><th>Details</th>
+            </tr>
+            {% for item in subsidies %}
+            <tr>
+                <td>{{ item.subsidy_type|default:"-" }}</td>
+                <td>{{ item.subsidy_name|default:"-" }}</td>
+                <td>{{ item.subsidy_detail|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    {% if enterprise.has_shg_receieved_man_fund and funds %}
+        <h4>Mandatory Funds</h4>
+        <table>
+            <tr>
+                <th>Form Type</th><th>Fund Type</th><th>Partially Received?</th><th>Amt Received</th><th>Amt Repaid</th><th>Status</th>
+            </tr>
+            {% for item in funds %}
+            <tr>
+                <td>{{ item.form_type|default:"-" }}</td>
+                <td>{{ item.fund_type|default:"-" }}</td>
+                <td>{{ item.have_received_part|yesno:"Yes,No" }}</td>
+                <td>{{ item.amount_received|default:"-" }}</td>
+                <td>{{ item.amount_repaid|default:"-" }}</td>
+                <td>{{ item.repayment_status|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <h3>6) Training & Expansion Section</h3>
+    <table>
+        <tr>
+            <th>Training Received?</th><td>{{ enterprise.is_training_received|yesno:"Yes,No" }}</td>
+            <th>Training Required?</th><td>{{ enterprise.is_training_required|yesno:"Yes,No" }}</td>
+        </tr>
+    </table>
+
+    {% if enterprise.is_training_received or enterprise.is_training_required %}
+        {% if trainings %}
+        <h4>Training Requirements</h4>
+        <p class="pdf-note">* Attached PDF Training Certificates are appended to the last page of this document.</p>
+        <table>
+            <tr>
+                <th>Form Type</th><th>Sector</th><th>Dept</th><th>Training Type</th><th>Duration</th><th>Location</th><th>Expected Inc.</th>
+            </tr>
+            {% for item in trainings %}
+            <tr>
+                <td>{{ item.form_type|default:"-" }}</td>
+                <td>{{ item.sector_type|default:"-" }} - {{ item.sector|default:"-" }}</td>
+                <td>{{ item.department|default:"-" }}</td>
+                <td>{{ item.training_type|default:"-" }}</td>
+                <td>{{ item.duration|default:"-" }}</td>
+                <td>{{ item.location|default:"-" }}</td>
+                <td>{{ item.expected_income|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        
+        <div class="image-grid">
+            {% for img in image_attachments %}
+                {% if "Training Certificate" in img.title %}
+                    <div class="image-card">
+                        <img src="{{ img.url }}" alt="{{ img.title }}">
+                        <div class="image-title">{{ img.title }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <table>
+        <tr>
+            <th>Expansion Plan</th><td colspan="3">{{ enterprise.expansion_plan|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Gov Scheme Info</th><td colspan="3">{{ enterprise.info_abt_gov_scheme|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Nearest Skill Centre</th><td>{{ enterprise.nearest_skill_centre|default:"-" }}</td>
+            <th>Skill Centre Loc.</th><td>{{ enterprise.skill_centre_loc|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Nearest Industry</th><td>{{ enterprise.nearest_industry|default:"-" }}</td>
+            <th>Industry Loc.</th><td>{{ enterprise.industry_loc|default:"-" }}</td>
+        </tr>
+    </table>
+
+    <h3>7) Support Section</h3>
+    <table>
+        <tr>
+            <th>Is Support Required?</th>
+            <td colspan="3"><strong>{{ enterprise.is_support_required|default:"No" }}</strong></td>
+        </tr>
+    </table>
+    {% if enterprise.is_support_required and supports %}
+        <h4>Support Details</h4>
+        <table>
+            <tr>
+                <th>Category</th><th>Sub Category</th><th>Description</th><th>Other</th>
+            </tr>
+            {% for item in supports %}
+            <tr>
+                <td>{{ item.support_category|default:"-" }}</td>
+                <td>{{ item.support_sub_category|default:"-" }}</td>
+                <td>{{ item.support_description|default:"-" }}</td>
+                <td>{{ item.other_support|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <h3>8) Enterprise Media</h3>
+    <div class="image-grid">
+        {% for img in image_attachments %}
+            {% if "Enterprise Photo" in img.title or "Enterprise Other Media" in img.title %}
+                <div class="image-card">
+                    <img src="{{ img.url }}" alt="{{ img.title }}">
+                    <div class="image-title">{{ img.title }}</div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <h3>9) Declaration Section</h3>
+    <table>
+        <tr>
+            <th>Declaration Confirmed?</th><td>{{ enterprise.declaration_confirmed|yesno:"Yes,No" }}</td>
+            <th>Declaration Date</th><td>{{ enterprise.declaration_date|default:"-" }}</td>
+            <th>Verifier Name</th><td>{{ enterprise.verifier_name|default:"-" }}</td>
+        </tr>
+    </table>
+
+
+    {% elif not is_existing and enterprise %}
+    <h2>2. New Enterprise Details</h2>
+    
+    <h3>Basic Info Section</h3>
+    <table>
+        <tr>
+            <th>Applicant Cadre</th><td>{{ enterprise.applicant_cadre|default:"-" }}</td>
+            <th>Applicant Designation</th><td>{{ enterprise.applicant_designation|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Special Category</th><td>{{ enterprise.applicant_special_category|default:"-" }}</td>
+            <th>Preferred Location</th><td>{{ enterprise.prefered_location|default:"-" }}</td>
+        </tr>
+    </table>
+
+    {% if categories %}
+    <h4>Enterprise Categories</h4>
+    <table>
+        <tr>
+            <th>Parent Category</th><th>Sub Category</th>
+        </tr>
+        {% for item in categories %}
+        <tr>
+            <td>{{ item.parent_category|default:"-" }}</td>
+            <td>{{ item.sub_category|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <h3>Fund Section</h3>
+    <table>
+        <tr>
+            <th>SHG Mandatory Fund?</th><td colspan="3">{{ enterprise.has_shg_receieved_man_fund|yesno:"Yes,No" }}</td>
+        </tr>
+    </table>
+    {% if enterprise.has_shg_receieved_man_fund and funds %}
+        <h4>Mandatory Funds</h4>
+        <table>
+            <tr>
+                <th>Fund Type</th><th>Partially Received?</th><th>Amt Received</th><th>Amt Repaid</th><th>Status</th>
+            </tr>
+            {% for item in funds %}
+            <tr>
+                <td>{{ item.fund_type|default:"-" }}</td>
+                <td>{{ item.have_received_part|yesno:"Yes,No" }}</td>
+                <td>{{ item.amount_received|default:"-" }}</td>
+                <td>{{ item.amount_repaid|default:"-" }}</td>
+                <td>{{ item.repayment_status|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <h3>Training Section</h3>
+    <table>
+        <tr>
+            <th>Training Received?</th><td>{{ enterprise.is_training_received|yesno:"Yes,No" }}</td>
+            <th>Training Required?</th><td>{{ enterprise.is_training_required|yesno:"Yes,No" }}</td>
+        </tr>
+        <tr>
+            <th>Nearest Skill Centre</th><td>{{ enterprise.nearest_skill_centre|default:"-" }}</td>
+            <th>Skill Centre Loc.</th><td>{{ enterprise.skill_centre_loc|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Nearest Industry</th><td>{{ enterprise.nearest_industry|default:"-" }}</td>
+            <th>Industry Loc.</th><td>{{ enterprise.industry_loc|default:"-" }}</td>
+        </tr>
+    </table>
+    {% if trainings %}
+        <h4>Training Requirements</h4>
+        <p class="pdf-note">* Attached PDF Training Certificates are appended to the last page of this document.</p>
+        <table>
+            <tr>
+                <th>Form Type</th><th>Sector</th><th>Dept</th><th>Training Type</th><th>Duration</th><th>Location</th><th>Expected Inc.</th>
+            </tr>
+            {% for item in trainings %}
+            <tr>
+                <td>{{ item.form_type|default:"-" }}</td>
+                <td>{{ item.sector_type|default:"-" }} - {{ item.sector|default:"-" }}</td>
+                <td>{{ item.department|default:"-" }}</td>
+                <td>{{ item.training_type|default:"-" }}</td>
+                <td>{{ item.duration|default:"-" }}</td>
+                <td>{{ item.location|default:"-" }}</td>
+                <td>{{ item.expected_income|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        
+        <div class="image-grid">
+            {% for img in image_attachments %}
+                {% if "Training Certificate" in img.title %}
+                    <div class="image-card">
+                        <img src="{{ img.url }}" alt="{{ img.title }}">
+                        <div class="image-title">{{ img.title }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <h3>Support Section</h3>
+    <table>
+        <tr>
+            <th>Support Required?</th><td colspan="3">{{ enterprise.is_support_required|default:"No" }}</td>
+        </tr>
+    </table>
+    {% if enterprise.is_support_required and supports %}
+        <h4>Support Details</h4>
+        <table>
+            <tr>
+                <th>Category</th><th>Sub Category</th><th>Description</th><th>Other</th>
+            </tr>
+            {% for item in supports %}
+            <tr>
+                <td>{{ item.support_category|default:"-" }}</td>
+                <td>{{ item.support_sub_category|default:"-" }}</td>
+                <td>{{ item.support_description|default:"-" }}</td>
+                <td>{{ item.other_support|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <h3>Declaration Section</h3>
+    <table>
+        <tr>
+            <th>Confirmed?</th><td>{{ enterprise.declaration_confirmed|yesno:"Yes,No" }}</td>
+            <th>Date</th><td>{{ enterprise.declaration_date|default:"-" }}</td>
+        </tr>
+    </table>
+    
+    {% if applicant_signature_url %}
+        <div class="signature-box">
+            <img src="{{ applicant_signature_url }}" alt="Applicant Signature"><br>
+            <strong>Applicant Signature</strong>
+        </div>
+    {% endif %}
+
+    {% else %}
+    <h2>2. Enterprise Details</h2>
+    <p>No specific enterprise details recorded for this beneficiary.</p>
+    {% endif %}
+
+</body>
+</html>

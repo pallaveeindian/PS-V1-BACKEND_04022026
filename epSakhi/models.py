@@ -707,6 +707,27 @@ class NoEnterpriseWage(SoftDeleteMixin):
 
 # MOU survey integration
 
+# District Wise MOU target for forms filling
+class DistMOUTarget(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    district = models.ForeignKey(
+        MasterDistrict,
+        on_delete=models.PROTECT,
+        db_column='district_id',
+        db_constraint=False,
+        null=True,
+        blank=True,
+    )
+
+    mou_target = models.IntegerField(null=True, blank=True)
+    achieved_mou = models.IntegerField(null=True, blank=True)
+
+    financial_year = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_distMOUTarget'
+
 # EXISTING METDATA USAGE
 class MOUEnterprise(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
@@ -736,6 +757,14 @@ class MOUEnterprise(SoftDeleteMixin):
         null=True,
         blank=True,
     )
+    village = models.ForeignKey(
+        MasterVillage,
+        on_delete=models.PROTECT,
+        db_column='village_id',
+        db_constraint=False,
+        null=True,
+        blank=True,
+    )
 
     # LokOS carry-overs
     lokos_shg_code = models.CharField(max_length=100, null=True, blank=True, db_column='lokos_shg_code')
@@ -744,8 +773,12 @@ class MOUEnterprise(SoftDeleteMixin):
     lokos_clf_code = models.CharField(max_length=100, null=True, blank=True, db_column='lokos_clf_code')
     lokos_clf_name = models.CharField(max_length=255, null=True, blank=True, db_column='lokos_clf_name')
 
+    lokos_vo_code = models.CharField(max_length=100, null=True, blank=True, db_column='lokos_vo_code')
+    lokos_vo_name = models.CharField(max_length=255, null=True, blank=True, db_column='lokos_vo_name')    
+
     # Enterprise Details
     enterprise_name = models.CharField(max_length=255, null=True, blank=True)
+    enterprise_type = models.TextField(null=True, blank=True)
     entrepreneur_name = models.CharField(max_length=255, null=True, blank=True)
     entrepreneur_contact = models.CharField(max_length=20, null=True, blank=True)
     entrepeneur_picture = models.ImageField(upload_to='epSakhi/media/mou/entrepreneurs/%Y/%m/', null=True, blank=True)

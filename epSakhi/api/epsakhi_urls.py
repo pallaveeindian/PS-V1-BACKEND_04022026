@@ -8,6 +8,7 @@ from .newep_oneshot import *
 
 from .views import *
 from .analytics_views import *
+from .epsakhi_pdf import *
 
 from .MOU.views import *
 
@@ -149,12 +150,24 @@ custom_urls = [
         name="crp-list",
     ),
 
-    # MOU Listing API
+    # epSakhi PDF Generation API
+    path('export-pdf/<int:pk>/', BeneficiaryPDFExportView.as_view(), name='beneficiary-pdf'),
+
+   # MOU Listing API
     path(
         "mou-enterprise/list/",
         MOUEnterpriseListingAPI.as_view(),
         name="mou-enterprise-list"
     ),
+
+    # MOU Detiail API with nested serializers for all related MOU data
+    path('mou-form/detail/<int:id>/', MOUEnterpriseDetailView.as_view(), name='mou-form-detail'),
+
+    # MOU Delete API
+    path('mou-form/delete/<int:id>/', MOUEnterpriseDeleteView.as_view(), name='mou-form-delete'),
+
+    # MOU Targets Listing API
+    path('mou-targets/', MOUTargetListView.as_view(), name='mou-targets-list'), 
 ]
 
 # Analytics

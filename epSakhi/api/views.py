@@ -18,6 +18,7 @@ from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
+from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status, filters, generics
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -563,13 +564,56 @@ class CRPPanchayatMappingViewSet(viewsets.ViewSet):
 # BeneficiaryRecorded ViewSet
 # -------------------------------------------------------------------
 
+class SurgicalCustomPagination(PageNumberPagination):
+    page_query_param = 'page'
+    page_size_query_param = 'limit'  # Maps frontend 'limit' to DRF page size
+    max_page_size = 100
+
 class BeneficiaryRecordedViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
+    # Set the custom pagination class here
+    pagination_class = SurgicalCustomPagination
 
     serializer_class = BeneficiaryRecordedSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['applicant_name', 'lokos_member_code', 'mobile', 'email', 'enterprise_id']
     ordering_fields = ['age', 'created_at']
+
+    def list(self, request, *args, **kwargs):
+        # Default to returning ALL unless '?paginate=true' is passed
+        if request.GET.get('paginate') != 'true':
+            self.pagination_class = None
+
+        qs = self.filter_queryset(self.get_queryset())
+
+        # Handle 'group_by'
+        group_by = request.GET.get('group_by')
+        if group_by:
+            keys = [k.strip() for k in group_by.split(',') if k.strip()]
+            vals = qs.values(*keys).order_by().annotate(count=models.Count('id'))
+            page = self.paginate_queryset(vals)
+            if page is not None:
+                return self.get_paginated_response(list(page))
+            return Response(list(vals))
+
+        # Handle 'fields'
+        fields = request.GET.get('fields')
+        if fields:
+            cols = [c.strip() for c in fields.split(',') if c.strip()]
+            qs = qs.values(*cols)
+            page = self.paginate_queryset(qs)
+            if page is not None:
+                return self.get_paginated_response(list(page))
+            return Response(list(qs))
+
+        # Fallback to standard serialized response (Paginated or ALL)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
     def get_queryset(self):
         qs = (
@@ -603,7 +647,6 @@ class BeneficiaryRecordedViewSet(viewsets.ModelViewSet, BaseProjectionMixin):
         if params.get('pld_status'):
             qs = qs.filter(pld_status=params['pld_status'])
         return qs
-
 
 # -------------------------------------------------------------------
 # Enterprise main viewsets
