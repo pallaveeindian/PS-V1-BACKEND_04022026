@@ -504,6 +504,7 @@ class TRPUserScopeSerializer(SoftDeleteModelSerializer):
 class TrainingRequestSerializer(SoftDeleteModelSerializer):
     district_name_en = serializers.SerializerMethodField()
     block_name_en = serializers.SerializerMethodField()
+    participant_count = serializers.SerializerMethodField()    
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
@@ -520,6 +521,16 @@ class TrainingRequestSerializer(SoftDeleteModelSerializer):
             return obj.block.block_name_en if obj.block else None
         except:
             return None
+
+    def get_participant_count(self, obj):
+        try:
+            if obj.training_type == 'BENEFICIARY':
+                return obj.beneficiary_registrations.filter(is_active=True).count()
+            elif obj.training_type == 'TRAINER':
+                return obj.trainer_registrations.filter(is_active=True).count()
+        except:
+            pass
+        return 0            
 
 
 class TRBeneficiarySerializer(SoftDeleteModelSerializer):
@@ -1262,6 +1273,7 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
     partner_name = serializers.CharField(
         source='partner.name', read_only=True
     )
+    participant_count = serializers.SerializerMethodField()
 
     class Meta:
         model = tms_models.TrainingRequest
@@ -1281,7 +1293,19 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'block',
             'block_name',
             'created_at',
+            'participant_count',
         ]
+
+    # Serializer for TrainingRequest list endpoint with filters and participant count
+    def get_participant_count(self, obj):
+        try:
+            if obj.training_type == 'BENEFICIARY':
+                return obj.beneficiary_registrations.filter(deleted_at__isnull=True).count()
+            elif obj.training_type == 'TRAINER':
+                return obj.trainer_registrations.filter(deleted_at__isnull=True).count()
+        except:
+            pass
+        return 0
 
 
 # ============================================================

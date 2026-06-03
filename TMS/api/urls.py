@@ -5,6 +5,10 @@ from rest_framework.routers import DefaultRouter
 
 from TMS.api import tms_views, dashboard_views, report_views
 
+# Custom TR deletion endpoint for DMMU with strict access control and cascade handling
+from TMS.api.tr_delete import TrainingRequestCustomDeleteView
+from TMS.api.user_mgmnt import *
+
 router = DefaultRouter()
 
 # Masters
@@ -263,4 +267,20 @@ urlpatterns = [
 
     # SMMU TP Targets bulk upload
     path('tp-targets/bulk-upload/', tms_views.BulkAssignTargetsAPIView.as_view(), name='bulk-upload-targets'),   
+
+    # Custom TR deletion endpoint for DMMU with strict access control and cascade handling
+    path(
+        'training-request/delete/<int:request_id>/', 
+        TrainingRequestCustomDeleteView.as_view(), 
+        name='custom-oneshot-training-delete'
+    ),
+
+    # User management APIs
+    path(
+        "manage-user/",
+        ManageUserView.as_view(),
+        name="manage-user"
+    ),    
+    path('dmmu-users/', DMMUDistrictListingView.as_view(), name='dmmu-district-users'),
+    path('bmmu-users/', BMMUUserListingView.as_view(), name='bmmu-users'),
 ]

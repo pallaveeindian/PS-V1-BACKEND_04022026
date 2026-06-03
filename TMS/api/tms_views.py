@@ -674,7 +674,6 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             "partner", "training_plan", "district"
         )
 
-        # --- SURGICAL ADDITION: Handle ach=1 and year param ---
         if self.request.query_params.get('ach') == '1':
             # Prefetch achievements to avoid N+1 database query crashing
             qs = qs.prefetch_related('achievements', 'achievements__partner', 'achievements__training_plan', 'achievements__district')
@@ -683,7 +682,22 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             year = self.request.query_params.get('year')
             if year:
                 qs = qs.filter(financial_year=year)
-        # ------------------------------------------------------
+
+        # ==========================================================
+        # SURGICAL FIX: SERVER-SIDE FILTERING FOR PAGINATION
+        # ==========================================================
+        
+        # 1. Filter by comma-separated themes (e.g. "?themes=FNHW,Health")
+        themes_param = self.request.query_params.get('themes')
+        if themes_param:
+            theme_list = [t.strip() for t in themes_param.split(',') if t.strip()]
+            if theme_list:
+                qs = qs.filter(theme__in=theme_list)
+                
+        # 2. Search by partner name 
+        partner_name = self.request.query_params.get('partner_name')
+        if partner_name:
+            qs = qs.filter(partner__name__icontains=partner_name)
 
         return qs
 
