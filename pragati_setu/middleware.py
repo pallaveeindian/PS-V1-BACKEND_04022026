@@ -203,6 +203,13 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
                     status=401,
                 )
 
+            # Prerna Canteen APIs (if restricted later)
+            if path.startswith("/api/v1/prerna/") and role_id not in COMMON_ROLE_IDS:
+                return JsonResponse(
+                    {"detail": "Unauthorized for Prerna Canteen"},
+                    status=401,
+                )
+
         request._audit_context = ("APP", master_user)
         return None
 

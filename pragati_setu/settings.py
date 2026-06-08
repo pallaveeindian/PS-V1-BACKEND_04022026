@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'epSakhi',
     'TMS',
     'LDMS',
+    'canteen',
     
     # audit
     'api_audit',

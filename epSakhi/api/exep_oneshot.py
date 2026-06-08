@@ -1,419 +1,520 @@
+"""
+ExistingEnterprise ZIP-based submission API
+============================================
+Frontend sends ONE multipart field: `zip_file`
+
+The ZIP must contain:
+  • payload.json              — full structured data (see PAYLOAD_SCHEMA below)
+  • <filename>.<ext>          — every image / PDF referenced by name in payload.json
+
+Flow:
+  1.  Receive ZIP
+  2.  Extract every entry → Django cache  (keyed per-job, TTL = 10 min)
+  3.  Parse payload.json from cache
+  4.  Run one atomic DB transaction (all inserts / file-saves happen here)
+  5.  Flush all cache keys for this job
+  6.  Return result (or roll-back details on failure)
+
+PAYLOAD_SCHEMA (payload.json)
+──────────────────────────────
+{
+  "beneficiary":      { ...BeneficiaryRecorded fields... },
+  "enterprise":       { ...ExistingEnterprise fields... },
+  "licenses":         [ { "license_category":"...", "license_name":"...",
+                          "license_no":"...", "file_key":"license_0.pdf",
+                          "created_by": 1 } ],
+  "loans":            [ { "bank_name":"...", ... } ],
+  "subsidies":        [ { "subsidy_type":"...", ... } ],
+  "shops": [
+    {
+      "shop_category": "...", ...all EnterpriseShop fields...,
+      "media": [
+        { "front_key":"shop1_front.jpg",
+          "inside_key":"shop1_inside.jpg",
+          "others_key": null }
+      ],
+      "created_by": 1
+    }
+  ],
+  "products": [
+    {
+      "main_product_name": "...", ...all EnterpriseProduct fields...,
+      "media": [
+        { "open_box_key":"prod1_open.jpg",
+          "close_box_key":"prod1_close.jpg",
+          "others_key": null }
+      ],
+      "created_by": 1
+    }
+  ],
+  "enterprise_media": {
+    "entrepreneur_key":"entrepreneur.jpg",
+    "enterprise_key":"enterprise.jpg",
+    "others_key": null,
+    "created_by": 1
+  },
+  "categories":       [ { "parent_category":"...", "sub_category":"..." } ],
+  "supports":         [ { "category":"...", "sub_category":"...",
+                          "description":"...", "other_support":"..." } ],
+  "mandatory_funds":  [ { "fund_type":"...", "have_received_part": true,
+                          "amount_received":"...", "amount_repaid":"...",
+                          "repayment_status":"PAID" } ],
+  "training_requests":[ { "form_type":"rec",          // "rec" | "req"
+                          "sector_type":"...", "sector":"...",
+                          "department":"...", "training_type":"...",
+                          "duration":"...", "location":"...",
+                          "expected_income":"...",
+                          "certificate_file_keys":["cert_0.pdf"],
+                          "created_by": 1 } ]
+}
+"""
+
 import json
 import uuid
+import zipfile
+import os
+
 from django.db import transaction
+from django.core.cache import cache
+from django.core.files.base import ContentFile
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 
-from epSakhi.models import *
+from epSakhi.models import (
+    BeneficiaryRecorded,
+    ExistingEnterprise,
+    EnterpriseLicenses,
+    EnterpriseLoanDetail,
+    EnterpriseSubsidyDetail,
+    EnterpriseShop,
+    ShopMedia,
+    EnterpriseProduct,
+    ProductMedia,
+    EnterpriseMedia,
+    EnterpriseTypeCategory,
+    EnterpriseSupport,
+    EnterpriseMandatoryFund,
+    EnterpriseTrainingReq,
+    TrainingCertificates,
+)
 
-def generate_custom_th_urid():
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+CACHE_TTL = 600          # seconds (10 min) — well beyond any realistic request time
+CACHE_NS  = "epsakhi"    # namespace prefix so keys never collide with other apps
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def generate_custom_th_urid() -> str:
     return f"TH_{uuid.uuid4().hex[:12].upper()}"
 
+
+def _cache_key_file(job_id: str, filename: str) -> str:
+    return f"{CACHE_NS}_{job_id}_file_{filename}"
+
+
+def _cache_key_payload(job_id: str) -> str:
+    return f"{CACHE_NS}_{job_id}_payload"
+
+
+def _flush_job_cache(job_id: str, file_names: list) -> None:
+    """Best-effort deletion of every cache entry written for this job."""
+    try:
+        cache.delete(_cache_key_payload(job_id))
+        for name in file_names:
+            cache.delete(_cache_key_file(job_id, name))
+    except Exception:
+        pass   # cache flush failures must never mask DB errors
+
+
+# ── Main View ─────────────────────────────────────────────────────────────────
+
 class ExistingEnterpriseCreateAPIView(APIView):
+    """
+    POST /api/existing-enterprise/create/
+    Accepts a single multipart field `zip_file`.
+    """
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request, *args, **kwargs):
-        from django.core.files.storage import default_storage
-        from datetime import datetime
 
-        def transpose_media_data(media_data, keys, folder):
-            """
-            Organizes flat files into rows. 
-            Example: open_box_key='p1,p2', close_box_key='p3' -> 
-            Rows: [{'open': 'p1', 'close': 'p3'}, {'open': 'p2', 'close': None}]
-            """
-            rows = []
-            # Gather all files per category
-            data_map = {}
-            for field in keys:
-                key_str = media_data.get(field, "")
-                paths = []
-                for k in str(key_str).split(','):
-                    k = k.strip()
-                    file_obj = request.FILES.get(k)
-                    if file_obj:
-                        now = datetime.now()
-                        save_path = f"{folder}/{now.year}/{now.strftime('%m')}/{file_obj.name}"
-                        paths.append(default_storage.save(save_path, file_obj))
-                data_map[field] = paths
+        # ── 0. Basic validation ───────────────────────────────────────────────
+        zip_upload = request.FILES.get('zip_file')
+        if not zip_upload:
+            return Response(
+                {"error": "Missing 'zip_file' field in request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            # Determine max rows needed
-            max_len = max([len(p) for p in data_map.values()] or [0])
-            for i in range(max_len):
-                row = {}
-                for field in keys:
-                    row[field] = data_map[field][i] if i < len(data_map[field]) else None
-                rows.append(row)
-            return rows
+        zip_upload.seek(0)
+        if not zipfile.is_zipfile(zip_upload):
+            return Response(
+                {"error": "Uploaded file is not a valid ZIP archive."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # 1. Parse the JSON payload
-        raw_payload = request.data.get('data_payload')
-        if not raw_payload:
-            return Response({"error": "Missing 'data_payload' JSON string."}, status=status.HTTP_400_BAD_REQUEST)
-        
+        # ── 1. Read ZIP in memory ─────────────────────────────────────────────
+        payload = None
+        extracted_paths = {}
+
         try:
-            payload = json.loads(raw_payload)
-        except json.JSONDecodeError:
-            return Response({"error": "Invalid JSON in 'data_payload'."}, status=status.HTTP_400_BAD_REQUEST)
-
-        files = request.FILES
-
-        # 2. Start ATOMIC Transaction
-        try:
-            with transaction.atomic():
+            zip_upload.seek(0)
+            with zipfile.ZipFile(zip_upload, 'r') as zf: # 🟢 Open Zip
                 
-                # --- A. CREATE BENEFICIARY RECORDED ---
-                benef_data = payload.get('beneficiary', {})
-                beneficiary = BeneficiaryRecorded.objects.create(
-                    lokos_member_code=benef_data.get('lokos_member_code'),
-                    applicant_name=benef_data.get('applicant_name'),
-                    age=benef_data.get('age'),
-                    gender=benef_data.get('gender'),
-                    marital_status=benef_data.get('marital_status'),
-                    father_husband_name=benef_data.get('father_husband_name'),
-                    category=benef_data.get('category'),
-                    pld_status=benef_data.get('pld_status'),
+                # First pass: Find payload and map file paths
+                for entry in zf.namelist():
+                    if entry.endswith('/'):
+                        continue
+                    basename = os.path.basename(entry)
+                    if not basename:
+                        continue
 
-                    enterprise_type='exep',
-                    special_category=benef_data.get('special_category'),
+                    if basename == 'payload.json':
+                        try:
+                            payload = json.loads(zf.read(entry).decode('utf-8'))
+                        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                            return Response(
+                                {"error": f"payload.json is invalid: {exc}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    else:
+                        extracted_paths[basename] = entry
 
-                    education=benef_data.get('education'),
-                    address=benef_data.get('address'),
-
-                    district_id_id=benef_data.get('district_id'),
-                    block_id_id=benef_data.get('block_id'),
-                    panchayat_id_id=benef_data.get('panchayat_id'),
-                    village_id_id=benef_data.get('village_id'),
-
-                    mobile=benef_data.get('mobile'),
-                    email=benef_data.get('email'),
-                    lokos_shg_code=benef_data.get('lokos_shg_code'),
-                    created_by_id=benef_data.get('created_by'), # CHANGED
-                )
-
-                # --- B. CREATE EXISTING ENTERPRISE ---
-                ep_data = payload.get('enterprise', {})
-                enterprise = ExistingEnterprise(
-                    recorded_benef_id=beneficiary,
-
-                    enterprise_name=ep_data.get('enterprise_name'),
-                    ownership_type=ep_data.get('ownership_type'),
-                    owner_cadre=ep_data.get('owner_cadre'),
-                    owner_designation=ep_data.get('owner_designation'),
-                    owner_special_category=ep_data.get('owner_special_category'),
-
-                    year_of_establishment=ep_data.get('year_of_establishment'),
-                    total_emp=ep_data.get('total_emp'),
-                    number_of_shg_emp=ep_data.get('number_of_shg_emp'),
-                    workplace_type=ep_data.get('workplace_type'),
-
-                    electricity_available=ep_data.get('electricity_available'),
-                    water_available=ep_data.get('water_available'),
-                    transportation_availability=ep_data.get('transportation_availability'),
-
-                    can_send_to_bijnor=ep_data.get('can_send_to_bijnor', False),
-                    need_transport_help=ep_data.get('need_transport_help', False),
-
-                    have_shop_based_prod=ep_data.get('have_shop_based_prod', False),
-
-                    monthly_income_estimate=ep_data.get('monthly_income_estimate'),
-                    annual_turnover=ep_data.get('annual_turnover'),
-                    gross_profit=ep_data.get('gross_profit'),
-                    working_capital_monthly=ep_data.get('working_capital_monthly'),
-                    initial_investment=ep_data.get('initial_investment'),
-                    source_of_investment=ep_data.get('source_of_investment'),
-
-                    has_taken_loan=ep_data.get('has_taken_loan', False),
-                    has_receieved_subsidy=ep_data.get('has_received_subsidy', False),
-                    has_shg_receieved_man_fund=ep_data.get('has_shg_received_man_fund', False),
-
-                    is_training_received=ep_data.get('is_training_received', False),
-                    is_training_required=ep_data.get('is_training_required', False),
-                    expansion_plan=ep_data.get('expansion_plan', False),
-                    info_abt_gov_scheme=ep_data.get('info_abt_gov_scheme', False),
-                    nearest_skill_centre=ep_data.get('nearest_skill_centre'),
-                    skill_centre_loc=ep_data.get('skill_centre_loc'),
-                    nearest_industry=ep_data.get('nearest_industry'),
-                    industry_loc=ep_data.get('industry_loc'),
-
-                    is_support_required=ep_data.get('is_support_required', False),
-
-                    declaration_confirmed=ep_data.get('declaration_confirmed', False),
-                    declaration_date=ep_data.get('declaration_date'),
-                    verifier_name=ep_data.get('verifier_name'),
-                    created_by_id=ep_data.get('created_by'), # CHANGED
-                )
-                
-                # Assign a TH_urid if your model relies on generating it manually
-                th_urid = generate_custom_th_urid()
-                if hasattr(enterprise, 'TH_urid'):
-                    enterprise.TH_urid = th_urid
-                
-                enterprise.save()
-
-                # Get the final TH_urid to use for shared tables
-                final_th_urid = getattr(enterprise, 'TH_urid', str(enterprise.id))
-
-                # --- C. LINK BENEFICIARY BACK TO ENTERPRISE ---
-                beneficiary.enterprise_id = final_th_urid
-                beneficiary.save(update_fields=['enterprise_id'])
-
-                # --- D. LICENSES ---
-                for idx, lic_data in enumerate(payload.get('licenses', [])):
-                    file_key = lic_data.get('file_key') # Frontend sends the key name, e.g., 'license_0'
-                    EnterpriseLicenses.objects.create(
-                        enterprise_id=enterprise,
-                        license_category=lic_data.get('license_category'),
-                        license_name=lic_data.get('license_name'),
-                        license_no=lic_data.get('license_no'),
-                        license_file=files.get(file_key) if file_key else None,
-                        created_by_id=lic_data.get('created_by') # CHANGED (fixed files.get bug too)
+                if payload is None:
+                    return Response(
+                        {"error": "ZIP must contain a 'payload.json' file."},
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                # --- E. LOANS & SUBSIDIES ---
-                for loan in payload.get('loans', []):
-                    EnterpriseLoanDetail.objects.create(
-                        enterprise_id=enterprise,
-                        form_type='exep',
-                        department=loan.get('department'),
-                        institution_name=loan.get('institution_name'),
-                        bank_name=loan.get('bank_name'),
-                        bank_branch=loan.get('bank_branch'),
-                        loan_amount=loan.get('loan_amount'),
-                        repaid_amount=loan.get('repaid_amount'),
-                        date_taken=loan.get('date_taken'),
-                        repayment_status=loan.get('repayment_status'),
-                        created_by_id=loan.get('created_by'), # CHANGED
+                # ── 2. On-Demand File Accessor (NOW INSIDE THE WITH BLOCK) ────
+                def cf(filename):
+                    if not filename or filename not in extracted_paths:
+                        return None
+                    raw_bytes = zf.read(extracted_paths[filename]) # Safely reads from open zip
+                    return ContentFile(raw_bytes, name=filename)
+
+                # ── 3. Atomic DB transaction (NOW INSIDE THE WITH BLOCK) ──────
+                with transaction.atomic():
+
+                    # ── A. BeneficiaryRecorded ────────────────────────────────────
+                    bd = payload.get('beneficiary', {})
+                    beneficiary = BeneficiaryRecorded.objects.create(
+                        lokos_member_code   = bd.get('lokos_member_code'),
+                        applicant_name      = bd.get('applicant_name'),
+                        age                 = bd.get('age'),
+                        gender              = bd.get('gender'),
+                        marital_status      = bd.get('marital_status'),
+                        father_husband_name = bd.get('father_husband_name'),
+                        category            = bd.get('category'),
+                        pld_status          = bd.get('pld_status'),
+                        enterprise_type     = 'exep',
+                        special_category    = bd.get('special_category'),
+                        education           = bd.get('education'),
+                        address             = bd.get('address'),
+                        district_id_id      = bd.get('district_id'),
+                        block_id_id         = bd.get('block_id'),
+                        panchayat_id_id     = bd.get('panchayat_id'),
+                        village_id_id       = bd.get('village_id'),
+                        mobile              = bd.get('mobile'),
+                        email               = bd.get('email'),
+                        lokos_shg_code      = bd.get('lokos_shg_code'),
+                        created_by_id       = bd.get('created_by'),
                     )
 
-                for sub in payload.get('subsidies', []):
-                    EnterpriseSubsidyDetail.objects.create(
-                        enterprise_id=enterprise,
-                        subsidy_type=sub.get('subsidy_type'),
-                        subsidy_name=sub.get('subsidy_name'),
-                        subsidy_detail=sub.get('subsidy_detail'),
-                        created_by_id=sub.get('created_by'), # CHANGED
+                    # ── B. ExistingEnterprise ─────────────────────────────────────
+                    ed = payload.get('enterprise', {})
+                    enterprise = ExistingEnterprise(
+                        recorded_benef_id           = beneficiary,
+                        enterprise_name             = ed.get('enterprise_name'),
+                        ownership_type              = ed.get('ownership_type'),
+                        owner_cadre                 = ed.get('owner_cadre'),
+                        owner_designation           = ed.get('owner_designation'),
+                        owner_special_category      = ed.get('owner_special_category'),
+                        year_of_establishment       = ed.get('year_of_establishment'),
+                        total_emp                   = ed.get('total_emp'),
+                        number_of_shg_emp           = ed.get('number_of_shg_emp'),
+                        workplace_type              = ed.get('workplace_type'),
+                        electricity_available       = ed.get('electricity_available'),
+                        water_available             = ed.get('water_available'),
+                        transportation_availability = ed.get('transportation_availability'),
+                        can_send_to_bijnor          = ed.get('can_send_to_bijnor', False),
+                        need_transport_help         = ed.get('need_transport_help', False),
+                        have_shop_based_prod        = ed.get('have_shop_based_prod', False),
+                        monthly_income_estimate     = ed.get('monthly_income_estimate'),
+                        annual_turnover             = ed.get('annual_turnover'),
+                        gross_profit                = ed.get('gross_profit'),
+                        working_capital_monthly     = ed.get('working_capital_monthly'),
+                        initial_investment          = ed.get('initial_investment'),
+                        source_of_investment        = ed.get('source_of_investment'),
+                        has_taken_loan              = ed.get('has_taken_loan', False),
+                        has_receieved_subsidy       = ed.get('has_received_subsidy', False),
+                        has_shg_receieved_man_fund  = ed.get('has_shg_received_man_fund', False),
+                        is_training_received        = ed.get('is_training_received', False),
+                        is_training_required        = ed.get('is_training_required', False),
+                        expansion_plan              = ed.get('expansion_plan'),
+                        info_abt_gov_scheme         = ed.get('info_abt_gov_scheme'),
+                        nearest_skill_centre        = ed.get('nearest_skill_centre'),
+                        skill_centre_loc            = ed.get('skill_centre_loc'),
+                        nearest_industry            = ed.get('nearest_industry'),
+                        industry_loc                = ed.get('industry_loc'),
+                        is_support_required         = ed.get('is_support_required'),
+                        declaration_confirmed       = ed.get('declaration_confirmed', False),
+                        declaration_date            = ed.get('declaration_date'),
+                        verifier_name               = ed.get('verifier_name'),
+                        created_by_id               = ed.get('created_by'),
                     )
+                    th_urid = generate_custom_th_urid()
+                    if hasattr(enterprise, 'TH_urid'):
+                        enterprise.TH_urid = th_urid
+                    enterprise.save()
 
-                # --- F. SHOP & SHOP MEDIA ---
-                shop_data_list = payload.get('shops', [])
-                for shop_data in shop_data_list:
-                    shop = EnterpriseShop.objects.create(
-                        enterprise_id=enterprise,
-                        shop_category=shop_data.get('shop_category'),
-                        shop_type=shop_data.get('shop_type'),
-                        source_of_inventory=shop_data.get('source_of_inventory'),
+                    final_th_urid = getattr(enterprise, 'TH_urid', str(enterprise.id))
 
-                        target_customers=shop_data.get('target_customers'),
-                        sales_area=shop_data.get('sales_area'),
-                        marketing_strategy=shop_data.get('marketing_strategy'),
-                        marketing_channels=shop_data.get('marketing_channels'),
-                        marketing_challenges=shop_data.get('marketing_challenges'),
-                        market_linkage=shop_data.get('market_linkage', False),
-                        
-                        accept_digital_payment=shop_data.get('accept_digital_payment', False),
+                    # Link beneficiary back to enterprise
+                    beneficiary.enterprise_id = final_th_urid
+                    beneficiary.save(update_fields=['enterprise_id'])
 
-                        avg_monthly_sales=shop_data.get('avg_monthly_sales'),
-                        avg_annual_sales=shop_data.get('avg_annual_sales'),
-                        created_by_id=shop_data.get('created_by'), # CHANGED
-                    )
-                    
-                    # Shop Media
-                    media_data = shop_data.get('media', {})
-                    media_rows = transpose_media_data(
-                        media_data, ['front_key', 'inside_key', 'others_key'], 'epSakhi/media/shops'
-                    )
-                    for m in media_rows:
-                        ShopMedia.objects.create(
-                            product_id=shop,
-                            front_photo=m.get('front_key'),
-                            inside_photo=m.get('inside_key'),
-                            others=m.get('others_key'),
-                            created_by_id=shop_data.get('created_by'),
+                    # ── C. Licenses ───────────────────────────────────────────────
+                    for lic in payload.get('licenses', []):
+                        EnterpriseLicenses.objects.create(
+                            enterprise_id    = enterprise,
+                            license_category = lic.get('license_category'),
+                            license_name     = lic.get('license_name'),
+                            license_no       = lic.get('license_no'),
+                            license_file     = cf(lic.get('file_key')),
+                            created_by_id    = lic.get('created_by'),
                         )
 
-                # --- G. PRODUCTS & PRODUCT MEDIA ---
-                for prod_data in payload.get('products', []):
-                    product = EnterpriseProduct.objects.create(
-                        enterprise_id=enterprise,
-                        main_product_name=prod_data.get('main_product_name'),
-                        activity_or_product_type=prod_data.get('activity_or_product_type'),
-                        product_features=prod_data.get('product_features'),
-                        production_capacity=prod_data.get('production_capacity'),
-                        raw_material=prod_data.get('raw_material'),
-                        raw_material_source=prod_data.get('raw_material_source'),
-                        machinery_equipment=prod_data.get('machinery_equipment'),
-                        source_machinery=prod_data.get('source_machinery'),
-                        product_mrp=prod_data.get('product_mrp'),
-
-                        sales_area=prod_data.get('sales_area'),
-                        target_customers=prod_data.get('target_customers'),
-                        packaging_branding_status=prod_data.get('packaging_branding_status', False),
-
-                        marketing_strategy=prod_data.get('marketing_strategy'),
-                        marketing_channels=prod_data.get('marketing_channels'),
-                        marketing_challenges=prod_data.get('marketing_challenges'),
-                        market_linkage=prod_data.get('market_linkage', False),
-
-                        accept_digital_payment=prod_data.get('accept_digital_payment', False),
-
-                        avg_monthly_sales=prod_data.get('avg_monthly_sales'),
-                        avg_annual_sales=prod_data.get('avg_annual_sales'),
-                        created_by_id=prod_data.get('created_by'), # CHANGED
-                    )
-                    
-                    media_data = prod_data.get('media', {})
-                    media_rows = transpose_media_data(
-                        media_data, ['open_box_key', 'close_box_key', 'others_key'], 'epSakhi/media/products'
-                    )
-                    for m in media_rows:
-                        ProductMedia.objects.create(
-                            product_id=product,
-                            open_box_photo=m.get('open_box_key'),
-                            close_box_photo=m.get('close_box_key'),
-                            others=m.get('others_key'),
-                            created_by_id=prod_data.get('created_by'),
+                    # ── D. Loans ──────────────────────────────────────────────────
+                    for loan in payload.get('loans', []):
+                        EnterpriseLoanDetail.objects.create(
+                            enterprise_id    = enterprise,
+                            form_type        = 'exep',
+                            department       = loan.get('department'),
+                            institution_name = loan.get('institution_name'),
+                            bank_name        = loan.get('bank_name'),
+                            bank_branch      = loan.get('bank_branch'),
+                            loan_amount      = loan.get('loan_amount'),
+                            repaid_amount    = loan.get('repaid_amount'),
+                            date_taken       = loan.get('date_taken'),
+                            repayment_status = loan.get('repayment_status'),
+                            created_by_id    = loan.get('created_by'),
                         )
 
-                # --- H. ENTERPRISE MEDIA (Standalone) ---
-                ep_media = payload.get('enterprise_media', {})
-                if ep_media:
-                    media_rows = transpose_media_data(
-                        ep_media, ['entrepreneur_key', 'enterprise_key', 'others_key'], 'epSakhi/media/enterprise'
-                    )
-                    for m in media_rows:
+                    # ── E. Subsidies ──────────────────────────────────────────────
+                    for sub in payload.get('subsidies', []):
+                        EnterpriseSubsidyDetail.objects.create(
+                            enterprise_id  = enterprise,
+                            subsidy_type   = sub.get('subsidy_type'),
+                            subsidy_name   = sub.get('subsidy_name'),
+                            subsidy_detail = sub.get('subsidy_detail'),
+                            created_by_id  = sub.get('created_by'),
+                        )
+
+                    # ── F. Shops + Shop Media ─────────────────────────────────────
+                    # payload.shops[n].media is a LIST so multiple ShopMedia rows
+                    # are supported: [{ front_key, inside_key, others_key }, ...]
+                    for shop_data in payload.get('shops', []):
+                        shop = EnterpriseShop.objects.create(
+                            enterprise_id          = enterprise,
+                            shop_category          = shop_data.get('shop_category'),
+                            shop_type              = shop_data.get('shop_type'),
+                            source_of_inventory    = shop_data.get('source_of_inventory'),
+                            target_customers       = shop_data.get('target_customers'),
+                            sales_area             = shop_data.get('sales_area'),
+                            marketing_strategy     = shop_data.get('marketing_strategy'),
+                            marketing_channels     = shop_data.get('marketing_channels'),
+                            marketing_challenges   = shop_data.get('marketing_challenges'),
+                            market_linkage         = shop_data.get('market_linkage', False),
+                            accept_digital_payment = shop_data.get('accept_digital_payment', False),
+                            avg_monthly_sales      = shop_data.get('avg_monthly_sales'),
+                            avg_annual_sales       = shop_data.get('avg_annual_sales'),
+                            created_by_id          = shop_data.get('created_by'),
+                        )
+                        for m in shop_data.get('media', []):
+                            ShopMedia.objects.create(
+                                product_id    = shop,
+                                front_photo   = cf(m.get('front_key')),
+                                inside_photo  = cf(m.get('inside_key')),
+                                others        = cf(m.get('others_key')),
+                                created_by_id = shop_data.get('created_by'),
+                            )
+
+                    # ── G. Products + Product Media ───────────────────────────────
+                    # Same pattern: payload.products[n].media is a LIST
+                    for prod in payload.get('products', []):
+                        product = EnterpriseProduct.objects.create(
+                            enterprise_id             = enterprise,
+                            main_product_name         = prod.get('main_product_name'),
+                            activity_or_product_type  = prod.get('activity_or_product_type'),
+                            product_features          = prod.get('product_features'),
+                            production_capacity       = prod.get('production_capacity'),
+                            raw_material              = prod.get('raw_material'),
+                            raw_material_source       = prod.get('raw_material_source'),
+                            machinery_equipment       = prod.get('machinery_equipment'),
+                            source_machinery          = prod.get('source_machinery'),
+                            product_mrp               = prod.get('product_mrp'),
+                            sales_area                = prod.get('sales_area'),
+                            target_customers          = prod.get('target_customers'),
+                            packaging_branding_status = prod.get('packaging_branding_status'),
+                            marketing_strategy        = prod.get('marketing_strategy'),
+                            marketing_channels        = prod.get('marketing_channels'),
+                            marketing_challenges      = prod.get('marketing_challenges'),
+                            market_linkage            = prod.get('market_linkage', False),
+                            accept_digital_payment    = prod.get('accept_digital_payment', False),
+                            avg_monthly_sales         = prod.get('avg_monthly_sales'),
+                            avg_annual_sales          = prod.get('avg_annual_sales'),
+                            created_by_id             = prod.get('created_by'),
+                        )
+                        for m in prod.get('media', []):
+                            ProductMedia.objects.create(
+                                product_id      = product,
+                                open_box_photo  = cf(m.get('open_box_key')),
+                                close_box_photo = cf(m.get('close_box_key')),
+                                others          = cf(m.get('others_key')),
+                                created_by_id   = prod.get('created_by'),
+                            )
+
+                    # ── H. Enterprise Media ───────────────────────────────────────
+                    ep_media = payload.get('enterprise_media', {})
+                    if ep_media:
                         EnterpriseMedia.objects.create(
-                            enterprise_id=enterprise,
-                            photo_entrepreneur=m.get('entrepreneur_key'),
-                            photo_enterprise=m.get('enterprise_key'),
-                            others=m.get('others_key'),
-                            created_by_id=ep_media.get('created_by'),
+                            enterprise_id      = enterprise,
+                            photo_entrepreneur = cf(ep_media.get('entrepreneur_key')),
+                            photo_enterprise   = cf(ep_media.get('enterprise_key')),
+                            others             = cf(ep_media.get('others_key')),
+                            created_by_id      = ep_media.get('created_by'),
                         )
 
-                # ==========================================
-                # SHARED TABLES (Linked via string TH_urid)
-                # ==========================================
+                    # ── I. Type Categories ────────────────────────────────────────
+                    for cat in payload.get('categories', []):
+                        EnterpriseTypeCategory.objects.create(
+                            enterprise_id   = final_th_urid,
+                            form_type       = 'exep',
+                            parent_category = cat.get('parent_category'),
+                            sub_category    = cat.get('sub_category'),
+                            created_by_id   = cat.get('created_by'),
+                        )
 
-                # --- I. ENTERPRISE TYPE CATEGORIES ---
-                for type_data in payload.get('categories', []):
-                    EnterpriseTypeCategory.objects.create(
-                        enterprise_id=final_th_urid,
-                        form_type='exep',
-                        parent_category=type_data.get('parent_category'),
-                        sub_category=type_data.get('sub_category'),
-                        created_by_id=type_data.get('created_by'), # CHANGED
-                    )
+                    # ── J. Support ────────────────────────────────────────────────
+                    for support in payload.get('supports', []):
+                        EnterpriseSupport.objects.create(
+                            enterprise_id        = final_th_urid,
+                            form_type            = 'exep',
+                            support_category     = support.get('category'),
+                            support_sub_category = support.get('sub_category'),
+                            support_description  = support.get('description'),
+                            other_support        = support.get('other_support'),
+                            created_by_id        = support.get('created_by'),
+                        )
 
-                # --- J. SUPPORT & MANDATORY FUNDS ---
-                for support in payload.get('supports', []):
-                    EnterpriseSupport.objects.create(
-                        enterprise_id=final_th_urid,
-                        form_type='exep',
-                        support_category=support.get('category'),
-                        support_sub_category=support.get('sub_category'),
-                        support_description=support.get('description'),
-                        other_support= support.get('other_support'),
-                        created_by_id=support.get('created_by'), # CHANGED
-                    )
+                    # ── K. Mandatory Funds ────────────────────────────────────────
+                    for fund in payload.get('mandatory_funds', []):
+                        EnterpriseMandatoryFund.objects.create(
+                            enterprise_id      = final_th_urid,
+                            form_type          = 'exep',
+                            fund_type          = fund.get('fund_type'),
+                            have_received_part = fund.get('have_received_part', False),
+                            amount_received    = fund.get('amount_received'),
+                            amount_repaid      = fund.get('amount_repaid'),
+                            repayment_status   = fund.get('repayment_status'),
+                            created_by_id      = fund.get('created_by'),
+                        )
 
-                for fund in payload.get('mandatory_funds', []):
-                    EnterpriseMandatoryFund.objects.create(
-                        enterprise_id=final_th_urid,
-                        form_type='exep',
-                        fund_type=fund.get('fund_type'),
-                        have_received_part=fund.get('have_received_part', False),
-                        amount_received=fund.get('amount_received'),
-                        amount_repaid=fund.get('amount_repaid'),
-                        repayment_status=fund.get('repayment_status'),
-                        created_by_id=fund.get('created_by'), # CHANGED
-                    )
+                    # ── L. Training + Certificates ────────────────────────────────
+                    for tr in payload.get('training_requests', []):
+                        training = EnterpriseTrainingReq.objects.create(
+                            enterprise_id   = final_th_urid,
+                            form_type       = tr.get('form_type'),
+                            sector_type     = tr.get('sector_type'),
+                            sector          = tr.get('sector'),
+                            department      = tr.get('department'),
+                            training_type   = tr.get('training_type'),
+                            duration        = tr.get('duration'),
+                            location        = tr.get('location'),
+                            expected_income = tr.get('expected_income'),
+                            created_by_id   = tr.get('created_by'),
+                        )
+                        if tr.get('form_type') == 'rec':
+                            for cert_key in tr.get('certificate_file_keys', []):
+                                cert_file = cf(cert_key)
+                                if cert_file:
+                                    TrainingCertificates.objects.create(
+                                        enterprise_id = final_th_urid,
+                                        training_id   = training,
+                                        certificates  = cert_file,
+                                        created_by_id = tr.get('created_by'),
+                                    )
 
-                # --- K. TRAINING REQUIRED / RECEIVED & CERTIFICATES ---
-                for tr_req in payload.get('training_requests', []):
-                    tr_form_type = tr_req.get('form_type') 
-                    
-                    training = EnterpriseTrainingReq.objects.create(
-                        enterprise_id=final_th_urid,
-                        form_type=tr_form_type,
-                        sector_type=tr_req.get('sector_type'),
-                        sector=tr_req.get('sector'),
-                        department=tr_req.get('department'),
-                        training_type=tr_req.get('training_type'),
-                        duration=tr_req.get('duration'),
-                        location=tr_req.get('location'),
-                        expected_income=tr_req.get('expected_income'),
-                        created_by_id=tr_req.get('created_by'), # CHANGED
-                    )
+                # Return success response from inside the zip context
+                return Response(
+                    {
+                        "message": "Existing Enterprise created successfully.",
+                        "enterprise_id": enterprise.id,
+                        "TH_urid": getattr(enterprise, 'TH_urid', enterprise.id),
+                        "recorded_benef_id": getattr(payload.get('beneficiary', {}), 'id', None),
+                    },
+                    status=status.HTTP_201_CREATED,
+                ) # 🟢 End of Zip lifecycle (closes cleanly here)
 
-                    # If received, handle certificates
-                    if tr_form_type == 'rec':
-                        cert_keys = tr_req.get('certificate_file_keys', [])
-                        for cert_key in cert_keys:
-                            if files.get(cert_key):
-                                TrainingCertificates.objects.create(
-                                    enterprise_id=final_th_urid,
-                                    training_id=training,
-                                    certificates=files.get(cert_key),
-                                    created_by_id=tr_req.get('created_by'), # CHANGED (fixed files.get bug too)
-                                )
+        except Exception as exc:
+            return Response(
+                {
+                    "error": "Transaction failed and was rolled back.",
+                    "details": str(exc),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            # If execution reaches here, the transaction is committed successfully.
-            return Response({
-                "message": "Existing Enterprise created successfully.",
-                "enterprise_id": enterprise.id,
-                "TH_urid": final_th_urid,
-                "recorded_benef_id": beneficiary.id
-            }, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
-            # The context manager automatically rolls back the DB here.
-            return Response({
-                "error": "Transaction failed and was rolled back.",
-                "details": str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
+# ── Delete view (unchanged logic, same as before) ─────────────────────────────
 
 class ExistingEnterpriseDeleteAPIView(APIView):
     """
-    Deletes an Existing Enterprise and manually cleans up the string-linked shared tables.
+    POST /api/existing-enterprise/delete/
+    Body: { "enterprise_id": <int> }
     """
     def post(self, request, *args, **kwargs):
         enterprise_id = request.data.get('enterprise_id')
-        
         if not enterprise_id:
-            return Response({"error": "enterprise_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "enterprise_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         enterprise = get_object_or_404(ExistingEnterprise, id=enterprise_id)
-        
-        # Extract the TH_urid before deleting so we can clean up shared tables
-        th_urid = getattr(enterprise, 'TH_urid', str(enterprise.id))
-        
+        th_urid    = getattr(enterprise, 'TH_urid', str(enterprise.id))
+
         try:
             with transaction.atomic():
-                # 1. Delete the string-linked shared tables explicitly
+                # String-linked shared tables first (no DB cascade)
                 EnterpriseTypeCategory.objects.filter(enterprise_id=th_urid, form_type='exep').delete()
-                EnterpriseSupport.objects.filter(enterprise_id=th_urid, form_type='exep').delete()
+                EnterpriseSupport.objects.filter(enterprise_id=th_urid,      form_type='exep').delete()
                 EnterpriseMandatoryFund.objects.filter(enterprise_id=th_urid, form_type='exep').delete()
-                
-                # Trainings and their cascaded certificates
-                EnterpriseTrainingReq.objects.filter(enterprise_id=th_urid).delete()
-                # (Note: TrainingCertificates cascades from EnterpriseTrainingReq, but we can also explicitly delete)
+                # TrainingCertificates cascades from EnterpriseTrainingReq,
+                # but explicit delete is safer for string-keyed rows
                 TrainingCertificates.objects.filter(enterprise_id=th_urid).delete()
+                EnterpriseTrainingReq.objects.filter(enterprise_id=th_urid).delete()
 
-                # 2. Delete the BeneficiaryRecorded
+                # BeneficiaryRecorded
                 if enterprise.recorded_benef_id:
                     enterprise.recorded_benef_id.delete()
 
-                # 3. Delete the ExistingEnterprise (Cascades to Loans, Subsidies, Products, Shops, Licenses)
+                # ExistingEnterprise (cascades: Loans, Subsidies, Products,
+                #                     Shops, Licenses, all Media)
                 enterprise.delete()
 
-            return Response({"message": "Enterprise and all related records deleted successfully."}, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            return Response({
-                "error": "Deletion failed. Rolled back.",
-                "details": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"message": "Enterprise and all related records deleted successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as exc:
+            return Response(
+                {"error": "Deletion failed. Rolled back.", "details": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
