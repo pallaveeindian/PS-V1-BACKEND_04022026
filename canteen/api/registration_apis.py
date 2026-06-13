@@ -45,9 +45,9 @@ class CanteenRegistrationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if not all([home_data, member_data, detail_data, finance_data, model_pc_data]):
+        if not all([home_data, member_data, detail_data, finance_data]):
             return Response(
-                {"detail": "Missing required sections. 'home', 'member', 'detail', 'finance', and 'model_pc' are required."},
+                {"detail": "Missing required sections. 'home', 'member', 'detail', and 'finance' are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -56,10 +56,23 @@ class CanteenRegistrationView(APIView):
             with transaction.atomic():
                 home = CanteenHome.objects.create(created_by=user, **home_data)
                 
-                CanteenMember.objects.create(canteen_home=home, created_by=user, **member_data)
+                for member in member_data if isinstance(member_data, list) else [member_data]:
+                    CanteenMember.objects.create(canteen_home=home, created_by=user, **member)
+                
+                if detail_data.get("training_amount") in ["", None]:
+                    detail_data.pop("training_amount", None)
+
+                if detail_data.get("training_source") in ["", None]:
+                    detail_data.pop("training_source", None)                
+
                 CanteenDetail.objects.create(canteen_home=home, created_by=user, **detail_data)
                 CanteenFinance.objects.create(canteen_home=home, created_by=user, **finance_data)
-                CanteenModelPC.objects.create(canteen_home=home, created_by=user, **model_pc_data)
+                if model_pc_data:
+                    CanteenModelPC.objects.create(
+                        canteen_home=home,
+                        created_by=user,
+                        **model_pc_data
+                    )
 
                 # 3. Handle File Uploads securely matching the index
                 if isinstance(licenses_data, list):

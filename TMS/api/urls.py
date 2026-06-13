@@ -9,6 +9,9 @@ from TMS.api import tms_views, dashboard_views, report_views
 from TMS.api.tr_delete import TrainingRequestCustomDeleteView
 from TMS.api.user_mgmnt import *
 
+# Custom TP target assignment API
+from TMS.api.tp_assign_v2.views import *
+
 router = DefaultRouter()
 
 # Masters
@@ -283,4 +286,12 @@ urlpatterns = [
     ),    
     path('dmmu-users/', DMMUDistrictListingView.as_view(), name='dmmu-district-users'),
     path('bmmu-users/', BMMUUserListingView.as_view(), name='bmmu-users'),
+
+    # TMS V2 APIs,
+    # New TP Assignment based on TR Financial Year
+    path(
+        'tp/by-target/', 
+        TargetedTrainingPartnerAPIView.as_view(), 
+        name='training-partners-by-target'
+    ),
 ]

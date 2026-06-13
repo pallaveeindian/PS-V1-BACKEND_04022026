@@ -101,6 +101,8 @@ from epSakhi.models import (
     TrainingCertificates,
 )
 
+from core.models import MasterBlock, MasterPanchayat, MasterVillage
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 CACHE_TTL = 600          # seconds (10 min) — well beyond any realistic request time
@@ -191,17 +193,61 @@ class ExistingEnterpriseCreateAPIView(APIView):
                     )
 
                 # ── 2. On-Demand File Accessor (NOW INSIDE THE WITH BLOCK) ────
-                def cf(filename):
-                    if not filename or filename not in extracted_paths:
-                        return None
-                    raw_bytes = zf.read(extracted_paths[filename]) # Safely reads from open zip
-                    return ContentFile(raw_bytes, name=filename)
+                def cf(filename, fallback_filename=None):
+                    # 1. Try exact match from JSON first
+                    if filename and filename in extracted_paths:
+                        raw_bytes = zf.read(extracted_paths[filename])
+                        return ContentFile(raw_bytes, name=filename)
+                    
+                    # 2. Try the fallback match (e.g., license_0.pdf)
+                    if fallback_filename and fallback_filename in extracted_paths:
+                        raw_bytes = zf.read(extracted_paths[fallback_filename])
+                        # Save it to the DB using the originally requested filename
+                        save_name = filename if filename else fallback_filename
+                        return ContentFile(raw_bytes, name=save_name)
+
+                    return None
 
                 # ── 3. Atomic DB transaction (NOW INSIDE THE WITH BLOCK) ──────
                 with transaction.atomic():
 
                     # ── A. BeneficiaryRecorded ────────────────────────────────────
                     bd = payload.get('beneficiary', {})
+                    
+                    # Extract IDs from payload
+                    dist_id = bd.get('district_id')
+                    blk_id = bd.get('block_id')
+                    panch_id = bd.get('panchayat_id')
+                    vill_id = bd.get('village_id')
+
+                    # 3) Fallback: village_id given, but others are null
+                    if not dist_id and not blk_id and not panch_id and vill_id:
+                        try:
+                            vill_obj = MasterVillage.objects.get(pk=vill_id)
+                            dist_id = vill_obj.district_id
+                            blk_id = vill_obj.block_id
+                            panch_id = vill_obj.panchayat_id
+                        except MasterVillage.DoesNotExist:
+                            pass
+                            
+                    # 2) Fallback: panchayat_id given, but dist & block are null
+                    elif not dist_id and not blk_id and panch_id:
+                        try:
+                            panch_obj = MasterPanchayat.objects.get(pk=panch_id)
+                            dist_id = panch_obj.district_id
+                            blk_id = panch_obj.block_id
+                        except MasterPanchayat.DoesNotExist:
+                            pass
+                            
+                    # 1) Fallback: block_id given, but dist is null
+                    elif not dist_id and blk_id:
+                        try:
+                            blk_obj = MasterBlock.objects.get(pk=blk_id)
+                            dist_id = blk_obj.district_id
+                        except MasterBlock.DoesNotExist:
+                            pass
+
+                    # Create beneficiary using the updated IDs
                     beneficiary = BeneficiaryRecorded.objects.create(
                         lokos_member_code   = bd.get('lokos_member_code'),
                         applicant_name      = bd.get('applicant_name'),
@@ -215,10 +261,10 @@ class ExistingEnterpriseCreateAPIView(APIView):
                         special_category    = bd.get('special_category'),
                         education           = bd.get('education'),
                         address             = bd.get('address'),
-                        district_id_id      = bd.get('district_id'),
-                        block_id_id         = bd.get('block_id'),
-                        panchayat_id_id     = bd.get('panchayat_id'),
-                        village_id_id       = bd.get('village_id'),
+                        district_id_id      = dist_id,   # Using fallback-checked variables
+                        block_id_id         = blk_id,    # Using fallback-checked variables
+                        panchayat_id_id     = panch_id,  # Using fallback-checked variables
+                        village_id_id       = vill_id,   # Using fallback-checked variables
                         mobile              = bd.get('mobile'),
                         email               = bd.get('email'),
                         lokos_shg_code      = bd.get('lokos_shg_code'),
@@ -279,13 +325,15 @@ class ExistingEnterpriseCreateAPIView(APIView):
                     beneficiary.save(update_fields=['enterprise_id'])
 
                     # ── C. Licenses ───────────────────────────────────────────────
-                    for lic in payload.get('licenses', []):
+                    for idx, lic in enumerate(payload.get('licenses', [])):
+                        fallback_key = f"license_{idx}.pdf"
+                        
                         EnterpriseLicenses.objects.create(
                             enterprise_id    = enterprise,
                             license_category = lic.get('license_category'),
                             license_name     = lic.get('license_name'),
                             license_no       = lic.get('license_no'),
-                            license_file     = cf(lic.get('file_key')),
+                            license_file     = cf(lic.get('file_key'), fallback_filename=fallback_key),
                             created_by_id    = lic.get('created_by'),
                         )
 

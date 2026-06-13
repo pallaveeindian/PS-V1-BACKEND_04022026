@@ -635,6 +635,7 @@ class TrainingRequest(SoftDeleteMixin):
         MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
     )    
 
+    financial_year = models.CharField("Financial year", max_length=9, null=True, blank=True)
     remarks = models.TextField(blank=True, null=True)
 
     class Meta:

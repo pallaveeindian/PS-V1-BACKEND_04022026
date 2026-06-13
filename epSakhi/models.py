@@ -798,6 +798,7 @@ class MOU(SoftDeleteMixin):
         blank=True,
     )
 
+    mou_level = models.CharField(max_length=255, null=True, blank=True)
     mou_status = models.CharField(max_length=255, null=True, blank=True)
     mou_date = models.DateField(null=True, blank=True)
     mou_duration = models.CharField(max_length=255, null=True, blank=True)

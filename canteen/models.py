@@ -202,10 +202,13 @@ class CanteenDetail(SoftDeleteMixin):
         max_length=255, null=True, blank=True,
         help_text="Are any other packaged food products manufactured by SHGs also being sold at the canteen?"
     )
+    packaged_products_list = models.TextField(null=True, blank=True, help_text="If yes, please list the products.")
     has_canteen_management_training = models.CharField(
         max_length=255, null=True, blank=True,
         help_text="Have you received any training related to operating or managing the canteen?"
     )
+    training_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    training_source = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
         db_table = 'prernaCanteen_details'

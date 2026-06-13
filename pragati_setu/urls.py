@@ -9,6 +9,9 @@ from core.views_health import health
 # Public VIEWS ALL
 from TMS.api.homepage_apis.up_at_a_glance import UPAtAGlanceView
 
+# MOU Template Download API
+from epSakhi.api.MOU.tmplt_dwnld import MOUTemplateDownloadAPIView
+
 # Public VIEWS TMS
 from TMS.api.homepage_apis.cadre_select import PublicCadreSelectionSummaryView
 from TMS.api.homepage_apis.login_status import PublicFirstLoginSummaryView
@@ -61,4 +64,6 @@ urlpatterns += [
         PublicDistrictMOUAnalyticsAPIView.as_view(),
         name="public-mou-analytics",
     ),       
+    # Public API for MOU Template Download
+    path('api/v1/public/mou-template-download/', MOUTemplateDownloadAPIView.as_view(), name='public-mou-template-download'),
 ]
