@@ -1294,6 +1294,7 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'block_name',
             'created_at',
             'participant_count',
+            'financial_year',
         ]
 
     # Serializer for TrainingRequest list endpoint with filters and participant count

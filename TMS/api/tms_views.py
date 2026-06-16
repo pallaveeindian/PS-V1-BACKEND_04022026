@@ -1975,6 +1975,9 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
         if params.get('block_id'):
             qs = qs.filter(block_id=params['block_id'])
 
+        if params.get('financial_year'):
+            qs = qs.filter(financial_year=params['financial_year'])            
+
         # --------------------------------------------------
         # ✅ NEW: CREATED_AT FILTERS
         # --------------------------------------------------
@@ -2004,6 +2007,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
     Input:
     {
         "participant_type": "BENEFICIARY" | "TRAINER",
+        "financial_year": "2023-24",  # Optional but recommended
         "ids": ["id1", "id2", ...]
     }
 
@@ -2016,6 +2020,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
 
     def post(self, request):
         participant_type = request.data.get("participant_type")
+        financial_year = request.data.get("financial_year")
         ids = request.data.get("ids", [])
 
         if participant_type not in ["BENEFICIARY", "TRAINER"]:
@@ -2037,18 +2042,30 @@ class BulkTrainingEngagementCheckAPI(APIView):
         # -------------------------------
         if participant_type == "BENEFICIARY":
             # Rule 1: Check TRBeneficiary (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
-            engaged_tr_bens = tms_models.TRBeneficiary.objects.exclude(
-                training__status__in=["COMPLETED"]
+            tr_bens_qs = tms_models.TRBeneficiary.objects.exclude(
+                training__status__in=["COMPLETED", "REJECTED"]
             ).filter(
                 lokos_member_code__in=ids
-            ).values_list("lokos_member_code", flat=True)
+            )
+            
+            # Apply strict Financial Year filter if provided
+            if financial_year:
+                tr_bens_qs = tr_bens_qs.filter(training__financial_year=financial_year)
+                
+            engaged_tr_bens = tr_bens_qs.values_list("lokos_member_code", flat=True)
 
             # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
-            engaged_batch_bens = tms_models.BatchBeneficiary.objects.exclude(
+            batch_bens_qs = tms_models.BatchBeneficiary.objects.exclude(
                 batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
             ).filter(
                 beneficiary__lokos_member_code__in=ids
-            ).values_list("beneficiary__lokos_member_code", flat=True)
+            )
+            
+            # Apply strict Financial Year filter if provided
+            if financial_year:
+                batch_bens_qs = batch_bens_qs.filter(batch__financial_year=financial_year)
+                
+            engaged_batch_bens = batch_bens_qs.values_list("beneficiary__lokos_member_code", flat=True)
 
             engaged_ids = set(map(str, engaged_tr_bens)).union(set(map(str, engaged_batch_bens)))
 
@@ -2057,25 +2074,40 @@ class BulkTrainingEngagementCheckAPI(APIView):
         # -------------------------------
         elif participant_type == "TRAINER":
             # Rule 3: Check TRTrainer (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
-            engaged_tr_trainers = tms_models.TRTrainer.objects.exclude(
-                training__status__in=["COMPLETED"]
+            tr_trainers_qs = tms_models.TRTrainer.objects.exclude(
+                training__status__in=["COMPLETED", "REJECTED"]
             ).filter(
                 trainer_id__in=ids
-            ).values_list("trainer_id", flat=True)
+            )
+            
+            if financial_year:
+                tr_trainers_qs = tr_trainers_qs.filter(training__financial_year=financial_year)
+                
+            engaged_tr_trainers = tr_trainers_qs.values_list("trainer_id", flat=True)
 
             # Rule 4: Check BatchMasterTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
-            engaged_batch_master_trainers = tms_models.BatchMasterTrainer.objects.exclude(
+            batch_master_trainers_qs = tms_models.BatchMasterTrainer.objects.exclude(
                 batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
             ).filter(
                 master_trainer_id__in=ids
-            ).values_list("master_trainer_id", flat=True)
+            )
+            
+            if financial_year:
+                batch_master_trainers_qs = batch_master_trainers_qs.filter(batch__financial_year=financial_year)
+                
+            engaged_batch_master_trainers = batch_master_trainers_qs.values_list("master_trainer_id", flat=True)
 
             # Rule 5: Check BatchTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
-            engaged_batch_trainers = tms_models.BatchTrainer.objects.exclude(
+            batch_trainers_qs = tms_models.BatchTrainer.objects.exclude(
                 batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
             ).filter(
                 trainer__trainer_id__in=ids
-            ).values_list("trainer__trainer_id", flat=True)
+            )
+            
+            if financial_year:
+                batch_trainers_qs = batch_trainers_qs.filter(batch__financial_year=financial_year)
+                
+            engaged_batch_trainers = batch_trainers_qs.values_list("trainer__trainer_id", flat=True)
 
             engaged_ids = set(map(str, engaged_tr_trainers)) \
                 .union(set(map(str, engaged_batch_master_trainers))) \

@@ -4,7 +4,7 @@ from django.views.decorators.cache import cache_page
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from TMS.models import TrainingRequest
-from core.models import MasterDistrict  # Imported to include all districts with 0 counts
+from core.models import MasterDistrict 
 
 class PublicCadreSelectionSummaryView(APIView):
     """
@@ -24,6 +24,7 @@ class PublicCadreSelectionSummaryView(APIView):
         exact_date = request.query_params.get('date')
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
+        financial_year = request.query_params.get('financial_year') # <-- NEW PARAMETER
         
         # Custom summary parameter flag
         district_wise_cadre_summary = request.query_params.get('district_wise_cadre_summary') == '1'
@@ -40,10 +41,17 @@ class PublicCadreSelectionSummaryView(APIView):
             
         if start_date and end_date:
             queryset = queryset.filter(created_at__date__range=[start_date, end_date])
+            
+        # Apply Financial Year Filter
+        if financial_year:
+            queryset = queryset.filter(financial_year=financial_year)
 
         # 4. Construct response payload base
         response_payload = {
-            "status": "success"
+            "status": "success",
+            "filters_applied": {
+                "financial_year": financial_year
+            }
         }
 
         # 5. Optional Branch: District Wise Cadre Summary (Includes all 0-count districts)
@@ -72,6 +80,7 @@ class PublicCadreSelectionSummaryView(APIView):
                 summary_data.append({
                     "district_id": d_id,
                     "district_name_en": dist['district_name_en'] or "-",
+                    "financial_year": financial_year or "All", 
                     "total_beneficiaries": counts_lookup[d_id]['total_beneficiaries'] if has_data else 0,
                     "total_trainers": counts_lookup[d_id]['total_trainers'] if has_data else 0,
                 })
@@ -90,6 +99,7 @@ class PublicCadreSelectionSummaryView(APIView):
         detailed_data = queryset.select_related(
             'created_by', 'district', 'block', 'training_plan'
         ).values(
+            'financial_year', 
             username=F('created_by__username'),
             district_name_en=F('district__district_name_en'),
             block_name_en=F('block__block_name_en'),

@@ -90,16 +90,29 @@ class Command(BaseCommand):
         for batch in closed_batches:
             # --- AUTO-INCREMENT ACHIEVEMENT ---
             if batch.request and getattr(batch.request, 'partner', None) and batch.request.training_plan:
-                achievement = TrainingPartnerAchievement.objects.filter(
+                
+                # Extract financial year from batch, fallback to request's financial year if missing
+                fy = batch.financial_year or getattr(batch.request, 'financial_year', None)
+                
+                # Build filter query for the exact partner and plan
+                qs = TrainingPartnerAchievement.objects.filter(
                     partner=batch.request.partner,
                     training_plan=batch.request.training_plan
-                ).order_by('-id').first()
+                )
+                
+                # Enforce the strict Financial Year boundary
+                if fy:
+                    qs = qs.filter(financial_year=fy)
+                    
+                achievement = qs.order_by('-id').first()
 
                 if achievement:
                     achievement.batches_completed += 1
                     achievement.date_achieved = today
                     achievement.save(update_fields=['batches_completed', 'date_achieved'])
-                    self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.request.partner.name}."))
+                    self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.request.partner.name} (FY: {achievement.financial_year})."))
+                else:
+                    self.stdout.write(self.style.WARNING(f"No achievement record found for Partner {batch.request.partner.name} under FY {fy}."))
 
             # Permanently flag as counted to survive daemon restarts
             batch.is_achievement_counted = True
