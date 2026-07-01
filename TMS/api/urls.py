@@ -12,6 +12,10 @@ from TMS.api.user_mgmnt import *
 # Custom TP target assignment API
 from TMS.api.tp_assign_v2.views import *
 
+# NEW TC MODULE APIs
+from TMS.api.tc_module_apis.trainees_list import *
+from TMS.api.tc_module_apis.batch_creator_v2 import *
+
 router = DefaultRouter()
 
 # Masters
@@ -294,4 +298,13 @@ urlpatterns = [
         TargetedTrainingPartnerAPIView.as_view(), 
         name='training-partners-by-target'
     ),
+    # TC Module APIS,
+    path(
+        'batch-creator/trainees/',
+        FetchTraineesForTrainingPartnerView.as_view(),
+        name='selected-trainees-by-bmmu'
+    ),
+    path('batch-creator/create/', CreateOneShotBatchAPIView.as_view(), name='batch-oneshot-create'),
+    path('batch-creator/update/<int:batch_id>/', OneShotUpdateBatchAPIView.as_view(), name='batch-oneshot-update'),
+    path('batch-creator/delete/<int:batch_id>/', OneShotDeleteBatchAPIView.as_view(), name='batch-oneshot-delete'),
 ]

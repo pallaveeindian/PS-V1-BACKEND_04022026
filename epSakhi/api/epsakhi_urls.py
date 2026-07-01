@@ -12,6 +12,8 @@ from .epsakhi_pdf import *
 
 from .MOU.views import *
 
+from .EPSMS.mapped_crp import *
+
 router = DefaultRouter()
 router.register('crp', CRPEPViewSet, basename='crp')
 router.register('recorded-beneficiaries', BeneficiaryRecordedViewSet, basename='recorded-beneficiaries')
@@ -168,6 +170,11 @@ custom_urls = [
 
     # MOU Targets Listing API
     path('mou-targets/', MOUTargetListView.as_view(), name='mou-targets-list'), 
+
+    # EPSMS Dashboard APIs
+    # Mapped CRP List
+    path('mapped-crp-list/', get_dmmu_crp_stats, name='dmmu_crp_stats'),
+    path('mcl/<int:dmmu_id>/detail/', get_dmmu_crp_detail, name='dmmu_crp_detail'),
 ]
 
 # Analytics

@@ -300,6 +300,52 @@ class TrainingPartnerBank(SoftDeleteMixin):
     def __str__(self):
         return f"{self.partner.name} - {self.bank_account_number}"
 
+# ----------------------------
+# TC Module - New District TP
+# ----------------------------
+
+class DistrictTP(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    
+    partner = models.ForeignKey(
+        TrainingPartner, 
+        on_delete=models.CASCADE, 
+        related_name='district_nodes'
+    )
+    
+    master_user = models.ForeignKey(
+        MasterUser, 
+        on_delete=models.PROTECT, 
+        db_column='user_id',
+        related_name='dtp_account', 
+        null=True, 
+        blank=True, 
+        db_constraint=False
+    )
+
+    district = models.ForeignKey(
+        MasterDistrict,
+        on_delete=models.RESTRICT,
+        related_name='district_tp_assignments'
+    )
+
+    is_active_dtp = models.BooleanField("Is Active District TP", default=True)
+
+    class Meta:
+        db_table = 'tms_districttp'
+        managed = True
+        unique_together = ('partner', 'district')
+        indexes = [
+            models.Index(fields=['partner']),
+            models.Index(fields=['district']),
+            models.Index(fields=['master_user']),
+        ]
+
+    def __str__(self):
+        tp_name = self.partner.tp_short_name or self.partner.name
+        district_name = getattr(self.district, 'district_name_en', f"District-{self.district_id}")
+        return f"{tp_name} - {district_name}"
+
 class TrainingPartnerCP(SoftDeleteMixin):
     id = models.AutoField(primary_key=True)
 
@@ -468,7 +514,7 @@ class TrainingPartnerSubmission(SoftDeleteMixin):
 
 # ----------------------------
 # TrainingPartnerTargets
-# ----------------------------
+# ----------------------------  
 
 class TrainingPartnerTargets(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
@@ -768,9 +814,22 @@ class TRTrainer(SoftDeleteMixin):
 
 class Batch(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
-    request = models.ForeignKey(
-        TrainingRequest, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='batches'
+
+    training_plan = models.ForeignKey(
+        TrainingPlan, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='plan_batches'
+    )
+
+    district = models.ForeignKey(
+        MasterDistrict, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+    block = models.ForeignKey(
+        MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
+    )    
+
+    partner = models.ForeignKey(
+        TrainingPartner, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='partner_batches'
     )
     centre = models.ForeignKey(
         TrainingPartnerCentre, on_delete=models.SET_NULL, null=True, blank=True
@@ -823,43 +882,22 @@ class Batch(SoftDeleteMixin):
     )
 
     rejection_reason = models.CharField(max_length=500, blank=True, null=True)
-
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
-
     time_of_training = models.CharField(max_length=255, blank=True, null=True)
-
     is_achievement_counted = models.BooleanField(default=False)
-
     financial_year = models.CharField("Financial year", max_length=9, null=True, blank=True)
+
     def save(self, *args, **kwargs):
         if not self.code:
-            # 1. Access related data through TrainingRequest (self.request)
-            req = self.request
+            # 1. Construct prefix based on newly mapped Batch attributes
+            tp = self.partner.tp_short_name if self.partner and self.partner.tp_short_name else "XXX"
+            plan_id = self.training_plan.id if self.training_plan else 0
             
-            # Extract names or fallback to "XXX"
-            district = "XXX"
-            if req and req.district:
-                district = req.district.district_short_name_en or "XXX"
-                
-            block = "XXX"
-            if req and req.block:
-                block = req.block.block_name_local or "XXX"
-                
-            tp = "XXX"
-            if req and req.partner:
-                tp = req.partner.tp_short_name or "XXX"
-                
-            plan_id = 0
-            if req and req.training_plan:
-                plan_id = req.training_plan.id or 0
+            prefix = f"BATCH-{tp}-{plan_id}"
 
-            # 2. Construct the prefix
-            prefix = f"{district}-{block}-{tp}-{plan_id}"
-
-            # 3. Sequence Generation with Race-Condition Protection
+            # 2. Sequence Generation with Race-Condition Protection
             with transaction.atomic():
-                # select_for_update() locks these rows until the save is complete
                 last_batch = Batch.objects.select_for_update().filter(
                     code__startswith=prefix
                 ).aggregate(max_seq=Max("code"))
@@ -868,7 +906,6 @@ class Batch(SoftDeleteMixin):
 
                 if last_code:
                     try:
-                        # Split by hyphen and take the last part (the sequence)
                         parts = last_code.split("-")
                         last_seq = int(parts[-1])
                     except (ValueError, IndexError):
@@ -885,7 +922,8 @@ class Batch(SoftDeleteMixin):
         db_table = 'tms_batch'
         managed = True
         indexes = [
-            models.Index(fields=['request']),
+            models.Index(fields=['training_plan']),
+            models.Index(fields=['partner']),
             models.Index(fields=['centre']),
             models.Index(fields=['status']),
             models.Index(fields=['start_date']),
@@ -894,96 +932,6 @@ class Batch(SoftDeleteMixin):
 
     def __str__(self):
         return self.code or str(self.id)
-
-# ----------------------------
-# Combined Batch Tracker
-# ----------------------------
-
-class CombinedBatchSummary(SoftDeleteMixin):
-    """
-    Summary tracker for combined batches to quickly access how many 
-    different districts and blocks are covered in a single batch.
-    """
-    id = models.BigAutoField(primary_key=True)
-    batch = models.OneToOneField(
-        'Batch', on_delete=models.CASCADE, related_name='combined_summary'
-    )
-    
-    total_districts_covered = models.PositiveIntegerField("Total Unique Districts", default=0)
-    total_blocks_covered = models.PositiveIntegerField("Total Unique Blocks", default=0)
-    
-    total_beneficiaries = models.PositiveIntegerField("Total Beneficiaries in Combined Batch", default=0)
-    total_trainers = models.PositiveIntegerField("Total Trainers in Combined Batch", default=0)
-    
-    notes = models.TextField(blank=True, null=True)
-
-    class Meta:
-        db_table = 'tms_combinedbatchsummary'
-        managed = True
-
-    def __str__(self):
-        return f"Combined Summary for Batch {self.batch_id} - Dist: {self.total_districts_covered}, Blk: {self.total_blocks_covered}"
-
-class CombinedBatchDetail(SoftDeleteMixin):
-    """
-    Granular trace-ability for combined batches, tracking exactly how many 
-    participants came from which specific block/district and under which Training Request.
-    """
-    id = models.BigAutoField(primary_key=True)
-    summary = models.ForeignKey(
-        CombinedBatchSummary, on_delete=models.CASCADE, related_name='regional_details'
-    )
-    training_request = models.ForeignKey(
-        'TrainingRequest', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='combined_batch_allocations'
-    )
-    
-    district = models.ForeignKey(
-        MasterDistrict, on_delete=models.DO_NOTHING, blank=True, null=True
-    )
-    block = models.ForeignKey(
-        MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
-    )
-    
-    PARTICIPANT_TYPE_CHOICES = [
-        ('BENEFICIARY', 'Beneficiary'),
-        ('TRAINER', 'Master Trainer'),
-    ]
-    participant_type = models.CharField(max_length=20, choices=PARTICIPANT_TYPE_CHOICES)
-    participant_count = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        db_table = 'tms_combinedbatchdetail'
-        managed = True
-        indexes = [
-            models.Index(fields=['summary']),
-            models.Index(fields=['district']),
-            models.Index(fields=['block']),
-            models.Index(fields=['participant_type']),
-        ]
-
-    def __str__(self):
-        return f"Trace Detail: {self.participant_count} {self.participant_type}(s) from Block {self.block_id}"
-
-class BatchSchedule(SoftDeleteMixin):
-    id = models.BigAutoField(primary_key=True)
-    batch = models.ForeignKey(
-        Batch, on_delete=models.CASCADE, related_name='schedules'
-    )
-    schedule_date = models.DateField()
-    start_time = models.TimeField(blank=True, null=True)
-    remarks = models.TextField(blank=True, null=True)
-
-    class Meta:
-        db_table = 'tms_batchschedule'
-        managed = True
-        indexes = [
-            models.Index(fields=['batch']),
-            models.Index(fields=['schedule_date']),
-        ]
-
-    def __str__(self):
-        return f"BatchSchedule({self.batch_id}) on {self.schedule_date}"    
 
 # ----------------------------
 # Participants attached to a batch
@@ -1029,6 +977,7 @@ class BatchMasterTrainer(SoftDeleteMixin):
         status = self.status or ""
         return f"{trainer_name}" + (f" - {batch_code}" if batch_code else "") + (f" [{status}]" if status else "")
 
+
 class BatchBeneficiary(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
     batch = models.ForeignKey(
@@ -1036,6 +985,11 @@ class BatchBeneficiary(SoftDeleteMixin):
     )
     beneficiary = models.ForeignKey(
         TRBeneficiary, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    
+    training_request = models.ForeignKey(
+        TrainingRequest, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='batch_beneficiary_mappings'
     )
 
     registered_on = models.DateTimeField(auto_now_add=True)
@@ -1048,10 +1002,12 @@ class BatchBeneficiary(SoftDeleteMixin):
         indexes = [
             models.Index(fields=['batch']),
             models.Index(fields=['beneficiary']),
+            models.Index(fields=['training_request']),
         ]
 
     def __str__(self):
         return f"BatchBeneficiary({self.beneficiary_id}) in Batch {self.batch_id}"
+
 
 class BatchTrainer(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
@@ -1060,6 +1016,11 @@ class BatchTrainer(SoftDeleteMixin):
     )
     trainer = models.ForeignKey(
         TRTrainer, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    
+    training_request = models.ForeignKey(
+        TrainingRequest, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='batch_trainer_mappings'
     )
 
     registered_on = models.DateTimeField(auto_now_add=True)
@@ -1072,14 +1033,66 @@ class BatchTrainer(SoftDeleteMixin):
         indexes = [
             models.Index(fields=['batch']),
             models.Index(fields=['trainer']),
+            models.Index(fields=['training_request']),
         ]
 
     def __str__(self):
         return f"BatchTrainer({self.trainer_id}) in Batch {self.batch_id}"
 
+
+# ----------------------------
+# Batch Block Coverage Tracker
+# ----------------------------
+
+class BatchBlockCoverage(SoftDeleteMixin):
+    """
+    Tracks how many participants from specific blocks are inside a Batch.
+    If a Batch has >1 records here, it is automatically a 'COMBINED' batch.
+    """
+    id = models.BigAutoField(primary_key=True)
+    batch = models.ForeignKey(
+        Batch, on_delete=models.CASCADE, related_name='block_coverages'
+    )
+    block = models.ForeignKey(
+        MasterBlock, on_delete=models.CASCADE, related_name='covered_batches'
+    )
+    participant_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'tms_batchblockcoverage'
+        managed = True
+        unique_together = ('batch', 'block')
+        indexes = [
+            models.Index(fields=['batch']),
+            models.Index(fields=['block']),
+        ]
+
+    def __str__(self):
+        return f"Batch {self.batch_id} covers Block {self.block_id} ({self.participant_count} pax)"
+
 # ----------------------------
 # Batch eKYC verification & attendance
 # ----------------------------
+
+class BatchSchedule(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    batch = models.ForeignKey(
+        Batch, on_delete=models.CASCADE, related_name='schedules'
+    )
+    schedule_date = models.DateField()
+    start_time = models.TimeField(blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'tms_batchschedule'
+        managed = True
+        indexes = [
+            models.Index(fields=['batch']),
+            models.Index(fields=['schedule_date']),
+        ]
+
+    def __str__(self):
+        return f"BatchSchedule({self.batch_id}) on {self.schedule_date}"    
 
 class BatchEkycVerification(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)
@@ -1196,7 +1209,6 @@ class TPBatchCostBreakup(SoftDeleteMixin):
     def __str__(self):
         return f"CostBreakup(Batch {self.batch_id} - Part: {self.batch_beneficiary_id or self.batch_trainer_id})"
 
-
 class BatchCost(SoftDeleteMixin):
     """
     The master invoice for the entire Batch.
@@ -1228,7 +1240,6 @@ class BatchCost(SoftDeleteMixin):
 
     def __str__(self):
         return f"BatchCost(Batch {self.batch_id} - Total: {self.grand_total_cost})"
-
 
 class BatchClosureRequest(SoftDeleteMixin):
     id = models.BigAutoField(primary_key=True)

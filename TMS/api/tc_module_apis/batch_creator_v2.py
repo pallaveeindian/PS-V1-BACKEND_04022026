@@ -1,0 +1,446 @@
+from django.db import transaction
+from django.db.models import Count
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from core.models import MasterUser
+from TMS.models import *
+
+class CreateOneShotBatchAPIView(APIView):
+    """
+    Creates a Batch and maps participants in a single atomic transaction.
+    Prevents double-booking via strict CB_selected checks.
+    Updates parent Training Requests to PENDING if fully exhausted.
+    
+    """
+    
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        
+        participant_type = data.get("participant_type", "").upper()
+        batch_type = data.get("batch_type", "").upper()
+        district_tp_user_id = data.get("district_tp_user_id")
+        
+        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+            return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
+        if batch_type not in ["SEPARATE", "COMBINED"]:
+            return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = MasterUser.objects.get(username=request.user.username)
+        except MasterUser.DoesNotExist:
+            return Response({"error": "Authenticated MasterUser not found."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Flatten participant IDs and construct mapping structure
+        all_participant_ids = []
+        parsed_mappings = [] # list of dicts: {'p_id': int, 'tr_id': int, 'block_id': int}
+        
+        if batch_type == "SEPARATE":
+            p_ids = data.get("participant_ids", [])
+            block_id = data.get("block_id")
+            if not p_ids or not block_id:
+                return Response({"error": "SEPARATE batch requires 'participant_ids' and 'block_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            all_participant_ids = [int(pid) for pid in p_ids]
+            
+            # TR mapping will be resolved inside the transaction below
+            for pid in all_participant_ids:
+                parsed_mappings.append({'p_id': pid, 'tr_id': None, 'block_id': block_id})
+                
+        elif batch_type == "COMBINED":
+            blocks_data = data.get("blocks", [])
+            if not blocks_data:
+                return Response({"error": "COMBINED batch requires 'blocks' array."}, status=status.HTTP_400_BAD_REQUEST)
+                
+            for b in blocks_data:
+                b_id = b.get("block_id")
+                for tr in b.get("training_requests", []):
+                    tr_id = tr.get("tr_id")
+                    for pid in tr.get("participant_ids", []):
+                        pid_int = int(pid)
+                        all_participant_ids.append(pid_int)
+                        parsed_mappings.append({'p_id': pid_int, 'tr_id': tr_id, 'block_id': b_id})
+
+        if not all_participant_ids:
+            return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Select Model Class
+        ParticipantModel = TRBeneficiary if participant_type == "BENEFICIARY" else TRTrainer
+
+        # BEGIN ATOMIC TRANSACTION
+        try:
+            with transaction.atomic():
+                
+                # 1. Resolve Partner
+                try:
+                    dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
+                    partner = dtp.partner
+                except DistrictTP.DoesNotExist:
+                    raise ValueError(f"DistrictTP not found for user ID: {district_tp_user_id}")
+
+                # 2. DOUBLE-BOOKING PREVENTION (Strict Check)
+                already_selected = ParticipantModel.objects.filter(
+                    id__in=all_participant_ids, 
+                    CB_selected=True
+                ).select_related('training', 'block', 'district')
+                
+                if already_selected.exists():
+                    error_details = []
+                    for p in already_selected:
+                        name = getattr(p, 'member_name', getattr(p, 'full_name', 'Unknown'))
+                        tr_id = p.training_id
+                        b_name = p.block.block_name_en if p.block else "Unknown Block"
+                        d_name = p.district.district_name_en if p.district else "Unknown District"
+                        error_details.append(f"Participant: {name} (ID: {p.id}) is already selected in Training Request #{tr_id} ({b_name}, {d_name})")
+                    
+                    return Response({
+                        "error": "Double-booking detected. Some participants are already assigned to batches.",
+                        "details": error_details
+                    }, status=status.HTTP_409_CONFLICT)
+
+                # Fetch all valid participants from DB to ensure they exist and extract missing TR IDs (for SEPARATE mode)
+                participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
+                if participants_db.count() != len(all_participant_ids):
+                    raise ValueError("One or more participant IDs provided do not exist in the database.")
+                
+                p_db_map = {p.id: p for p in participants_db}
+                
+                # 3. Create the Batch
+                batch = Batch.objects.create(
+                    training_plan_id=data.get("training_plan_id"),
+                    partner=partner,
+                    centre_id=data.get("centre_id"),
+                    district_id=data.get("district_id"),
+                    block_id=data.get("block_id") if batch_type == "SEPARATE" else None,
+                    batch_type=batch_type,
+                    status=data.get("status", "DRAFT"),
+                    financial_year=data.get("financial_year"),
+                    start_date=data.get("start_date"),
+                    end_date=data.get("end_date"),
+                    created_by=user
+                )
+
+                touched_tr_ids = set()
+                combined_block_counts = {} # Format: {block_id: count}
+
+                # 4. Create Batch Participants & Traceability Mappings
+                for mapping in parsed_mappings:
+                    p_id = mapping['p_id']
+                    p_obj = p_db_map[p_id]
+                    
+                    # Resolve TR ID (if SEPARATE, fallback to the participant's parent TR)
+                    tr_id = mapping['tr_id'] or p_obj.training_id
+                    touched_tr_ids.add(tr_id)
+                    
+                    # Track block counts for COMBINED
+                    if batch_type == "COMBINED":
+                        b_id = mapping['block_id']
+                        combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
+
+                    if participant_type == "BENEFICIARY":
+                        BatchBeneficiary.objects.create(
+                            batch=batch, 
+                            beneficiary=p_obj, 
+                            training_request_id=tr_id
+                        )
+                    else:
+                        BatchTrainer.objects.create(
+                            batch=batch, 
+                            trainer=p_obj, 
+                            training_request_id=tr_id
+                        )
+
+                # 5. Create BatchBlockCoverage for COMBINED batches
+                if batch_type == "COMBINED":
+                    for blk_id, count in combined_block_counts.items():
+                        BatchBlockCoverage.objects.create(
+                            batch=batch,
+                            block_id=blk_id,
+                            participant_count=count
+                        )
+
+                # 6. Flag Participants as Selected
+                ParticipantModel.objects.filter(id__in=all_participant_ids).update(CB_selected=True)
+
+                # 7. Evaluate and Update Training Request Statuses
+                for tr_id in touched_tr_ids:
+                    # Count total participants associated with this Training Request
+                    total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
+                    # Count how many of them have been selected
+                    selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
+                    
+                    # If all participants in the request are now selected, mark as PENDING
+                    if total_p > 0 and total_p == selected_p:
+                        TrainingRequest.objects.filter(id=tr_id).update(status="PENDING")
+
+            # Transaction successful
+            return Response({
+                "message": f"Successfully created {batch_type} Batch.",
+                "batch_id": batch.id,
+                "batch_code": batch.code,
+                "participants_added": len(all_participant_ids)
+            }, status=status.HTTP_201_CREATED)
+
+        except ValueError as ve:
+            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class OneShotUpdateBatchAPIView(APIView):
+    """
+    Updates a Batch and its participant mappings atomically.
+    Handles adding/removing participants, updating CB_selected, 
+    re-evaluating Training Request statuses, and changing batch_type.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, batch_id, *args, **kwargs):
+        data = request.data
+        
+        participant_type = data.get("participant_type", "").upper()
+        batch_type = data.get("batch_type", "").upper()
+        district_tp_user_id = data.get("district_tp_user_id")
+        
+        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+            return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
+        if batch_type not in ["SEPARATE", "COMBINED"]:
+            return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = MasterUser.objects.get(username=request.user.username)
+        except MasterUser.DoesNotExist:
+            return Response({"error": "Authenticated MasterUser not found."}, status=status.HTTP_403_FORBIDDEN)
+
+        batch = get_object_or_404(Batch, id=batch_id)
+
+        # Flatten participant IDs and construct mapping structure
+        all_participant_ids = []
+        parsed_mappings = []
+        
+        if batch_type == "SEPARATE":
+            p_ids = data.get("participant_ids", [])
+            block_id = data.get("block_id")
+            if not p_ids or not block_id:
+                return Response({"error": "SEPARATE batch requires 'participant_ids' and 'block_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            all_participant_ids = [int(pid) for pid in p_ids]
+            
+            for pid in all_participant_ids:
+                parsed_mappings.append({'p_id': pid, 'tr_id': None, 'block_id': block_id})
+                
+        elif batch_type == "COMBINED":
+            blocks_data = data.get("blocks", [])
+            if not blocks_data:
+                return Response({"error": "COMBINED batch requires 'blocks' array."}, status=status.HTTP_400_BAD_REQUEST)
+                
+            for b in blocks_data:
+                b_id = b.get("block_id")
+                for tr in b.get("training_requests", []):
+                    tr_id = tr.get("tr_id")
+                    for pid in tr.get("participant_ids", []):
+                        pid_int = int(pid)
+                        all_participant_ids.append(pid_int)
+                        parsed_mappings.append({'p_id': pid_int, 'tr_id': tr_id, 'block_id': b_id})
+
+        if not all_participant_ids:
+            return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        ParticipantModel = TRBeneficiary if participant_type == "BENEFICIARY" else TRTrainer
+        MappingModel = BatchBeneficiary if participant_type == "BENEFICIARY" else BatchTrainer
+        mapping_filter_kwarg = "beneficiary_id" if participant_type == "BENEFICIARY" else "trainer_id"
+
+        try:
+            with transaction.atomic():
+                # 1. Resolve Partner
+                try:
+                    dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
+                    partner = dtp.partner
+                except DistrictTP.DoesNotExist:
+                    raise ValueError(f"DistrictTP not found for user ID: {district_tp_user_id}")
+
+                # 2. Identify Old vs New Participants
+                existing_mappings = MappingModel.objects.filter(batch=batch)
+                old_p_ids = set(existing_mappings.values_list(mapping_filter_kwarg, flat=True))
+                new_p_ids_set = set(all_participant_ids)
+
+                removed_ids = old_p_ids - new_p_ids_set
+                added_ids = new_p_ids_set - old_p_ids
+
+                # 3. DOUBLE-BOOKING PREVENTION (Only check newly added participants)
+                if added_ids:
+                    already_selected = ParticipantModel.objects.filter(
+                        id__in=added_ids, 
+                        CB_selected=True
+                    ).select_related('training', 'block', 'district')
+                    
+                    if already_selected.exists():
+                        error_details = []
+                        for p in already_selected:
+                            name = getattr(p, 'member_name', getattr(p, 'full_name', 'Unknown'))
+                            tr_id = p.training_id
+                            b_name = p.block.block_name_en if p.block else "Unknown Block"
+                            error_details.append(f"Participant: {name} (ID: {p.id}) is already assigned to Training Request #{tr_id} ({b_name})")
+                        return Response({
+                            "error": "Double-booking detected on newly added participants.",
+                            "details": error_details
+                        }, status=status.HTTP_409_CONFLICT)
+
+                # Fetch all valid participants to ensure existence
+                participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
+                if participants_db.count() != len(all_participant_ids):
+                    raise ValueError("One or more participant IDs provided do not exist in the database.")
+                p_db_map = {p.id: p for p in participants_db}
+
+                touched_tr_ids = set()
+
+                # 4. Handle REMOVED Participants
+                if removed_ids:
+                    # Capture their TR IDs before deleting mappings
+                    removed_mappings = existing_mappings.filter(**{f"{mapping_filter_kwarg}__in": removed_ids})
+                    tr_ids_to_revert = set(removed_mappings.values_list("training_request_id", flat=True))
+                    touched_tr_ids.update(tr_ids_to_revert)
+                    
+                    # Delete mappings and revert CB_selected
+                    removed_mappings.delete()
+                    ParticipantModel.objects.filter(id__in=removed_ids).update(CB_selected=False)
+
+                # 5. Update Batch Details
+                batch.training_plan_id = data.get("training_plan_id")
+                batch.partner = partner
+                batch.centre_id = data.get("centre_id")
+                batch.district_id = data.get("district_id")
+                batch.block_id = data.get("block_id") if batch_type == "SEPARATE" else None
+                batch.batch_type = batch_type
+                batch.status = data.get("status", batch.status)
+                batch.financial_year = data.get("financial_year")
+                batch.start_date = data.get("start_date")
+                batch.end_date = data.get("end_date")
+                batch.updated_by = user
+                batch.save()
+
+                # 6. Rebuild Mappings & Coverages
+                # Clear old coverages first (simplest way to handle changing batch_types or blocks)
+                BatchBlockCoverage.objects.filter(batch=batch).delete()
+                
+                combined_block_counts = {}
+
+                for mapping in parsed_mappings:
+                    p_id = mapping['p_id']
+                    
+                    # If this is a newly added participant, create the row
+                    if p_id in added_ids:
+                        p_obj = p_db_map[p_id]
+                        tr_id = mapping['tr_id'] or p_obj.training_id
+                        touched_tr_ids.add(tr_id)
+                        
+                        if participant_type == "BENEFICIARY":
+                            MappingModel.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
+                        else:
+                            MappingModel.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id)
+                    else:
+                        # Existing participant, just trace their TR for re-evaluation if needed
+                        p_obj = p_db_map[p_id]
+                        tr_id = mapping['tr_id'] or p_obj.training_id
+                        touched_tr_ids.add(tr_id)
+
+                    # Track block coverage regardless of whether they were newly added or existing
+                    if batch_type == "COMBINED":
+                        b_id = mapping['block_id']
+                        combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
+
+                # 7. Create New BatchBlockCoverage for COMBINED batches
+                if batch_type == "COMBINED":
+                    for blk_id, count in combined_block_counts.items():
+                        BatchBlockCoverage.objects.create(batch=batch, block_id=blk_id, participant_count=count)
+
+                # 8. Flag NEW Participants as Selected
+                if added_ids:
+                    ParticipantModel.objects.filter(id__in=added_ids).update(CB_selected=True)
+
+                # 9. Evaluate and Update Training Request Statuses
+                for tr_id in touched_tr_ids:
+                    if not tr_id:
+                        continue
+                    total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
+                    selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
+                    
+                    # If all are selected -> PENDING. If not -> revert to BATCHING.
+                    if total_p > 0 and total_p == selected_p:
+                        TrainingRequest.objects.filter(id=tr_id).update(status="PENDING")
+                    else:
+                        TrainingRequest.objects.filter(id=tr_id).update(status="BATCHING")
+
+            return Response({
+                "message": "Batch updated successfully.",
+                "batch_id": batch.id,
+                "participants_total": len(all_participant_ids)
+            }, status=status.HTTP_200_OK)
+
+        except ValueError as ve:
+            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class OneShotDeleteBatchAPIView(APIView):
+    """
+    Deletes a Batch atomically.
+    Reverts all associated participants' CB_selected flags to False.
+    Reverts all associated Training Requests to BATCHING.
+    Clears BatchBlockCoverage automatically.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, batch_id, *args, **kwargs):
+        try:
+            user = MasterUser.objects.get(username=request.user.username)
+        except MasterUser.DoesNotExist:
+            return Response({"error": "Authenticated MasterUser not found."}, status=status.HTTP_403_FORBIDDEN)
+
+        batch = get_object_or_404(Batch, id=batch_id)
+
+        try:
+            with transaction.atomic():
+                b_bens = BatchBeneficiary.objects.filter(batch=batch)
+                b_trainers = BatchTrainer.objects.filter(batch=batch)
+                
+                touched_tr_ids = set()
+
+                # Handle Beneficiaries
+                if b_bens.exists():
+                    p_ids = list(b_bens.values_list('beneficiary_id', flat=True))
+                    tr_ids = list(b_bens.values_list('training_request_id', flat=True))
+                    touched_tr_ids.update(tr_ids)
+                    
+                    # Free up participants
+                    TRBeneficiary.objects.filter(id__in=p_ids).update(CB_selected=False)
+                    # Hard delete mappings to clean db
+                    b_bens.delete()
+
+                # Handle Trainers
+                if b_trainers.exists():
+                    p_ids = list(b_trainers.values_list('trainer_id', flat=True))
+                    tr_ids = list(b_trainers.values_list('training_request_id', flat=True))
+                    touched_tr_ids.update(tr_ids)
+                    
+                    # Free up participants
+                    TRTrainer.objects.filter(id__in=p_ids).update(CB_selected=False)
+                    # Hard delete mappings
+                    b_trainers.delete()
+
+                # Revert Training Request Statuses
+                valid_tr_ids = [tid for tid in touched_tr_ids if tid is not None]
+                if valid_tr_ids:
+                    TrainingRequest.objects.filter(id__in=valid_tr_ids).update(status="BATCHING")
+
+                # Clear Coverage tracking
+                BatchBlockCoverage.objects.filter(batch=batch).delete()
+
+                # Delete the Batch (using the custom SoftDeleteMixin signature)
+                batch.delete(by_user=user)
+
+            return Response({"message": "Batch deleted and participants reverted successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

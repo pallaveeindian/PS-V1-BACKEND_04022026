@@ -46,7 +46,7 @@ COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10, 12}
 EPSAKHI_ROLE_IDS = {6}
 
 # TMS-only roles
-TMS_ROLE_IDS = {4, 7, 11}
+TMS_ROLE_IDS = {4, 7, 11, 13}
 
 class ApiIdApiKeyMiddleware(MiddlewareMixin):
     """

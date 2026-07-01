@@ -136,6 +136,39 @@ class CRPEPToPanchayat(SoftDeleteMixin):
     def __str__(self):
         return f"{self.crp_id} -> {self.allocated_panchayat_id}"
 
+class MappingCRPTargets(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+
+    district = models.ForeignKey(
+        MasterDistrict,
+        on_delete=models.SET_NULL,
+        related_name='crpmap_district_target',
+        null=True, blank=True,
+    )
+
+    target_count = models.PositiveIntegerField("Target count (crps)", default=0)
+    financial_year = models.CharField("Financial year", max_length=9, null=True, blank=True)
+
+    class Meta:
+        db_table = 'epSakhi_crpmap_targets'
+        managed = True
+        indexes = [
+            models.Index(fields=['district']),
+            models.Index(fields=['financial_year']),
+        ]
+
+    def clean(self):
+        if not self.financial_year:
+            raise ValidationError("financial_year is required (e.g. '2023-24').")
+        if self.target_count < 0:
+            raise ValidationError("target_count cannot be negative.")
+
+        if len(self.financial_year) < 5:
+            raise ValidationError("financial_year looks invalid (expected e.g. '2023-24').")
+
+    def __str__(self):
+        return f"{self.district} + {self.target_count}"
+
 # ---------------------------------------------
 # BeneficiaryRecorded (epSakhi_recorBenefs)
 # ---------------------------------------------
