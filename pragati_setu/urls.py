@@ -16,6 +16,7 @@ from epSakhi.api.MOU.tmplt_dwnld import MOUTemplateDownloadAPIView
 from TMS.api.homepage_apis.cadre_select import PublicCadreSelectionSummaryView
 from TMS.api.homepage_apis.login_status import PublicFirstLoginSummaryView
 from epSakhi.api.homepage_apis.mou_form import PublicDistrictMOUAnalyticsAPIView
+from TMS.api.part_cert_gen import DownloadParticipantCertificateAPIView
 
 schema_view = get_schema_view(
    openapi.Info(
@@ -66,4 +67,6 @@ urlpatterns += [
     ),       
     # Public API for MOU Template Download
     path('api/v1/public/mou-template-download/', MOUTemplateDownloadAPIView.as_view(), name='public-mou-template-download'),
+    # Participant Certificate Download API
+    path('api/v1/public/tms-certificate/download/', DownloadParticipantCertificateAPIView.as_view(), name='public-participant-certificate-download'),
 ]

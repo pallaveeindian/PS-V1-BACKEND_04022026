@@ -248,7 +248,9 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
 
     def validate(self, attrs):
-        request = self.context["request"]
+        request = self.context.get("request")
+        if not request:
+            return attrs
 
         auth_user = request.user
         master_user = core_models.MasterUser.objects.filter(
@@ -258,47 +260,41 @@ class TPCPToCentreSerializer(SoftDeleteModelSerializer):
         if not master_user:
             raise serializers.ValidationError("Invalid user.")
 
-        partner = tms_models.TrainingPartner.objects.filter(
-            master_user=master_user,
-            is_active=True
-        ).first()
-
-        if not partner:
-            raise serializers.ValidationError("Training Partner not found.")
-
-        cp = attrs.get("contact_person")
-        centre = attrs.get("allocated_centre")
+        # Resolve instance for partial updates
+        instance = getattr(self, "instance", None)
+        cp = attrs.get("contact_person", instance.contact_person if instance else None)
+        centre = attrs.get("allocated_centre", instance.allocated_centre if instance else None)
 
         if not cp or not centre:
             raise serializers.ValidationError("Invalid assignment data.")
 
-        # 🔐 Ensure CP belongs to logged-in partner
-        if cp.partner != partner:
-            raise serializers.ValidationError(
-                "Unauthorized contact person selection."
-            )
-
-        # 🔐 Ensure centre belongs to same partner
-        if centre.partner != partner:
-            raise serializers.ValidationError(
-                "Unauthorized centre selection."
-            )
-
-        # 🔐 Ensure CP and Centre belong to SAME partner
+        # 1. Structural Security Check: 
+        # Ensure CP and Centre belong to SAME partner (Applies to EVERYONE, even Admins)
         if cp.partner_id != centre.partner_id:
             raise serializers.ValidationError(
-                "Contact person and centre must belong to same partner."
+                "Contact person and centre must belong to the same partner."
             )
 
-        # -------------------------------
-        # 🚫 Prevent Duplicate Mapping
-        # -------------------------------
-        instance = getattr(self, "instance", None)
+        # 2. Determine User Role
+        partner = tms_models.TrainingPartner.objects.filter(master_user=master_user, is_active=True).first()
+        dtp = tms_models.DistrictTP.objects.filter(master_user=master_user, is_active=True).first()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user, is_active=True).exists()
+        
+        is_admin = not (partner or dtp or is_tpcp)
 
+        # 3. Authorization Check (Skip for Admins)
+        if not is_admin:
+            authorized_partner_id = partner.id if partner else (dtp.partner_id if dtp else None)
+            
+            if not authorized_partner_id or cp.partner_id != authorized_partner_id:
+                raise serializers.ValidationError(
+                    "You do not have permission to manage assignments for this Training Partner."
+                )
+
+        # 4. Prevent Duplicate Mapping
         duplicate_qs = tms_models.TPCPToCentre.objects.filter(
             contact_person=cp,
             allocated_centre=centre,
-            contact_person__partner=partner,
             is_active=True
         )
 
@@ -534,9 +530,24 @@ class TrainingRequestSerializer(SoftDeleteModelSerializer):
 
 
 class TRBeneficiarySerializer(SoftDeleteModelSerializer):
+    district_name_en = serializers.SerializerMethodField()
+    block_name_en = serializers.SerializerMethodField()
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TRBeneficiary
         fields = "__all__"
+
+    def get_district_name_en(self, obj):
+        try:
+            return obj.district.district_name_en if obj.district else None
+        except:
+            return None
+
+    def get_block_name_en(self, obj):
+        try:
+            return obj.block.block_name_en if obj.block else None
+        except:
+            return None        
 
 
 class TRBeneficiaryDetailSerializer(SoftDeleteModelSerializer):
@@ -682,8 +693,9 @@ class BatchParticipantCertificateSerializer(SoftDeleteModelSerializer):
 # --- UPDATED MASTER DETAIL SERIALIZER ---
 
 class BatchDetailSerializer(SoftDeleteModelSerializer):
-    # --- SURGICAL FIX: Explicitly map base relations so we don't need depth=2 ---
-    request = TrainingRequestDetailSerializer(read_only=True)
+    # --- SURGICAL FIX: Removed `request = TrainingRequestDetailSerializer(read_only=True)`
+    # Since `Batch` no longer holds a direct `request` foreign key.
+    
     centre = TrainingPartnerCentreSerializer(read_only=True)
     beneficiary = TRBeneficiarySerializer(many=True, read_only=True)
     trainer = TRTrainerSerializer(many=True, read_only=True)
@@ -714,7 +726,7 @@ class BatchDetailSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.Batch
         fields = "__all__"
-
+        
 # ----------------------------
 # Batch Closure & Certificates
 # ----------------------------
@@ -798,8 +810,10 @@ class BatchTRSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
        
 class BatchListSerializer(serializers.ModelSerializer):
-    request = BatchTRSerializer()
+    district = BatchDistrictSerializer(read_only=True)
+    block = BatchBlockSerializer(read_only=True)
     centre = BatchCentreSerializer()
+    pax_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = tms_models.Batch
@@ -811,8 +825,11 @@ class BatchListSerializer(serializers.ModelSerializer):
             'start_date',
             'end_date',
             'time_of_training',
-            'request',
-            'centre'
+            'centre',
+            'district',
+            'participant_type',
+            'block',
+            'pax_count',
         ]
 
 

@@ -89,15 +89,15 @@ class Command(BaseCommand):
 
         for batch in closed_batches:
             # --- AUTO-INCREMENT ACHIEVEMENT ---
-            if batch.request and getattr(batch.request, 'partner', None) and batch.request.training_plan:
+            if batch.partner and batch.training_plan:
                 
-                # Extract financial year from batch, fallback to request's financial year if missing
-                fy = batch.financial_year or getattr(batch.request, 'financial_year', None)
+                # Extract financial year directly from the batch
+                fy = batch.financial_year
                 
                 # Build filter query for the exact partner and plan
                 qs = TrainingPartnerAchievement.objects.filter(
-                    partner=batch.request.partner,
-                    training_plan=batch.request.training_plan
+                    partner=batch.partner,
+                    training_plan=batch.training_plan
                 )
                 
                 # Enforce the strict Financial Year boundary
@@ -110,9 +110,9 @@ class Command(BaseCommand):
                     achievement.batches_completed += 1
                     achievement.date_achieved = today
                     achievement.save(update_fields=['batches_completed', 'date_achieved'])
-                    self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.request.partner.name} (FY: {achievement.financial_year})."))
+                    self.stdout.write(self.style.SUCCESS(f"Incremented achievement for Partner {batch.partner.name} (FY: {achievement.financial_year})."))
                 else:
-                    self.stdout.write(self.style.WARNING(f"No achievement record found for Partner {batch.request.partner.name} under FY {fy}."))
+                    self.stdout.write(self.style.WARNING(f"No achievement record found for Partner {batch.partner.name} under FY {fy}."))
 
             # Permanently flag as counted to survive daemon restarts
             batch.is_achievement_counted = True
@@ -120,7 +120,7 @@ class Command(BaseCommand):
 
 
     def calculate_batch_attendance(self, batch):        
-        training_plan = batch.request.training_plan if batch.request else None
+        training_plan = batch.training_plan
         
         if not training_plan or not training_plan.no_of_days:
             self.stdout.write(self.style.WARNING(f"Skipping attendance for Batch {batch.id}: No training_plan or no_of_days set."))
@@ -157,7 +157,7 @@ class Command(BaseCommand):
             BeneficiaryAttendanceSummary.objects.update_or_create(
                 batch_beneficiary=bb,
                 defaults={
-                    'batch': batch, 'training_request': batch.request, 'total_training_days': total_days,
+                    'batch': batch, 'training_request': bb.training_request, 'total_training_days': total_days,
                     'days_present': present_days, 'attendance_percentage': attendance_percentage,
                     'is_dropout': is_dropout, 'is_successful': is_successful
                 }
@@ -192,7 +192,7 @@ class Command(BaseCommand):
             BeneficiaryAttendanceSummary.objects.update_or_create(
                 batch_trainer=bt,
                 defaults={
-                    'batch': batch, 'training_request': batch.request, 'total_training_days': total_days,
+                    'batch': batch, 'training_request': bt.training_request, 'total_training_days': total_days,
                     'days_present': present_days, 'attendance_percentage': attendance_percentage,
                     'is_dropout': is_dropout, 'is_successful': is_successful
                 }

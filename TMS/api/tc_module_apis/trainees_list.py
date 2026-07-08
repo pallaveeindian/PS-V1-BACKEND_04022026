@@ -1,6 +1,5 @@
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
-from django.db import models
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -35,6 +34,8 @@ class FetchTraineesForTrainingPartnerView(APIView):
         financial_year = request.query_params.get("financial_year")
         training_plan_id = request.query_params.get("training_plan_id")
         participant_type = request.query_params.get("participant_type")
+        batch_id = request.query_params.get("batch_id")
+        training_request_id = request.query_params.get("training_request_id")
 
         # Extract Optional Filter query parameters
         block_id = request.query_params.get("block_id")
@@ -92,17 +93,30 @@ class FetchTraineesForTrainingPartnerView(APIView):
         district_ids = geo_scopes.values_list("district_id", flat=True)
 
         # 3. Filter Training Requests matching core constraints and status='BATCHING'
-        training_requests = TrainingRequest.objects.filter(
-            financial_year=financial_year,
-            training_plan_id=training_plan_id,
-            district_id__in=district_ids,
-            status="BATCHING",
-        )
+        tr_filters = {
+            "financial_year": financial_year,
+            "training_plan_id": training_plan_id,
+            "district_id__in": district_ids
+        }
+        
+        if training_request_id:
+            tr_filters["id"] = training_request_id
+
+        # OR requests that were previously BATCHING but moved to PENDING because this batch consumed them.
+        if batch_id:
+            # If batch_id is provided, we must include requests that might be PENDING 
+            # because they were fully mapped to this specific batch.
+            training_requests = TrainingRequest.objects.filter(**tr_filters).filter(
+                Q(status="BATCHING") | Q(status="PENDING")
+            )
+        else:
+            tr_filters["status"] = "BATCHING"
+            training_requests = TrainingRequest.objects.filter(**tr_filters)
 
         if not training_requests.exists():
             return Response(
                 {
-                    "message": "No training requests found matching the selection criteria under 'BATCHING' status.",
+                    "message": "No valid training requests found matching the selection criteria.",
                     "results": [],
                 },
                 status=status.HTTP_200_OK,
@@ -110,7 +124,14 @@ class FetchTraineesForTrainingPartnerView(APIView):
 
         # 4. Fetch the targeted participant type data and apply advanced filters
         if participant_type == "beneficiary":
-            trainees = TRBeneficiary.objects.filter(training__in=training_requests, CB_selected=False)
+            if batch_id:
+                linked_ids = list(BatchBeneficiary.objects.filter(batch_id=batch_id).values_list('beneficiary_id', flat=True))
+                trainees = TRBeneficiary.objects.filter(
+                    Q(training__in=training_requests) & 
+                    (Q(CB_selected=False) | Q(CB_selected=True, id__in=linked_ids))
+                )
+            else:
+                trainees = TRBeneficiary.objects.filter(training__in=training_requests, CB_selected=False)
 
             # Apply Optional Filters for Beneficiaries
             if block_id:
@@ -138,35 +159,67 @@ class FetchTraineesForTrainingPartnerView(APIView):
             if to_age and to_age.isdigit():
                 trainees = trainees.filter(age__lte=int(to_age))
 
-            # Search Filter (SHG Code, Member Code, or Name)
+            # Search Filter (SHG Code, Member Code, Name, or Training Request ID)
             if search_query:
-                trainees = trainees.filter(
+                search_q = (
                     Q(lokos_shg_code__icontains=search_query) |
                     Q(lokos_member_code__icontains=search_query) |
                     Q(member_name__icontains=search_query)
                 )
+                # SURGICAL FIX: If the search query is a number, also check training_id
+                if search_query.isdigit():
+                    search_q |= Q(training_id=search_query)
+                    
+                trainees = trainees.filter(search_q)
 
             serializer = TRBeneficiarySerializer(trainees, many=True)
 
         else: # TRAINER
-            trainees = TRTrainer.objects.filter(training__in=training_requests, CB_selected=False)
+            linked_ids = []
+            if batch_id:
+                # Use the clean ManyToMany reverse relation to avoid naming collisions
+                linked_ids = list(TRTrainer.objects.filter(trainers_for_batch__id=batch_id).values_list('id', flat=True))
 
-            # Apply Optional Filters mapped to Trainer structure
-            if block_id:
-                trainees = trainees.filter(block_id=block_id)
-            if gender:
-                trainees = trainees.filter(trainer__gender__iexact=gender)
-            if designation:
-                trainees = trainees.filter(trainer__designation__icontains=designation)
-            if social_category:
-                trainees = trainees.filter(trainer__social_category__iexact=social_category)
+            # 1. Group all optional filters into a single Q object
+            optional_filters = Q()
             
-            # Search Filter (Mobile, Name, or Aadhaar)
+            # SURGICAL FIX: Completely ignore block_id for trainers. 
+            # (We purposefully do NOT add block_id to optional_filters here)
+
+            if gender:
+                optional_filters &= Q(trainer__gender__iexact=gender)
+            if designation:
+                optional_filters &= Q(trainer__designation__icontains=designation)
+            if social_category:
+                optional_filters &= Q(trainer__social_category__iexact=social_category)
+            
+            # Search Filter (Mobile, Name, Aadhaar, or Training Request ID)
             if search_query:
-                trainees = trainees.filter(
+                search_q = (
                     Q(full_name__icontains=search_query) |
                     Q(mobile_no__icontains=search_query) |
                     Q(aadhaar_no__icontains=search_query)
+                )
+                # SURGICAL FIX: If the search query is a number, also check training_id
+                if search_query.isdigit():
+                    search_q |= Q(training_id=search_query)
+                    
+                optional_filters &= search_q
+
+            # 2. Apply logic: Include if (Unselected AND matches filters) OR (Already Selected for this batch)
+            if batch_id:
+                trainees = TRTrainer.objects.filter(
+                    Q(training__in=training_requests) & 
+                    (
+                        (Q(CB_selected=False) & optional_filters) | 
+                        Q(CB_selected=True, id__in=linked_ids)
+                    )
+                )
+            else:
+                trainees = TRTrainer.objects.filter(
+                    Q(training__in=training_requests) & 
+                    Q(CB_selected=False) & 
+                    optional_filters
                 )
 
             serializer = TRTrainerSerializer(trainees, many=True)

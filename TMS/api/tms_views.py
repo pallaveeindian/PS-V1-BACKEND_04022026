@@ -242,8 +242,7 @@ class TenPerPagePagination(PageNumberPagination):
     page_size_query_param = "page_size"  # optional: allow clients to change page size
     max_page_size = 100000  # optional safeguard
 
-
-    
+  
 class MasterTrainerViewSet(BaseTMSModelViewSet):
     """
     CRUD for MasterTrainer (BRP/DRP/SRP).
@@ -333,8 +332,6 @@ class TrainingPartnerViewSet(BaseTMSModelViewSet):
         serializer = TrainingPartnerSerializer(partner, context={"request": request})
         return Response(serializer.data)
 
-
-
 class TrainingPartnerBankViewSet(BaseTMSModelViewSet):
     """
     CRUD for TrainingPartnerBank.
@@ -343,7 +340,6 @@ class TrainingPartnerBankViewSet(BaseTMSModelViewSet):
     queryset = tms_models.TrainingPartnerBank.objects.select_related("partner")
     serializer_class = TrainingPartnerBankSerializer
     filterset_fields = ["partner"]
-
 
 class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
     serializer_class = TrainingPartnerCPSerializer
@@ -362,15 +358,42 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
         except core_models.MasterUser.DoesNotExist:
             return tms_models.TrainingPartnerCP.objects.none()
 
-        return (
-            super()
-            .get_queryset()
-            .filter(
-                Q(partner__master_user=master_user) |  # Training Partner Owner
-                Q(master_user=master_user)             # Contact Person
+        queryset = super().get_queryset()
+
+        # 1. Determine the user's role context
+        is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
+        is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+
+        # 2. Apply strict filtering ONLY if the user belongs to the Training Partner domain.
+        # This allows Admin/State users (who have no TP profiles) to bypass and see results.
+        if is_tp_owner or is_tpcp or is_dtp:
+            queryset = queryset.filter(
+                Q(partner__master_user=master_user) |               # Training Partner Owner
+                Q(master_user=master_user) |                        # Contact Person
+                Q(partner__district_nodes__master_user=master_user) # District TP Node
             )
-            .distinct()
-        )
+
+        # 3. Introduce district_id OR created_by filtering
+        # Includes CPs mapped to the district OR newly created CPs by the user (not mapped yet)
+        district_id = self.request.query_params.get("district_id")
+        created_by_param = self.request.query_params.get("created_by")
+
+        if district_id or created_by_param:
+            param_q = Q()
+            if district_id:
+                param_q |= Q(
+                    tpcptocentre__allocated_centre__district_id=district_id,
+                    tpcptocentre__is_active=True,
+                    tpcptocentre__allocated_centre__is_active=True
+                )
+            if created_by_param:
+                param_q |= Q(created_by_id=created_by_param)
+                
+            queryset = queryset.filter(param_q)
+
+        # 4. Distinct must be called at the very end to clean up the INNER JOIN duplicates
+        return queryset.distinct()
 
     def perform_create(self, serializer):
         auth_user = self.request.user
@@ -383,8 +406,20 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
             master_user=master_user
         ).first()
 
+        # Fallback: Allow District TPs to create CPs for their partner
         if not partner:
-            raise NotFound("Training Partner not found")
+            dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).first()
+            if dtp:
+                partner = dtp.partner
+
+        # Fallback: If Admin, extract from request payload
+        if not partner:
+            partner_id = self.request.data.get("partner")
+            if partner_id:
+                partner = tms_models.TrainingPartner.objects.filter(id=partner_id).first()
+
+        if not partner:
+            raise NotFound("Training Partner not found or you lack permission.")
 
         serializer.save(
             partner=partner,
@@ -395,9 +430,18 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
         instance = self.get_object()
         master_user = get_master_user_from_request(self.request)
 
+        is_dtp = instance.partner.district_nodes.filter(master_user=master_user).exists()
+        is_admin = not (
+            tms_models.TrainingPartner.objects.filter(master_user=master_user).exists() or
+            tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists() or
+            tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        )
+
         if not (
             instance.partner.master_user == master_user
             or instance.master_user == master_user
+            or is_dtp
+            or is_admin
         ):
             raise PermissionDenied("Unauthorized update attempt")
 
@@ -410,13 +454,22 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
         if not master_user:
             raise NotFound()
 
+        is_dtp = obj.partner.district_nodes.filter(master_user=master_user).exists()
+        is_admin = not (
+            tms_models.TrainingPartner.objects.filter(master_user=master_user).exists() or
+            tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists() or
+            tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        )
+
         if not (
             obj.partner.master_user == master_user
             or obj.master_user == master_user
+            or is_dtp
+            or is_admin
         ):
             raise PermissionDenied("Unauthorized access")
 
-        return obj    
+        return obj
 
 class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     """
@@ -444,6 +497,29 @@ class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     ]
     search_fields = ["venue_name", "venue_address"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.filter(username=auth_user.username).first()
+        if not master_user:
+            return qs.none()
+
+        is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
+        is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        is_admin = not (is_tp_owner or is_tpcp or is_dtp)
+
+        # Non-admin users see only their respective Partner's centres
+        if not is_admin:
+            qs = qs.filter(
+                Q(partner__master_user=master_user) |               # TP Owner
+                Q(partner__contact_person__master_user=master_user) | # TP Contact Person
+                Q(partner__district_nodes__master_user=master_user) # District TP Node
+            ).distinct()
+
+        return qs
+
     @swagger_auto_schema(
         operation_summary="Retrieve centre with nested rooms",
         responses={200: TrainingPartnerCentreDetailSerializer},
@@ -457,7 +533,6 @@ class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
         serializer = TrainingPartnerCentreDetailSerializer(centre, context={"request": request})
         return Response(serializer.data)
 
-
 class TrainingPartnerCentreRoomsViewSet(BaseTMSModelViewSet):
     """
     CRUD for TrainingPartnerCentreRooms.
@@ -467,13 +542,38 @@ class TrainingPartnerCentreRoomsViewSet(BaseTMSModelViewSet):
     serializer_class = TrainingPartnerCentreRoomsSerializer
     filterset_fields = ["centre"]
 
-    
+    def get_queryset(self):
+        qs = super().get_queryset()
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.filter(username=auth_user.username).first()
+        if not master_user:
+            return qs.none()
+
+        is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
+        is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        is_admin = not (is_tp_owner or is_tpcp or is_dtp)
+
+        if not is_admin:
+            qs = qs.filter(
+                Q(centre__partner__master_user=master_user) |
+                Q(centre__partner__contact_person__master_user=master_user) |
+                Q(centre__partner__district_nodes__master_user=master_user)
+            ).distinct()
+
+        return qs
+
 class TPCPToCentreViewSet(BaseTMSModelViewSet):
     """
     Maps TrainingPartnerCP → TrainingPartnerCentre.
     Used when partner assigns contact person for centre.
     """
     swagger_schema = PartnersSchema
+    
+    # --- ADDED: Base queryset to resolve the AssertionError ---
+    queryset = tms_models.TPCPToCentre.objects.all()
+    
     serializer_class = TPCPToCentreSerializer
     filterset_fields = ["contact_person", "allocated_centre", "created_by"]
 
@@ -502,19 +602,27 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
             is_active=True
         ).first()
 
-        if not partner and not contact_person:
+        # District TP
+        dtp = tms_models.DistrictTP.objects.filter(
+            master_user=master_user,
+            is_active=True
+        ).first()
+
+        is_admin = not (partner or contact_person or dtp)
+
+        if not partner and not contact_person and not dtp and not is_admin:
             raise PermissionDenied("User has no partner access.")
 
-        return master_user, partner, contact_person
+        return master_user, partner, contact_person, dtp, is_admin
 
     # ----------------------------------
     # Queryset
     # ----------------------------------
     def get_queryset(self):
-        master_user, partner, contact_person = self._get_access()
+        master_user, partner, contact_person, dtp, is_admin = self._get_access()
 
         queryset = (
-            tms_models.TPCPToCentre.objects
+            super().get_queryset()
             .select_related(
                 "contact_person__partner",
                 "allocated_centre__partner",
@@ -522,13 +630,15 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
             .filter(is_active=True)
         )
 
-        # Partner owner → see all
-        if partner:
-            queryset = queryset.filter(contact_person__partner=partner)
+        if is_admin:
+            return queryset
 
-        # Contact person → see only their centres
-        if contact_person:
-            queryset = queryset.filter(contact_person=contact_person)
+        # Standardize filtering for TP, CP, and DTP using the central relation
+        queryset = queryset.filter(
+            Q(contact_person__partner__master_user=master_user) |               # TP Owner
+            Q(contact_person__master_user=master_user) |                        # Contact Person Specific
+            Q(contact_person__partner__district_nodes__master_user=master_user) # District TP Node
+        ).distinct()
 
         return queryset
 
@@ -536,11 +646,29 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     # Create
     # ----------------------------------
     def perform_create(self, serializer):
-        master_user, partner, contact_person = self._get_access()
+        master_user, partner, contact_person, dtp, is_admin = self._get_access()
 
-        # Only partner owner should assign centres
-        if not partner:
-            raise PermissionDenied("Only Training Partner can assign centres.")
+        # 1. Permission Check
+        if not (partner or dtp or is_admin):
+            raise PermissionDenied("Only Training Partners, District TPs, or Admins can assign centres.")
+
+        # 2. Get the requested objects from the payload
+        contact_person_id = self.request.data.get("contact_person")
+        centre_id = self.request.data.get("allocated_centre")
+
+        cp_obj = tms_models.TrainingPartnerCP.objects.select_related("partner").get(id=contact_person_id)
+        centre_obj = tms_models.TrainingPartnerCentre.objects.select_related("partner").get(id=centre_id)
+
+        # 3. Structural Validation: Ensure they belong to the same partner
+        if cp_obj.partner_id != centre_obj.partner_id:
+            raise ValidationError("The Contact Person and Centre must belong to the same Training Partner.")
+
+        # 4. Authorization Validation: Ensure the user owns this specific partner
+        # (Skip if admin)
+        if not is_admin:
+            authorized_partner = partner if partner else dtp.partner
+            if cp_obj.partner_id != authorized_partner.id:
+                raise PermissionDenied("You do not have access to assign this partner's resources.")
 
         serializer.save(created_by=master_user)
 
@@ -548,15 +676,21 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     # Update
     # ----------------------------------
     def perform_update(self, serializer):
-        master_user, partner, contact_person = self._get_access()
+        master_user, partner, contact_person, dtp, is_admin = self._get_access()
         instance = self.get_object()
 
-        if partner:
-            if instance.contact_person.partner != partner:
-                raise PermissionDenied("Unauthorized access.")
+        if not is_admin:
+            instance_partner = instance.contact_person.partner
+            user_is_authorized = False
 
-        if contact_person:
-            if instance.contact_person != contact_person:
+            if partner and instance_partner == partner:
+                user_is_authorized = True
+            elif dtp and instance_partner == dtp.partner:
+                user_is_authorized = True
+            elif contact_person and instance.contact_person == contact_person:
+                user_is_authorized = True
+
+            if not user_is_authorized:
                 raise PermissionDenied("Unauthorized access.")
 
         serializer.save(updated_by=master_user)
@@ -565,19 +699,24 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     # Delete
     # ----------------------------------
     def perform_destroy(self, instance):
-        master_user, partner, contact_person = self._get_access()
+        master_user, partner, contact_person, dtp, is_admin = self._get_access()
 
-        if partner:
-            if instance.contact_person.partner != partner:
-                raise PermissionDenied("Unauthorized access.")
+        if not is_admin:
+            instance_partner = instance.contact_person.partner
+            user_is_authorized = False
 
-        if contact_person:
-            if instance.contact_person != contact_person:
+            if partner and instance_partner == partner:
+                user_is_authorized = True
+            elif dtp and instance_partner == dtp.partner:
+                user_is_authorized = True
+            elif contact_person and instance.contact_person == contact_person:
+                user_is_authorized = True
+
+            if not user_is_authorized:
                 raise PermissionDenied("Unauthorized access.")
 
         instance.delete(by_user=master_user)
                 
-    
 class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     """
     ViewSet to get details of TrainingPartnerCP along with allocated centres.
@@ -587,6 +726,27 @@ class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
     serializer_class = TPCPToCentreDetailSerializer
     filterset_fields = ["contact_person", "allocated_centre", "created_by"]    
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.filter(username=auth_user.username).first()
+        if not master_user:
+            return qs.none()
+
+        is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
+        is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        is_admin = not (is_tp_owner or is_tpcp or is_dtp)
+
+        if not is_admin:
+            qs = qs.filter(
+                Q(contact_person__partner__master_user=master_user) |               # TP Owner
+                Q(contact_person__master_user=master_user) |                        # Contact Person Specific
+                Q(contact_person__partner__district_nodes__master_user=master_user) # District TP Node
+            ).distinct()
+
+        return qs
 
 class TrainingPartnerSubmissionViewSet(BaseTMSModelViewSet):
     """
@@ -602,6 +762,28 @@ class TrainingPartnerSubmissionViewSet(BaseTMSModelViewSet):
     filterset_fields = ["partner", "centre", "category"]
     parser_classes = [MultiPartParser, FormParser]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        auth_user = self.request.user
+
+        master_user = core_models.MasterUser.objects.filter(username=auth_user.username).first()
+        if not master_user:
+            return qs.none()
+
+        is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
+        is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
+        is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
+        is_admin = not (is_tp_owner or is_tpcp or is_dtp)
+
+        if not is_admin:
+            qs = qs.filter(
+                Q(partner__master_user=master_user) |               # TP Owner
+                Q(partner__contact_person__master_user=master_user) | # TP Contact Person
+                Q(partner__district_nodes__master_user=master_user) # District TP Node
+            ).distinct()
+
+        return qs
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def download_submission(request, pk):
@@ -612,17 +794,6 @@ def download_submission(request, pk):
     )
 
     safe_path = os.path.normpath(submission.file.name).lstrip("/")
-
-    # response = HttpResponse()
-    # response["X-Accel-Redirect"] = f"/media/{safe_path}"
-    # response["Content-Type"] = "application/octet-stream"
-    # response["Content-Disposition"] = (
-    #     f'attachment; filename="{os.path.basename(safe_path)}"'
-    # )
-    # response["X-Content-Type-Options"] = "nosniff"
-    # response["Cache-Control"] = "no-store"
-
-    # return response
     file_path = os.path.join(settings.MEDIA_ROOT, safe_path)
     
     if not os.path.exists(file_path):
@@ -1119,15 +1290,14 @@ class BatchViewSet(BaseTMSModelViewSet):
     """
     swagger_schema = BatchesSchema
     serializer_class = BatchSerializer
-    filterset_fields = ["request", "centre", "status", "start_date", "end_date", "created_by"]
+    filterset_fields = ["centre", "status", "start_date", "end_date", "created_by"]
     search_fields = ["code"]
 
     def get_queryset(self):
         # 1. select_related for ForeignKeys and OneToOne fields directly on Batch
         qs = tms_models.Batch.objects.select_related(
-            "request", 
             "centre", 
-            "request__training_plan",
+            "training_plan", # --- SURGICAL FIX: Changed from request__training_plan
         )
         
         # 2. prefetch_related for reverse relations (only active on detail views to save memory)
@@ -1315,11 +1485,11 @@ class BatchViewSet(BaseTMSModelViewSet):
             batch = (
                 tms_models.Batch.objects
                 .select_related(
-                    "request",
-                    "request__training_plan",
-                    "request__training_plan__theme",
-                    "request__district",
-                    "request__block",
+                    # --- SURGICAL FIX: Replaced `request__` lookups with direct relations ---
+                    "training_plan",
+                    "training_plan__theme",
+                    "district",
+                    "block",
                     "centre",
                     "batch_closing",   # OneToOne
                 )
@@ -1400,7 +1570,7 @@ class BatchViewSet(BaseTMSModelViewSet):
         filename = f"pragati_setu_certificate_batch_{batch.code or batch.id}.pdf"
         response = HttpResponse(pdf_buffer.read(), content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="{filename}"'
-        return response        
+        return response
 
 class BatchListPagination(PageNumberPagination):
     page_size = 10
@@ -1419,7 +1589,6 @@ class BatchesListView(APIView):
         block_id
 
     - Training / Batch:
-        request_id
         centre_id
         batch_type
         status
@@ -1445,13 +1614,15 @@ class BatchesListView(APIView):
             tms_models.Batch.objects
             .filter(is_active=True)
             .select_related(
-                "request",
-                "request__district",
-                "request__block",
-                "request__training_plan",
-                "request__training_plan__theme",
+                "district",
+                "block",
+                "training_plan",
+                "training_plan__theme",
                 "centre",
                 "centre__partner",
+            )
+            .annotate(
+                pax_count=Count('beneficiary', distinct=True) + Count('trainer', distinct=True)
             )
         )
 
@@ -1465,30 +1636,29 @@ class BatchesListView(APIView):
         block_id = params.get("block_id")
 
         if mandal_id:
-            qs = qs.filter(request__district__mandal_id=mandal_id)
+            qs = qs.filter(district__mandal_id=mandal_id)
 
         if district_category_id:
             qs = qs.filter(
-                request__district__masterdistrictcategorymapping__category_id=district_category_id
+                district__masterdistrictcategorymapping__category_id=district_category_id
             )
 
         if district_id:
-            qs = qs.filter(request__district_id=district_id)
+            qs = qs.filter(district=district_id)
 
         if block_id:
-            qs = qs.filter(request__block_id=block_id)
+            # SURGICAL CHANGE: Check both the direct block AND the block_coverages mapping
+            qs = qs.filter(
+                Q(block=block_id) | Q(block_coverages__block=block_id)
+            ).distinct()
 
         # -------------------------
         # TRAINING / BATCH FILTERS
         # -------------------------
 
-        request_id = params.get("request_id")
         centre_id = params.get("centre_id")
         batch_type = params.get("batch_type")
         status = params.get("status")
-
-        if request_id:
-            qs = qs.filter(request_id=request_id)
 
         if centre_id:
             qs = qs.filter(centre_id=centre_id)
@@ -1500,7 +1670,7 @@ class BatchesListView(APIView):
             qs = qs.filter(status=status)
 
         # -------------------------
-        # TRAINING PLAN FILTERS (via request)
+        # TRAINING PLAN FILTERS 
         # -------------------------
 
         training_plan_id = params.get("training_plan_id")
@@ -1509,16 +1679,16 @@ class BatchesListView(APIView):
         training_type = params.get("training_type")
 
         if training_plan_id:
-            qs = qs.filter(request__training_plan_id=training_plan_id)
+            qs = qs.filter(training_plan_id=training_plan_id)
 
         if theme_id:
-            qs = qs.filter(request__training_plan__theme_id=theme_id)
+            qs = qs.filter(training_plan__theme_id=theme_id)
 
         if partner_id:
-            qs = qs.filter(request__partner_id=partner_id)
+            qs = qs.filter(training_plan__partner_id=partner_id)
 
         if training_type:
-            qs = qs.filter(request__training_type=training_type)
+            qs = qs.filter(participant_type=training_type)
 
         # -------------------------
         # OWNERSHIP FILTER
@@ -1751,7 +1921,9 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
         # TRIGGER: If certificates_issued flips to True
         if instance.certificates_issued and not was_issued:
             batch = instance.batch
-            training_plan = batch.request.training_plan if batch.request else None
+            
+            # --- SURGICAL FIX: Natively pull training_plan from Batch ---
+            training_plan = batch.training_plan
             theme = training_plan.theme if training_plan else None
 
             # 1. Generate Certificates for SUCCESSFUL Beneficiaries
@@ -1767,10 +1939,11 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
                     tr_beneficiary=bb.beneficiary
                 )
 
-            # 2. Generate Certificates for SUCCESSFUL Trainers (attended=True)
+            # 2. Generate Certificates for SUCCESSFUL Trainers
+            # --- SURGICAL FIX: Standardized to use attendance_summary__is_successful ---
             successful_trainers = tms_models.BatchTrainer.objects.filter(
                 batch=batch,
-                attended=True,
+                attendance_summary__is_successful=True,
                 is_active=True
             ).select_related('trainer')
 
@@ -2123,6 +2296,31 @@ class BulkTrainingEngagementCheckAPI(APIView):
             "eligible_ids": eligible_ids,
             "engaged_ids": list(engaged_ids)
         }, status=status.HTTP_200_OK)
+
+# Resolve Partner id from given DTP user_id
+class DTPUserPartnerResolveView(APIView):
+    """
+    Resolve the Partner ID associated with a given DTP user_id.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        dtp_user_id = get_master_user_from_request(request).id
+        try:
+            dtp_user = MasterUser.objects.get(id=dtp_user_id)
+            dtp_profile = tms_models.DistrictTP.objects.filter(master_user=dtp_user).first()
+            if not dtp_profile:
+                return Response(
+                    {"detail": f"No DTP profile found for user_id {dtp_user_id}."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            partner_id = dtp_profile.partner.id if dtp_profile.partner else None
+            return Response({"partner_id": partner_id}, status=status.HTTP_200_OK)
+        except MasterUser.DoesNotExist:
+            return Response(
+                {"detail": f"DTP user with user_id {dtp_user_id} not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 # -------------------------------------------------------------------
 # Deleted Participants & Related TRs View

@@ -15,6 +15,12 @@ from TMS.api.tp_assign_v2.views import *
 # NEW TC MODULE APIs
 from TMS.api.tc_module_apis.trainees_list import *
 from TMS.api.tc_module_apis.batch_creator_v2 import *
+from TMS.api.tc_module_apis.tp_user_mgmnt import *
+from TMS.api.batch_detail_v2.views import *
+from TMS.api.tc_module_apis.batch_review import *
+from TMS.api.tc_module_apis.tpcp_creator_v2 import *
+from TMS.api.tc_module_apis.target_ach_v2 import *
+from TMS.api.tc_module_apis.tr_participants import *
 
 router = DefaultRouter()
 
@@ -304,7 +310,42 @@ urlpatterns = [
         FetchTraineesForTrainingPartnerView.as_view(),
         name='selected-trainees-by-bmmu'
     ),
+    path(
+        'dtp/parent-partner/',
+        tms_views.DTPUserPartnerResolveView.as_view(),
+        name='dtp-parent-partner'
+    ),
     path('batch-creator/create/', CreateOneShotBatchAPIView.as_view(), name='batch-oneshot-create'),
     path('batch-creator/update/<int:batch_id>/', OneShotUpdateBatchAPIView.as_view(), name='batch-oneshot-update'),
     path('batch-creator/delete/<int:batch_id>/', OneShotDeleteBatchAPIView.as_view(), name='batch-oneshot-delete'),
+
+    # TP User Management APIs
+
+    # 1) List users (Use ?type=dtp or ?type=tpcp)
+    path('tp/user-management/', UserManagementAPIView.as_view(), name='user-manage-list'),
+    
+    # 2, 3, 4) Detail, Update, Delete a specific user
+    path('tp/user-management/<int:user_id>/', UserManagementAPIView.as_view(), name='user-manage-detail'),
+    
+    # 5) Reset Password
+    path('tp/user-management/<int:user_id>/reset-password/', UserPasswordResetAPIView.as_view(), name='user-manage-reset-pwd'),   
+
+    # NEW Batch Detail API (Comprehensive)
+    path(
+        'batches/comprehensive-detail/<int:id>/', 
+        ComprehensiveBatchDetailView.as_view(), 
+        name='comprehensive-batch-detail'
+    ),
+
+    # Batch Reivew API
+    path('batch/<int:batch_id>/approve-reject/', ApproveRejectBatchAPIView.as_view(), name='batch-approve-reject'),
+
+    # TPCP Creator V2 API
+    path('tpcp/create-oneshot/', TPCPCreateOneShotView.as_view(), name='tpcp-create-oneshot'),
+
+    # DTP Target fetch
+    path('dtp/target-count/', DTPTargetCountAPIView.as_view(), name='dtp-target-count'),
+
+    # Batch wise TR Participant breakage
+    path('tr/<int:tr_id>/participants/', TrainingRequestParticipantsAPIView.as_view(), name='tr-participants-with-batches'),
 ]

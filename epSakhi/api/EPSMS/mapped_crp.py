@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.db.models import OuterRef, Subquery, Count, Q
 from core.models import MasterUser, MasterGeoUserScope, MasterDistrict, MasterPanchayat
-from epSakhi.models import CRPEP, CRPEPToPanchayat
+from epSakhi.models import CRPEP, CRPEPToPanchayat, MappingCRPTargets
 from core.api.upsrlm import BaseUpsrlmView, _as_list  
 
 def get_dmmu_crp_stats(request):
@@ -19,7 +19,12 @@ def get_dmmu_crp_stats(request):
         district_id=OuterRef('geo_district_id')
     ).values('district_name_en')[:1]
 
-    # 3. Main Query: Filter DMM users, annotate geographic data, and count completed CRPs
+    # 3. Subquery to get the district target_count based on the resolved district_id
+    target_count_subquery = MappingCRPTargets.objects.filter(
+        district_id=OuterRef('geo_district_id')
+    ).values('target_count')[:1]
+
+    # 4. Main Query: Filter DMM users, annotate geographic data, and count completed CRPs
     # A CRP is completed if it has a MasterUser record, a CRPEP record, and at least 1 CRPEPToPanchayat record.
     dmms = MasterUser.objects.filter(
         role_id=2
@@ -27,6 +32,8 @@ def get_dmmu_crp_stats(request):
         geo_district_id=Subquery(district_id_subquery)
     ).annotate(
         geo_district_name=Subquery(district_name_subquery)
+    ).annotate(
+        district_target_count=Subquery(target_count_subquery)        
     ).annotate(
         created_crp_count=Count(
             'masteruser_created_by_set',  # Related name for MasterUser.created_by
@@ -46,7 +53,8 @@ def get_dmmu_crp_stats(request):
             "username": dmm.username,
             "district_id": dmm.geo_district_id,
             "district_name_en": dmm.geo_district_name,
-            "created_crp_count": dmm.created_crp_count
+            "created_crp_count": dmm.created_crp_count,
+            "district_target_count": dmm.district_target_count
         })
 
     return JsonResponse({

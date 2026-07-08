@@ -7,6 +7,8 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from core.models import MasterUser, MasterDistrict, MasterBlock, MasterPanchayat, MasterVillage
 from django.db.models import Max
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 def generate_custom_th_urid():
     # Example generator for format like: TH_1AN33KN221 (prefix TH_ + 11 alnum)
@@ -854,6 +856,14 @@ class Batch(SoftDeleteMixin):
         through='BatchTrainer',
     )
 
+    PARTICIPANT_TYPE_CHOICES = [
+        ('BENEFICIARY', 'Beneficiary'),
+        ('TRAINER', 'Master Trainer'),
+    ]
+    participant_type = models.CharField(
+        "Applicable For", max_length=20, choices=PARTICIPANT_TYPE_CHOICES, null=True, blank=True
+    )
+
     BATCH_TYPE = [
         ('SEPARATE', 'Separate Batch'),
         ('COMBINED', 'Combined Batch'),
@@ -890,14 +900,29 @@ class Batch(SoftDeleteMixin):
 
     def save(self, *args, **kwargs):
         if not self.code:
-            # 1. Construct prefix based on newly mapped Batch attributes
-            tp = self.partner.tp_short_name if self.partner and self.partner.tp_short_name else "XXX"
-            plan_id = self.training_plan.id if self.training_plan else 0
-            
-            prefix = f"BATCH-{tp}-{plan_id}"
+            # Extract names or fallback to "XXX"
+            district = "XXX"
+            if self.district:
+                district = self.district.district_short_name_en or "XXX"
 
-            # 2. Sequence Generation with Race-Condition Protection
+            block = "XXX"
+            if self.block:
+                block = self.block.block_name_local or "XXX"
+                
+            tp = "XXX"
+            if self.partner:
+                tp = self.partner.tp_short_name or "XXX"
+                
+            plan_id = 0
+            if self.training_plan:
+                plan_id = self.training_plan.id or 0
+
+            # 2. Construct the prefix
+            prefix = f"{district}-{block}-{tp}-{plan_id}"
+
+            # 3. Sequence Generation with Race-Condition Protection
             with transaction.atomic():
+                # select_for_update() locks these rows until the save is complete
                 last_batch = Batch.objects.select_for_update().filter(
                     code__startswith=prefix
                 ).aggregate(max_seq=Max("code"))
@@ -906,6 +931,7 @@ class Batch(SoftDeleteMixin):
 
                 if last_code:
                     try:
+                        # Split by hyphen and take the last part (the sequence)
                         parts = last_code.split("-")
                         last_seq = int(parts[-1])
                     except (ValueError, IndexError):
@@ -1377,27 +1403,23 @@ class BatchParticipantCertificate(SoftDeleteMixin):
         if not self.tr_beneficiary and not self.tr_trainer:
             raise ValidationError("Either tr_beneficiary or tr_trainer must be set.")
 
-        # must be consistent with batch.request.training_type if possible
-        if self.batch and self.batch.request:
-            t_type = self.batch.request.training_type
+        # must be consistent with batch.participant_type if possible
+        if self.batch and self.batch.participant_type:
+            t_type = self.batch.participant_type
             if t_type == 'BENEFICIARY' and self.tr_trainer:
-                raise ValidationError("For BENFICIARY training_type, use tr_beneficiary, not tr_trainer.")
+                raise ValidationError("For BENEFICIARY participant_type, use tr_beneficiary, not tr_trainer.")
             if t_type == 'TRAINER' and self.tr_beneficiary:
-                raise ValidationError("For TRAINER training_type, use tr_trainer, not tr_beneficiary.")
+                raise ValidationError("For TRAINER participant_type, use tr_trainer, not tr_beneficiary.")
 
     def save(self, *args, **kwargs):
-        from datetime import datetime
+        from django.utils import timezone
 
         if not self.issued_on:
             self.issued_on = timezone.now()
 
         # Auto-generate issue_code if missing
-        if not self.issue_code and self.batch and self.batch.request:
-            training_plan_id = None
-            if self.batch.request.training_plan_id:
-                training_plan_id = self.batch.request.training_plan_id
-            else:
-                training_plan_id = 0
+        if not self.issue_code and self.batch:
+            training_plan_id = self.batch.training_plan_id or 0
 
             date_part = ""
             if self.batch.end_date:
@@ -1527,3 +1549,86 @@ class TMSFirstLoginTracker(models.Model):
 
     def __str__(self):
         return f"{self.master_user.username} - First TMS Login"
+
+# ----------------------------
+# Batch History Tracker
+# ----------------------------
+
+class BatchHistory(SoftDeleteMixin):
+    """
+    Automatically tracks date and timestamps of a Batch's status changes.
+    Records every transition (DRAFT, PENDING, SCHEDULED, REJECTED, etc.)
+    """
+    id = models.BigAutoField(primary_key=True)
+    batch = models.ForeignKey(
+        Batch, 
+        on_delete=models.CASCADE, 
+        related_name='status_history'
+    )
+    status = models.CharField(
+        max_length=30, 
+        choices=Batch.STATUS
+    )
+    remarks = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="Stores rejection reasons or automated system tracking remarks."
+    )
+
+    class Meta:
+        db_table = 'tms_batchhistory'
+        managed = True
+        ordering = ['-created_at']  # Newest history appears first
+        indexes = [
+            models.Index(fields=['batch']),
+            models.Index(fields=['status']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        batch_identifier = self.batch.code or f"ID-{self.batch.id}"
+        return f"Batch {batch_identifier} -> {self.status} on {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+# =====================================================================
+# SIGNAL: The Engine that makes BatchHistory "Self-Populating"
+# =====================================================================
+
+@receiver(post_save, sender=Batch)
+def track_batch_status_history(sender, instance, created, **kwargs):
+    """
+    Automatically creates a BatchHistory record whenever a Batch is created 
+    or its status is updated. It compares the current status against the 
+    last recorded status to prevent duplicate log entries.
+    """
+    if created:
+        # 1. Triggered when the Batch is first created (e.g., DRAFT)
+        BatchHistory.objects.create(
+            batch=instance,
+            status=instance.status,
+            remarks=f"Batch Initialized as {instance.status}.",
+            created_by=instance.created_by
+        )
+    else:
+        # 2. Triggered on subsequent updates
+        # Fetch the most recent history record for this batch
+        last_history = BatchHistory.objects.filter(batch=instance).order_by('-created_at').first()
+        
+        # Only create a new history row if the status has actually changed
+        if not last_history or last_history.status != instance.status:
+            
+            # Safely capture who made the change
+            user = instance.updated_by if instance.updated_by else instance.created_by
+            
+            # Auto-capture rejection reasons if applicable
+            remarks = None
+            if instance.status == 'REJECTED' and instance.rejection_reason:
+                remarks = f"Rejected Reason: {instance.rejection_reason}"
+            else:
+                remarks = f"Status automatically transitioned to {instance.status}"
+            
+            BatchHistory.objects.create(
+                batch=instance,
+                status=instance.status,
+                remarks=remarks,
+                created_by=user
+            )

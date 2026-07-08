@@ -175,6 +175,8 @@ custom_urls = [
     # Mapped CRP List
     path('mapped-crp-list/', get_dmmu_crp_stats, name='dmmu_crp_stats'),
     path('mcl/<int:dmmu_id>/detail/', get_dmmu_crp_detail, name='dmmu_crp_detail'),
+    # Bulk Delete CRP Panchayats
+    path('mapped-crp-bulk-delete/', BulkPanchayatDelete.as_view(), name='crp-panchayat-bulk-delete'),
 ]
 
 # Analytics

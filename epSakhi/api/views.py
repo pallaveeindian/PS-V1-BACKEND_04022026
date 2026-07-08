@@ -1655,3 +1655,52 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+# EPSMS Dashboard APIs
+class BulkPanchayatDelete(APIView):
+    """
+    Bulk Deletion of CRP-Panchayat Mappings
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RemoveCRPPanchayatSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        crpep_id = serializer.validated_data["crpep_id"]
+        panchayat_ids = serializer.validated_data["panchayat_ids"]
+
+        try:
+            crpep = CRPEP.objects.get(master_user=crpep_id)
+        except CRPEP.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "message": "CRP-EP not found."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not crpep.master_user:
+            return Response(
+                {
+                    "status": False,
+                    "message": "CRP-EP has no linked Master User."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        deleted_count, _ = CRPEPToPanchayat.objects.filter(
+            crp=crpep.master_user,
+            allocated_panchayat_id__in=panchayat_ids
+        ).delete()
+
+        return Response(
+            {
+                "status": True,
+                "message": f"{deleted_count} Panchayat allocation(s) removed successfully.",
+                "deleted_count": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )

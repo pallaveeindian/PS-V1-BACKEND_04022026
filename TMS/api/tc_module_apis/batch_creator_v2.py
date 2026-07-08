@@ -13,9 +13,7 @@ class CreateOneShotBatchAPIView(APIView):
     Creates a Batch and maps participants in a single atomic transaction.
     Prevents double-booking via strict CB_selected checks.
     Updates parent Training Requests to PENDING if fully exhausted.
-    
     """
-    
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
@@ -37,7 +35,7 @@ class CreateOneShotBatchAPIView(APIView):
 
         # Flatten participant IDs and construct mapping structure
         all_participant_ids = []
-        parsed_mappings = [] # list of dicts: {'p_id': int, 'tr_id': int, 'block_id': int}
+        parsed_mappings = [] # list of dicts: {'p_id': int, 'block_id': int}
         
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
@@ -46,9 +44,8 @@ class CreateOneShotBatchAPIView(APIView):
                 return Response({"error": "SEPARATE batch requires 'participant_ids' and 'block_id'."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
-            # TR mapping will be resolved inside the transaction below
             for pid in all_participant_ids:
-                parsed_mappings.append({'p_id': pid, 'tr_id': None, 'block_id': block_id})
+                parsed_mappings.append({'p_id': pid, 'block_id': block_id})
                 
         elif batch_type == "COMBINED":
             blocks_data = data.get("blocks", [])
@@ -58,11 +55,10 @@ class CreateOneShotBatchAPIView(APIView):
             for b in blocks_data:
                 b_id = b.get("block_id")
                 for tr in b.get("training_requests", []):
-                    tr_id = tr.get("tr_id")
                     for pid in tr.get("participant_ids", []):
                         pid_int = int(pid)
                         all_participant_ids.append(pid_int)
-                        parsed_mappings.append({'p_id': pid_int, 'tr_id': tr_id, 'block_id': b_id})
+                        parsed_mappings.append({'p_id': pid_int, 'block_id': b_id})
 
         if not all_participant_ids:
             return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
@@ -101,7 +97,7 @@ class CreateOneShotBatchAPIView(APIView):
                         "details": error_details
                     }, status=status.HTTP_409_CONFLICT)
 
-                # Fetch all valid participants from DB to ensure they exist and extract missing TR IDs (for SEPARATE mode)
+                # Fetch all valid participants from DB to ensure they exist
                 participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
                 if participants_db.count() != len(all_participant_ids):
                     raise ValueError("One or more participant IDs provided do not exist in the database.")
@@ -112,6 +108,7 @@ class CreateOneShotBatchAPIView(APIView):
                 batch = Batch.objects.create(
                     training_plan_id=data.get("training_plan_id"),
                     partner=partner,
+                    participant_type=participant_type,
                     centre_id=data.get("centre_id"),
                     district_id=data.get("district_id"),
                     block_id=data.get("block_id") if batch_type == "SEPARATE" else None,
@@ -131,8 +128,8 @@ class CreateOneShotBatchAPIView(APIView):
                     p_id = mapping['p_id']
                     p_obj = p_db_map[p_id]
                     
-                    # Resolve TR ID (if SEPARATE, fallback to the participant's parent TR)
-                    tr_id = mapping['tr_id'] or p_obj.training_id
+                    # Fix FK Error: Resolve TR ID directly and safely from the validated database participant object!
+                    tr_id = p_obj.training_id
                     touched_tr_ids.add(tr_id)
                     
                     # Track block counts for COMBINED
@@ -174,7 +171,7 @@ class CreateOneShotBatchAPIView(APIView):
                     
                     # If all participants in the request are now selected, mark as PENDING
                     if total_p > 0 and total_p == selected_p:
-                        TrainingRequest.objects.filter(id=tr_id).update(status="PENDING")
+                        TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
 
             # Transaction successful
             return Response({
@@ -309,6 +306,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 # 5. Update Batch Details
                 batch.training_plan_id = data.get("training_plan_id")
                 batch.partner = partner
+                batch.participant_type = participant_type
                 batch.centre_id = data.get("centre_id")
                 batch.district_id = data.get("district_id")
                 batch.block_id = data.get("block_id") if batch_type == "SEPARATE" else None
@@ -368,7 +366,7 @@ class OneShotUpdateBatchAPIView(APIView):
                     
                     # If all are selected -> PENDING. If not -> revert to BATCHING.
                     if total_p > 0 and total_p == selected_p:
-                        TrainingRequest.objects.filter(id=tr_id).update(status="PENDING")
+                        TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
                     else:
                         TrainingRequest.objects.filter(id=tr_id).update(status="BATCHING")
 

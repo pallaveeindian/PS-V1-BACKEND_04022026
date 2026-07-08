@@ -3,104 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        /* ── Page Layout & Ornate Border ── */
         @page {
-            size: A4;
-            /* Narrowed Margins */
-            margin: 1.2cm;
-            /* Creates your Double Border */
-            border: 2.8pt solid #1a3a6b;
-            padding: 3mm;
-            outline: 0.9pt solid #b8860b;
+            size: A4 portrait;
+            margin: 12mm;
+            /* Creates the thick double ornate border from the image */
+            border: 6pt double #8b0000;
+            padding: 6mm;
+            outline: 1.5pt solid #8b0000;
+            outline-offset: 4pt;
         }
         
         body {
             font-family: 'Noto Sans Devanagari', sans-serif;
-            color: #1a1a2e;
-            font-size: 10pt;
+            color: #1a1a1a;
+            font-size: 10.5pt;
             line-height: 1.6;
+            position: relative;
         }
 
-        /* Your Diagonal Watermark */
+        /* ── Enlarged Translucent Watermark ── */
         .watermark {
             position: fixed;
-            top: 40%;
-            left: 15%;
-            font-size: 58pt;
-            color: rgba(191, 209, 237, 0.25);
-            transform: rotate(42deg);
-            z-index: -1;
-            text-align: center;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 450px;
+            opacity: 0.12;
+            z-index: -100;
         }
 
-        /* Header Card */
-        .header-card {
-            background-color: #eaf0fb;
-            border: 2pt solid #1a3a6b;
-            border-bottom: 3pt solid #b8860b;
+        /* ── Header Styling (Matching Image Colors) ── */
+        .header-container {
+            position: relative;
             text-align: center;
-            padding: 12pt;
-            margin-bottom: 15pt;
+            margin-bottom: 25px;
+            padding-top: 15px;
+            padding-left: 105px; 
+            padding-right: 105px; 
         }
-        .header-org { color: #b8860b; font-weight: bold; font-size: 10pt; }
-        .header-title { color: #1a3a6b; font-weight: bold; font-size: 24pt; margin: 5pt 0; }
-        .header-sub { color: #4a5568; font-size: 9pt; }
+        .logo-left {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 90px;
+        }
+        .logo-right {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 90px;
+        }
+        .top-red {
+            color: #8b0000;
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 12px; /* Space before main heading */
+        }
+        .main-black {
+            color: #1a4f24; /* Dark Green */
+            font-size: 30pt; /* Larger */
+            font-weight: 900; /* Very Bold */
+            margin: 12px 0 10px 0;
+            letter-spacing: 0.5px;
+            line-height: 1.1;
+            /* Subtle embossed / shadow effect */
+            text-shadow: 1px 1px 0px #ffffff, 2px 2px 4px rgba(0, 0, 0, 0.25); 
+        }
+        .sub-red{
+            color:#8b0000;
+            font-size:15pt;
+            font-weight:700;
+            margin-top:4px;
+        }
+        .fin-year {
+            color: #000000;
+            font-size: 13pt;
+            font-weight: bold;
+            margin: 6px 0;
+        }
+        .cert-title {
+            color: #8b0000;
+            font-size: 26pt;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #d1d5db;
+            margin-top: 10px;
+            letter-spacing: 1.5px;
+        }
 
-        /* Tables */
+        /* ── Tables (Optimized for Portrait fitting 12 columns) ── */
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10pt;
-            font-size: 8.5pt;
+            margin-bottom: 12pt;
+            font-size: 8pt; /* Slightly smaller to fit cost columns in portrait */
         }
         th {
-            background-color: #1a3a6b;
+            background-color: #8b0000;
             color: white;
-            border: 1.5pt solid #2e5da6;
-            border-bottom: 1.8pt solid #b8860b;
-            padding: 5pt;
+            border: 1pt solid #5c0000;
+            padding: 4pt 3pt;
+            text-align: center;
         }
         td {
-            border: 0.4pt solid #c0cfe0;
-            padding: 5pt;
+            border: 0.5pt solid #cbd5e1;
+            padding: 4pt 3pt;
+            color: #1e293b;
         }
-        tr:nth-child(even) td { background-color: #eaf0fb; }
-        tr:nth-child(odd) td { background-color: #fafcff; }
+        tr:nth-child(even) td { background-color: #fdf8f8; }
+        tr:nth-child(odd) td { background-color: #ffffff; }
 
-        /* Helpers */
-        .hr-gold { border-top: 1.2pt solid #b8860b; margin: 8pt 0; }
-        .hr-blue { border-top: 0.6pt solid #2e5da6; margin: 4pt 0; }
-        .flex-between { display: flex; justify-content: space-between; }
-        .text-navy { color: #1a3a6b; font-weight: bold; }
+        /* ── Helpers ── */
+        .hr-maroon { border-top: 1.5pt solid #8b0000; margin: 8pt 0; }
+        .flex-between { display: flex; justify-content: space-between; margin-bottom: 10pt; }
+        .text-maroon { color: #8b0000; font-weight: bold; }
         
-        /* Signatories */
-        .sig-container { display: flex; justify-content: space-between; margin-top: 20pt; }
+        /* ── Signatories (Preserving your original Box Structure) ── */
+        .sig-container { display: flex; justify-content: space-between; margin-top: 25pt; }
         .sig-box {
             width: 47%;
-            border: 1.2pt solid #2e5da6;
-            background-color: #fafcff;
+            border: 1.5pt solid #8b0000;
+            background-color: #ffffff;
             padding-bottom: 8pt;
         }
         .sig-header {
-            background-color: #1a3a6b;
+            background-color: #8b0000;
             color: white;
             text-align: center;
             font-weight: bold;
-            padding: 7pt;
-            border-bottom: 1.5pt solid #b8860b;
+            padding: 6pt;
+            border-bottom: 1.5pt solid #5c0000;
             margin-bottom: 6pt;
+            font-size: 11pt;
         }
-        .sig-line { font-size: 9pt; padding: 0 5pt; margin-bottom: 4pt; }
-        .footer { text-align: center; font-size: 8pt; color: #4a5568; margin-top: 10pt; }
+        .sig-line { font-size: 9pt; padding: 0 6pt; margin-bottom: 4pt; color: #1a1a1a; }
+        .footer { text-align: center; font-size: 8pt; color: #64748b; margin-top: 15pt; }
     </style>
 </head>
 <body>
 
-    <div class="watermark">प्रगति सेतु<br>UPSRLM</div>
+    <!-- Center Translucent Watermark -->
+    <img src="{{ right_logo }}" class="watermark" />
 
-    <div class="header-card">
-        <div class="header-org">उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन (UPSRLM)</div>
-        <div class="header-title">प्रमाण पत्र</div>
-        <div class="header-sub">प्रगति सेतु – प्रशिक्षण प्रबंधन प्रणाली</div>
+    <!-- Header Section matching image theme -->
+    <div class="header-container">
+        <img src="{{ left_logo }}" class="logo-left" />
+        <div class="top-red">दीनदयाल अंत्योदय योजना - राष्ट्रीय ग्रामीण आजीविका मिशन</div>
+        <div class="main-black">उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन</div>
+        <div class="sub-red">{{ level_hi }} स्तरीय प्रशिक्षण कार्यक्रम</div>
+        <div class="fin-year">वित्तीय वर्ष {{ financial_year }}</div>
+        <div class="cert-title">प्रशिक्षण प्रमाण-पत्र</div>
+        <img src="{{ right_logo }}" class="logo-right" />
     </div>
 
     <div class="flex-between">
@@ -114,11 +167,11 @@
         </div>
     </div>
 
-    <div class="hr-blue"></div>
-    <div class="text-navy" style="text-align: justify; margin: 4pt 0;">
+    <div class="hr-maroon"></div>
+    <div class="text-maroon" style="text-align: justify; margin: 4pt 0;">
         विषय: वित्तीय वर्ष {{ financial_year }} के अंतर्गत {{ theme_name }} थीम – {{ plan_name }} मॉड्यूल के अंतर्गत कराए गए प्रशिक्षण के संबंध में।
     </div>
-    <div class="hr-gold"></div>
+    <div class="hr-maroon"></div>
 
     <p style="text-align: justify;">
         यह प्रमाणित किया जाता है कि संबंधित प्रतिभागियों ने <b>{{ level_hi }}</b> स्तर के अंतर्गत, <b>{{ plan_name }}</b> शीर्षक से आयोजित <b>{{ no_of_days }} दिवसीय</b> {{ plan_type_hi }} प्रशिक्षण कार्यक्रम में वित्तीय वर्ष <b>{{ financial_year }}</b> के अंतर्गत सफलतापूर्वक सहभागिता की है।
@@ -133,53 +186,85 @@
     <p>प्रशिक्षण के दौरान प्रतिभागियों द्वारा संतोषजनक सहभागिता एवं सक्रिय योगदान किया गया।</p>
     <p>यह प्रमाण पत्र प्रशिक्षण में सफल सहभागिता के उपरांत निर्गत किया जा रहा है।</p>
 
-    <div class="hr-gold"></div>
-    <div class="text-navy">कुल प्रतिभागियों की संख्या: {{ participants|length }}</div>
+    <div class="hr-maroon"></div>
+    <div class="text-maroon">कुल प्रतिभागियों की संख्या: {{ participants|length }}</div>
 
     {% if not participants %}
-        <p>कोई सफल प्रतिभागी इस बैच में नहीं मिला।</p>
+        <p style="text-align: center; color: #8b0000; font-weight: bold; padding: 10px;">कोई सफल प्रतिभागी इस बैच में नहीं मिला।</p>
     {% elif training_type == 'BENEFICIARY' %}
         <table>
-            <tr><th>क्र.</th><th>नाम</th><th>आयु</th><th>पदनाम</th><th>PLD स्थिति</th><th>सामाजिक श्रेणी</th><th>धर्म</th><th>मोबाइल</th><th>उपस्थिति (%)</th></tr>
+            <tr>
+                <th>क्र.</th>
+                <th style="text-align: left;">नाम</th>
+                <th>आयु</th>
+                <th style="text-align: left;">पदनाम</th>
+                <th>PLD</th>
+                <th>श्रेणी</th>
+                <th>धर्म</th>
+                <th>मोबाइल</th>
+                <th>उपस्थिति</th>
+                <th style="text-align: right;">TA/HRA</th>
+                <th style="text-align: right;">DA</th>
+                <th style="text-align: right;">कुल (₹)</th>
+            </tr>
             {% for p in participants %}
             <tr>
                 <td style="text-align: center;">{{ forloop.counter }}</td>
                 <td>{{ p.member_name|default:"—" }}</td>
                 <td style="text-align: center;">{{ p.age|default:"—" }}</td>
                 <td>{{ p.designation|default:"सदस्य" }}</td>
-                <td>{{ p.pld_status|default:"—" }}</td>
-                <td>{{ p.social_category|default:"—" }}</td>
-                <td>{{ p.religion|default:"—" }}</td>
-                <td>{{ p.mobile|default:"—" }}</td>
-                <td style="text-align: center;">{{ p.attendance_pct }}%</td>
+                <td style="text-align: center;">{{ p.pld_status|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.social_category|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.religion|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.mobile|default:"—" }}</td>
+                <td style="text-align: center; font-weight: bold;">{{ p.attendance_pct }}%</td>
+                <td style="text-align: right;">{{ p.hra|default:"0.00" }}</td>
+                <td style="text-align: right;">{{ p.ta_da|default:"0.00" }}</td>
+                <td style="text-align: right; font-weight: bold; color: #8b0000;">{{ p.total_cost|default:"0.00" }}</td>
             </tr>
             {% endfor %}
         </table>
     {% else %}
         <table>
-            <tr><th>क्र.</th><th>नाम</th><th>मोबाइल</th><th>उपस्थिति (%)</th></tr>
+            <tr>
+                <th>क्र.</th>
+                <th style="text-align: left;">नाम</th>
+                <th>मोबाइल</th>
+                <th>उपस्थिति (%)</th>
+                <th style="text-align: right;">TA/HRA (₹)</th>
+                <th style="text-align: right;">DA (₹)</th>
+                <th style="text-align: right;">कुल (₹)</th>
+            </tr>
             {% for p in participants %}
             <tr>
                 <td style="text-align: center;">{{ forloop.counter }}</td>
                 <td>{{ p.full_name|default:"—" }}</td>
-                <td>{{ p.mobile_no|default:"—" }}</td>
-                <td style="text-align: center;">{{ p.attendance_pct }}%</td>
+                <td style="text-align: center;">{{ p.mobile_no|default:"—" }}</td>
+                <td style="text-align: center; font-weight: bold;">{{ p.attendance_pct }}%</td>
+                <td style="text-align: right;">{{ p.hra|default:"0.00" }}</td>
+                <td style="text-align: right;">{{ p.ta_da|default:"0.00" }}</td>
+                <td style="text-align: right; font-weight: bold; color: #8b0000;">{{ p.total_cost|default:"0.00" }}</td>
             </tr>
             {% endfor %}
         </table>
     {% endif %}
 
     {% if master_trainers %}
-    <div class="hr-blue"></div>
-    <div class="text-navy">प्रशिक्षण बैच के मास्टर ट्रेनर:</div>
-    <table>
-        <tr><th>क्र.</th><th>नाम</th><th>मोबाइल</th><th>पदनाम</th></tr>
+    <div class="hr-maroon"></div>
+    <div class="text-maroon">प्रशिक्षण बैच के मास्टर ट्रेनर:</div>
+    <table style="width: 80%;">
+        <tr>
+            <th>क्र.</th>
+            <th style="text-align: left;">नाम</th>
+            <th>मोबाइल</th>
+            <th style="text-align: left;">पदनाम</th>
+        </tr>
         {% for mt in master_trainers %}
         <tr>
             <td style="text-align: center;">{{ forloop.counter }}</td>
             <td>{{ mt.full_name|default:"—" }}</td>
-            <td>{{ mt.mobile_no|default:"—" }}</td>
-            <td style="text-align: center;">{{ mt.designation|default:"—" }}</td>
+            <td style="text-align: center;">{{ mt.mobile_no|default:"—" }}</td>
+            <td>{{ mt.designation|default:"—" }}</td>
         </tr>
         {% endfor %}
     </table>
@@ -192,7 +277,7 @@
             <div class="sig-line">पदनाम: _______________________________</div>
             <div class="sig-line">कार्यालय: _______________________________</div>
             <div class="sig-line">निर्गमन तिथि: ____________________________</div>
-            <div class="sig-line" style="margin-top: 40pt;">___________________________________</div>
+            <div class="sig-line" style="margin-top: 35pt;">___________________________________</div>
             <div class="sig-line">अधिकृत हस्ताक्षरकर्ता<br><span style="font-size: 8pt; color: #4a5568;">अधिकृत अधिकारी, UPSRLM / जिला प्रशासन</span></div>
         </div>
         <div class="sig-box">
@@ -201,12 +286,11 @@
             <div class="sig-line">पदनाम: _______________________________</div>
             <div class="sig-line">कार्यालय: _______________________________</div>
             <div class="sig-line">निर्गमन तिथि: ____________________________</div>
-            <div class="sig-line" style="margin-top: 40pt;">___________________________________</div>
+            <div class="sig-line" style="margin-top: 35pt;">___________________________________</div>
             <div class="sig-line">अधिकृत हस्ताक्षरकर्ता<br><span style="font-size: 8pt; color: #4a5568;">अधिकृत अधिकारी, UPSRLM / जिला प्रशासन</span></div>
         </div>
     </div>
 
-    <div class="hr-blue" style="margin-top: 15pt;"></div>
     <div class="footer">
         प्रगति सेतु – प्रशिक्षण प्रबंधन प्रणाली द्वारा जनरेटेड<br>
         प्रेरणा पहल | उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन (UPSRLM)

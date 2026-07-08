@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<title>प्रशिक्षण प्रमाण-पत्र</title>
+<style>
+    /* ══════════════════ PAGE SETUP (LANDSCAPE) ══════════════════ */
+    @page {
+        size: A4 landscape;
+        margin: 10mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Noto Sans Devanagari', 'Mangal', sans-serif;
+        color: #1a1a1a;
+        background-color: #ffffff;
+        overflow: hidden; /* SURGICAL LOCK: Prevent absolute body overflow */
+    }
+
+    /* ══════════════════ ORNATE BORDER REPLICATION ══════════════════ */
+    /* Approximating the heavy, ornate maroon frame from the picture */
+    .certificate-page {
+        position: relative;
+        width: 100%;
+        /* SURGICAL LOCK: Fixed height 188mm safely fits inside 190mm printable area */
+        height: 188mm; 
+        padding: 12mm 18mm;
+        background-color: #ffffff;
+        border: 4px solid #8b0000;
+        outline: 1px solid #8b0000;
+        outline-offset: 4px;
+        box-shadow: inset 0 0 0 6px #ffffff, inset 0 0 0 8px #8b0000;
+        overflow: hidden;
+        page-break-inside: avoid; /* SURGICAL LOCK: Force single page rendering */
+    }
+
+    /* Inner decorative border approximation */
+    .flourish-border {
+        position: absolute;
+        top: 10px; left: 10px; right: 10px; bottom: 10px;
+        border: 2px dashed #8b0000;
+        pointer-events: none;
+        z-index: 5;
+    }
+
+    /* ══════════════════ WATERMARK ══════════════════ */
+    .watermark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 380px;
+        opacity: 0.08; /* Very faded, like in the picture */
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .content { 
+        position: relative; 
+        z-index: 1; 
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ══════════════════ HEADER ══════════════════ */
+    .header-container {
+        position: relative;
+        text-align: center;
+        padding: 0 110px;
+        margin-bottom: 8mm;
+    }
+    
+    .logo-left, .logo-right {
+        position: absolute;
+        top: 5px;
+        width: 95px;
+        height: 95px;
+        object-fit: contain;
+    }
+    .logo-left  { left: 10mm; }
+    .logo-right { right: 10mm; }
+
+    .top-red {
+        color: #c92a2a;
+        font-size: 15pt;
+        font-weight: bold;
+        margin-bottom: 2px;
+    }
+    
+    .main-black {
+        color: #14532d; /* Dark green/black as seen in the picture */
+        font-size: 26pt;
+        font-weight: 900;
+        margin: 0;
+        letter-spacing: 0.5px;
+        text-shadow: 2px 2px 0px #ffffff, 3px 3px 4px rgba(0,0,0,0.3);
+    }
+    
+    .sub-red {
+        color: #c92a2a;
+        font-size: 17pt;
+        font-weight: 700;
+        margin-top: 4px;
+    }
+    
+    .fin-year {
+        color: #1e3a8a; /* Dark Blue as in the picture */
+        font-size: 14pt;
+        font-weight: bold;
+        margin: 6px 0;
+    }
+    
+    .cert-title {
+        color: #c92a2a;
+        font-size: 26pt;
+        font-weight: 900;
+        text-shadow: 2px 2px 0px #a8a29e, 3px 3px 0px #d6d3d1; /* Distinct 3D shadow from picture */
+        margin-top: 8px;
+        letter-spacing: 1.5px;
+        display: inline-block;
+    }
+
+    /* ══════════════════ BODY / FILL-IN TEXT ══════════════════ */
+    .cert-body {
+        font-size: 14pt;
+        line-height: 2.5;
+        margin: 2mm 15mm;
+        text-align: left;
+        font-weight: 500;
+    }
+    
+    p {
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Dotted underline mimicking the printed dots in the image */
+    .blank {
+        display: inline-block;
+        border-bottom: 2.5pt dotted #444;
+        padding: 0 8px;
+        text-align: center;
+        font-weight: bold;
+        color: #1a1a1a;
+        line-height: 1.2;
+        /* SURGICAL LOCK: Prevent wrapping so long names don't expand the page height */
+        white-space: nowrap; 
+        overflow: hidden;
+        vertical-align: bottom;
+    }
+    
+    .blank-name   { min-width: 480px; }
+    .blank-father { min-width: 420px; }
+    .blank-dist   { min-width: 250px; }
+    .blank-block  { min-width: 320px; }
+    .blank-gp     { min-width: 320px; }
+    .blank-cadre  { min-width: 280px; }
+    .blank-date   { min-width: 140px; }
+
+    /* ══════════════════ SIGNATORIES ══════════════════ */
+    .sig-container {
+        display: flex;
+        justify-content: space-between;
+        margin-top: auto;
+        padding: 0 10mm 10mm 10mm;
+    }
+    
+    .sig-box {
+        width: 23%;
+        text-align: center;
+        position: relative;
+    }
+    
+    .sig-line-space {
+        height: 45pt;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    
+    .sig-image {
+        max-height: 40pt; /* For the MD's signature if provided */
+        max-width: 100%;
+    }
+    
+    .sig-name {
+        font-weight: normal;
+        font-size: 11pt;
+        color: #1a1a1a;
+        padding-top: 4px;
+        margin: 0 6px;
+    }
+    
+    .sig-role {
+        font-size: 11pt;
+        color: #1a1a1a;
+    }
+    
+    .sig-sub {
+        font-size: 11pt;
+        color: #1a1a1a;
+    }
+    
+    /* Dotted line under district managers */
+    .inline-blank {
+        display: inline-block;
+        min-width: 100px;
+        border-bottom: 1.5pt dotted #1a1a1a;
+    }
+
+</style>
+</head>
+<body>
+
+<div class="certificate-page">
+    <div class="flourish-border"></div>
+
+    <!-- Center watermark -->
+    <img src="{{ right_logo }}" class="watermark" />
+
+    <div class="content">
+
+        <!-- ═════ Header ═════ -->
+        <div class="header-container">
+            <img src="{{ left_logo }}" class="logo-left" />
+            
+            <div class="top-red">दीनदयाल अंत्योदय योजना - राष्ट्रीय ग्रामीण आजीविका मिशन</div>
+            <div class="main-black">उत्तर प्रदेश राज्य ग्रामीण आजीविका मिशन</div>
+            <div class="sub-red">{{ level_hi|default:"जनपद" }} स्तरीय प्रशिक्षण कार्यक्रम</div>
+            <div class="fin-year">वित्तीय वर्ष {{ financial_year|default:"2025 - 2026" }}</div>
+            <div class="cert-title">प्रशिक्षण प्रमाण-पत्र</div>
+            
+            <img src="{{ right_logo }}" class="logo-right" />
+        </div>
+
+        <!-- ═════ Fill-in Body Text (Exactly aligned with the picture) ═════ -->
+        <div class="cert-body">
+            <p>
+                प्रमाणित किया जाता है कि श्री/सुश्री/श्रीमती 
+                <span class="blank blank-name">{{ participant_name }}</span>
+            </p>
+            <p>
+                पिता/पति 
+                <span class="blank blank-father">{{ father_husband_name }}</span> 
+                जनपद 
+                <span class="blank blank-dist">{{ district_name }}</span>
+            </p>
+            <p>
+                विकास खण्ड 
+                <span class="blank blank-block">{{ block_name }}</span> 
+                ग्राम पंचायत 
+                <span class="blank blank-gp">{{ gram_panchayat }}</span> 
+                द्वारा प्रशिक्षण
+            </p>
+            <p>
+                कैडर 
+                <span class="blank blank-cadre">{{ cadre }}</span> 
+                में दिनांक 
+                <span class="blank blank-date">{{ start_str }}</span> 
+                से 
+                <span class="blank blank-date">{{ end_str }}</span> 
+                तक प्रशिक्षण प्राप्त किया
+            </p>
+            <p>
+                गया। प्रशिक्षण के दौरान इनकी सहभागिता अत्यंत सराहनीय रही।
+            </p>
+            <p style="text-align:center; margin-top: 5mm;">
+                हम इनके उज्जवल भविष्य की कामना करते हैं।
+            </p>
+        </div>
+
+        <!-- ═════ Signatories (Matching the 4 columns in the picture) ═════ -->
+        <div class="sig-container">
+            <!-- 1. Managing Director (NITC) -->
+            <div class="sig-box">
+                <div class="sig-line-space">
+                    {% if md_signature_url %}
+                        <img src="{{ md_signature_url }}" class="sig-image" />
+                    {% endif %}
+                </div>
+                <div class="sig-role">प्रबंध निदेशक</div>
+                <div class="sig-sub">निटकान लिमिटेड</div>
+            </div>
+            
+            <!-- 2. Master Trainer -->
+            <div class="sig-box">
+                <div class="sig-line-space"></div>
+                <div class="sig-role">रिसोर्स पर्सन/मास्टर ट्रेनर</div>
+            </div>
+            
+            <!-- 3. District Mission Manager -->
+            <div class="sig-box">
+                <div class="sig-line-space"></div>
+                <div class="sig-role">जिला मिशन प्रबंधक</div>
+                <div class="sig-sub">( <span class="inline-blank"></span> )</div>
+            </div>
+            
+            <!-- 4. Upayukt (Satah Rojgar) -->
+            <div class="sig-box">
+                <div class="sig-line-space"></div>
+                <div class="sig-role">उपायुक्त (स्वत: रोजगार)</div>
+                <div class="sig-sub">(जनपद <span class="inline-blank"></span> )</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

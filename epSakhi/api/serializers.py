@@ -501,3 +501,28 @@ class CRPListSerializer(serializers.ModelSerializer):
         panchayats = MasterPanchayat.objects.filter(panchayat_id__in=allocations)
 
         return PanchayatSerializer(panchayats, many=True).data
+
+
+# EPSMS Serializers
+class RemoveCRPPanchayatSerializer(serializers.Serializer):
+    crpep_id = serializers.IntegerField()
+    panchayat_ids = serializers.CharField()
+
+    def validate_panchayat_ids(self, value):
+        try:
+            ids = [
+                int(x.strip())
+                for x in value.split(",")
+                if x.strip()
+            ]
+        except ValueError:
+            raise serializers.ValidationError(
+                "Panchayat IDs must be comma separated integers."
+            )
+
+        if not ids:
+            raise serializers.ValidationError(
+                "At least one Panchayat ID is required."
+            )
+
+        return ids
