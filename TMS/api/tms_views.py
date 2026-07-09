@@ -2223,7 +2223,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
             
             # Apply strict Financial Year filter if provided
             if financial_year:
-                tr_bens_qs = tr_bens_qs.filter(training__financial_year=financial_year)
+                tr_bens_qs = tr_bens_qs.filter(training__financial_year=financial_year, is_active=True)
                 
             engaged_tr_bens = tr_bens_qs.values_list("lokos_member_code", flat=True)
 
@@ -2236,7 +2236,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
             
             # Apply strict Financial Year filter if provided
             if financial_year:
-                batch_bens_qs = batch_bens_qs.filter(batch__financial_year=financial_year)
+                batch_bens_qs = batch_bens_qs.filter(batch__financial_year=financial_year, is_active=True)
                 
             engaged_batch_bens = batch_bens_qs.values_list("beneficiary__lokos_member_code", flat=True)
 
@@ -2254,7 +2254,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
             )
             
             if financial_year:
-                tr_trainers_qs = tr_trainers_qs.filter(training__financial_year=financial_year)
+                tr_trainers_qs = tr_trainers_qs.filter(training__financial_year=financial_year, is_active=True)
                 
             engaged_tr_trainers = tr_trainers_qs.values_list("trainer_id", flat=True)
 
@@ -2266,7 +2266,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
             )
             
             if financial_year:
-                batch_master_trainers_qs = batch_master_trainers_qs.filter(batch__financial_year=financial_year)
+                batch_master_trainers_qs = batch_master_trainers_qs.filter(batch__financial_year=financial_year, is_active=True)
                 
             engaged_batch_master_trainers = batch_master_trainers_qs.values_list("master_trainer_id", flat=True)
 

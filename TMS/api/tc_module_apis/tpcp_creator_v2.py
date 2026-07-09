@@ -1,3 +1,6 @@
+import uuid
+import random
+import string
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,6 +10,11 @@ from django.db import transaction
 from TMS.api.serializers import TrainingPartnerCPSerializer
 import TMS.models as tms_models 
 import core.models as core_models
+
+def generate_custom_th_urid():
+    # Example generator for format like: TH_1AN33KN221 (prefix TH_ + 11 alnum)
+    body = ''.join(random.choices(string.ascii_uppercase + string.digits, k=11))
+    return f"TH_{body}"
 
 class TPCPCreateOneShotView(APIView):
     """
@@ -27,6 +35,7 @@ class TPCPCreateOneShotView(APIView):
         email = data.get('email')
         address = data.get('address')
         partner_id = data.get('partner')
+        TH_urid = generate_custom_th_urid()
 
         if not all([username, password, name]):
             return Response(
@@ -75,7 +84,8 @@ class TPCPCreateOneShotView(APIView):
                     username=username,
                     role_id=data.get('role', 11),  # Default to 11 as mapped in your frontend
                     is_active=True,
-                    created_by=master_user
+                    created_by=master_user,
+                    TH_urid=TH_urid,
                 )
                 new_master_user.password = password  # Storing in cleartext as requested
                 new_master_user.save()
@@ -88,7 +98,8 @@ class TPCPCreateOneShotView(APIView):
                     mobile_number=mobile_number,
                     email=email,
                     address=address,
-                    created_by=master_user
+                    created_by=master_user,
+                    TH_urid=TH_urid,
                 )
 
             return Response({

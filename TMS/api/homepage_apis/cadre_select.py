@@ -24,7 +24,7 @@ class PublicCadreSelectionSummaryView(APIView):
         exact_date = request.query_params.get('date')
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        financial_year = request.query_params.get('financial_year') # <-- NEW PARAMETER
+        financial_year = request.query_params.get('financial_year')
         
         # Custom summary parameter flag
         district_wise_cadre_summary = request.query_params.get('district_wise_cadre_summary') == '1'

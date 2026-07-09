@@ -51,7 +51,6 @@ EnterpriseSupportDetail = EnterpriseSubsidyDetail
 CACHE_TTL = getattr(settings, 'CACHE_TTL', 300)
 SHG_CACHE_TTL = getattr(settings, 'SHG_CACHE_TTL', 300)
 
-
 def _parse_csv_param(value: str):
     if not value:
         return []
@@ -1693,8 +1692,9 @@ class BulkPanchayatDelete(APIView):
 
         deleted_count, _ = CRPEPToPanchayat.objects.filter(
             crp=crpep.master_user,
-            allocated_panchayat_id__in=panchayat_ids
-        ).delete()
+            allocated_panchayat_id__in=panchayat_ids,
+            is_active=True,  
+        ).update(is_active=False)
 
         return Response(
             {
