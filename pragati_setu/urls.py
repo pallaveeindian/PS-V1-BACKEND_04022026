@@ -39,6 +39,7 @@ urlpatterns = [
     path('api/v1/epsakhi/', include(('epSakhi.api.epsakhi_urls', 'epSakhi'), namespace='epSakhi')),
     path("api/v1/ldms/", include("LDMS.api.urls")),
     path("api/v1/prerna/", include("canteen.api.urls")),
+    path("api/v1/support/", include(("support.urls", "support"), namespace="support")),
 ]
 
 urlpatterns += [

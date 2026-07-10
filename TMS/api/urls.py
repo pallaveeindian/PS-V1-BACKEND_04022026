@@ -2,6 +2,7 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework.permissions import AllowAny
 
 from TMS.api import tms_views, dashboard_views, report_views
 
@@ -348,4 +349,24 @@ urlpatterns = [
 
     # Batch wise TR Participant breakage
     path('tr/<int:tr_id>/participants/', TrainingRequestParticipantsAPIView.as_view(), name='tr-participants-with-batches'),
+
+    # Public TMS Themes
+    path(
+        "public/training-themes/",
+        tms_views.TrainingThemeViewSet.as_view(
+            {"get": "list"},
+            permission_classes=[AllowAny],
+        ),
+        name="public-training-theme-list",
+    ),
+
+    # Public TMS Training Plans
+    path(
+        "public/training-plans/",
+        tms_views.TrainingPlanViewSet.as_view(
+            {"get": "list"},
+            permission_classes=[AllowAny],
+        ),
+        name="public-training-plan-list",
+    ), 
 ]

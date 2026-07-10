@@ -59,7 +59,15 @@ class TrainingRequestParticipantsAPIView(APIView):
         # 3A. Process BENEFICIARY Training Requests
         # ==========================================
         if tr.training_type == 'BENEFICIARY':
-            participants = TRBeneficiary.objects.filter(training=tr, is_active=True)
+            participants = (
+                TRBeneficiary.objects.filter(training=tr, is_active=True)
+                .select_related(
+                    "district",
+                    "block",
+                    "panchayat",
+                    "village",
+                )
+            )
             
             # Pre-fetch batches for selected participants to avoid N+1 DB queries
             selected_ids = participants.filter(CB_selected=True).values_list('id', flat=True)
@@ -92,9 +100,21 @@ class TrainingRequestParticipantsAPIView(APIView):
                     "pld_status": p.pld_status,
                     "mobile": p.mobile,
                     "district_id": p.district_id,
+                    "district_name_en": (
+                        p.district.district_name_en if p.district else None
+                    ),
                     "block_id": p.block_id,
+                    "block_name_en": (
+                        p.block.block_name_en if p.block else None
+                    ),
                     "panchayat_id": p.panchayat_id,
+                    "panchayat_name_en": (
+                        p.panchayat.panchayat_name_en if p.panchayat else None
+                    ),
                     "village_id": p.village_id,
+                    "village_name_english": (
+                        p.village.village_name_english if p.village else None
+                    ),
                     "CB_selected": p.CB_selected,
                     "attended": p.attended,
                     "is_replaced": p.is_replaced,
@@ -106,7 +126,13 @@ class TrainingRequestParticipantsAPIView(APIView):
         # 3B. Process TRAINER Training Requests
         # ==========================================
         elif tr.training_type == 'TRAINER':
-            participants = TRTrainer.objects.filter(training=tr, is_active=True)
+            participants = (
+                TRTrainer.objects.filter(training=tr, is_active=True)
+                .select_related(
+                    "district",
+                    "block",
+                )
+            )
             
             # Pre-fetch batches for selected participants to avoid N+1 DB queries
             selected_ids = participants.filter(CB_selected=True).values_list('id', flat=True)
@@ -135,7 +161,13 @@ class TrainingRequestParticipantsAPIView(APIView):
                     "mobile_no": p.mobile_no,
                     "aadhaar_no": p.aadhaar_no,
                     "district_id": p.district_id,
+                    "district_name_en": (
+                        p.district.district_name_en if p.district else None
+                    ),
                     "block_id": p.block_id,
+                    "block_name_en": (
+                        p.block.block_name_en if p.block else None
+                    ),
                     "CB_selected": p.CB_selected,
                     "attended": p.attended,
                     "is_replaced": p.is_replaced,
