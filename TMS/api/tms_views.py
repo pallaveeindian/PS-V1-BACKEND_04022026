@@ -185,7 +185,7 @@ class TrainingThemeViewSet(BaseTMSModelViewSet):
     CRUD for TrainingTheme.
     """
     swagger_schema = MastersSchema
-    queryset = tms_models.TrainingTheme.objects.all()
+    queryset = tms_models.TrainingTheme.objects.filter(is_active=True)
     serializer_class = TrainingThemeSerializer
     filterset_fields = ["theme_name", "expert"]
     search_fields = ["theme_name"]
