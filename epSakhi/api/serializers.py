@@ -390,6 +390,7 @@ class CRPEPAnalyticsSerializer(serializers.ModelSerializer):
 # CRP-Panchayat mapping Form Serializers
 class CRPPanchayatBulkSerializer(serializers.Serializer):
     crp_id = serializers.IntegerField()
+    created_by = serializers.IntegerField()
     allocated_panchayats = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False
@@ -404,6 +405,14 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
         except CRPEP.DoesNotExist:
             raise serializers.ValidationError("Invalid CRP ID")
 
+        return value
+
+    def validate_created_by(self, value):
+        """
+        Validate MasterUser exists
+        """
+        if not MasterUser.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Invalid created_by ID")
         return value
 
     def validate_allocated_panchayats(self, value):
@@ -422,9 +431,9 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
     def create(self, validated_data):
         crp_id = validated_data["crp_id"]
         panchayats = validated_data["allocated_panchayats"]
-        user = self.context["request"].user
+        created_by = validated_data["created_by"]
 
-        master_user = MasterUser.objects.get(username=user.username)
+        master_user = MasterUser.objects.get(id=created_by)
 
         existing = set(
             CRPEPToPanchayat.objects.filter(
@@ -437,7 +446,6 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
         created_rows = []
 
         with transaction.atomic():
-
             for panchayat_id in panchayats:
 
                 if panchayat_id in existing:
@@ -453,7 +461,7 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
 
                 created_rows.append(obj)
 
-        return created_rows 
+        return created_rows
     
 # CRP view with panchayat
 class PanchayatSerializer(serializers.ModelSerializer):
@@ -507,6 +515,7 @@ class CRPListSerializer(serializers.ModelSerializer):
 class RemoveCRPPanchayatSerializer(serializers.Serializer):
     crpep_id = serializers.IntegerField()
     panchayat_ids = serializers.CharField()
+    deleted_by = serializers.IntegerField()
 
     def validate_panchayat_ids(self, value):
         try:

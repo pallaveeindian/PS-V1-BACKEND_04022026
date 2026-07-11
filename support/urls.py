@@ -1,11 +1,6 @@
 # support/urls.py
 from django.urls import path
-from .views import (
-    TicketCreateAPIView,
-    TicketDeleteAPIView,
-    TicketListAPIView,
-    TicketDetailAPIView
-)
+from .views import *
 
 urlpatterns = [
     # PUBLIC API
@@ -15,4 +10,5 @@ urlpatterns = [
     path('tickets/list/', TicketListAPIView.as_view(), name='ticket-list'),
     path('tickets/<str:ticket_code>/', TicketDetailAPIView.as_view(), name='ticket-detail'),
     path('tickets/delete/<str:ticket_code>/', TicketDeleteAPIView.as_view(), name='ticket-delete'),
+    path('tickets/resolve/<str:ticket_code>/', TicketResolveAPIView.as_view(), name='ticket-resolving')
 ]

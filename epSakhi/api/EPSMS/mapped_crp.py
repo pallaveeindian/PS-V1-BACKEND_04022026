@@ -87,7 +87,7 @@ def get_dmmu_crp_detail(request, dmmu_id):
     for crp in completed_crps:
         # Extract CRPEP Data
         crpep_info = []
-        for ep in crp.crpep_account.all():
+        for ep in crp.crpep_account.filter(is_active=True):
             block_id = ep.block.block_id if ep.block else None
             nodal_clf = ep.nodal_clf
             clf_name = None
@@ -143,7 +143,8 @@ def get_dmmu_crp_detail(request, dmmu_id):
 
         # Extract Allocated Panchayats and resolve their English names
         allocated_panchayat_ids = list(
-            crp.crpeptopanchayat_set.values_list('allocated_panchayat_id', flat=True)
+            crp.crpeptopanchayat_set.filter(is_active=True)
+                .values_list('allocated_panchayat_id', flat=True)
         )
         
         # Query MasterPanchayat to fetch the actual names

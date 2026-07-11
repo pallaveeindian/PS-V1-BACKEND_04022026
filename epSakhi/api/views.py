@@ -1669,6 +1669,7 @@ class BulkPanchayatDelete(APIView):
 
         crpep_id = serializer.validated_data["crpep_id"]
         panchayat_ids = serializer.validated_data["panchayat_ids"]
+        deleted_by = serializer.validated_data["deleted_by"]
 
         try:
             crpep = CRPEP.objects.get(master_user=crpep_id)
@@ -1690,11 +1691,15 @@ class BulkPanchayatDelete(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        deleted_count, _ = CRPEPToPanchayat.objects.filter(
+        deleted_count = CRPEPToPanchayat.objects.filter(
             crp=crpep.master_user,
             allocated_panchayat_id__in=panchayat_ids,
-            is_active=True,  
-        ).update(is_active=False)
+            is_active=True,
+        ).update(
+            is_active=False,
+            deleted_at=timezone.now(),
+            deleted_by_id=deleted_by,
+        )
 
         return Response(
             {

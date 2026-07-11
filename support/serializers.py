@@ -1,5 +1,16 @@
 from rest_framework import serializers
 from .models import Ticket, TicketBody, TicketMedia
+from core.models import MasterDistrict, MasterBlock
+
+class TicketDistrictSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MasterDistrict
+        fields = ['district_id', 'district_name_en', 'district_short_name_en']
+
+class TicketBlockSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MasterBlock
+        fields = ['block_id', 'block_name_en', 'block_name_local', 'is_aspirational']
 
 class TicketMediaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -8,13 +19,19 @@ class TicketMediaSerializer(serializers.ModelSerializer):
 
 class TicketBodySerializer(serializers.ModelSerializer):
     # These read-only fields fetch names directly from the related core models
-    district_name = serializers.CharField(source='district.name', read_only=True, default="N/A")
-    block_name = serializers.CharField(source='block.name', read_only=True, default="N/A")
+    district_obj = TicketDistrictSerializer(
+        source="district",
+        read_only=True,
+    )
+    block_obj = TicketBlockSerializer(
+        source="block",
+        read_only=True,
+    )
 
     class Meta:
         model = TicketBody
         fields = [
-            'id', 'district', 'district_name', 'block', 'block_name', 
+            'id', 'district', 'district_obj', 'block', 'block_obj', 
             'username', 'problem_message', 'mobile_no'
         ]
 

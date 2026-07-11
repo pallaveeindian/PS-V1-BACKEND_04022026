@@ -135,7 +135,7 @@ class FetchTraineesForTrainingPartnerView(APIView):
 
             # Apply Optional Filters for Beneficiaries
             if block_id:
-                trainees = trainees.filter(block_id=block_id)
+                trainees = trainees.filter(training__block_id=block_id)
             if panchayat_id:
                 trainees = trainees.filter(panchayat_id=panchayat_id)
             if village_id:
@@ -161,14 +161,17 @@ class FetchTraineesForTrainingPartnerView(APIView):
 
             # Search Filter (SHG Code, Member Code, Name, or Training Request ID)
             if search_query:
-                search_q = (
-                    Q(lokos_shg_code__icontains=search_query) |
-                    Q(lokos_member_code__icontains=search_query) |
-                    Q(member_name__icontains=search_query)
-                )
-                # SURGICAL FIX: If the search query is a number, also check training_id
-                if search_query.isdigit():
-                    search_q |= Q(training_id=search_query)
+                # SURGICAL FIX: If it exactly matches a valid Training ID, snap to it to prevent substring false positives
+                if search_query.isdigit() and training_requests.filter(id=search_query).exists():
+                    search_q = Q(training_id=search_query)
+                else:
+                    search_q = (
+                        Q(lokos_shg_code__icontains=search_query) |
+                        Q(lokos_member_code__icontains=search_query) |
+                        Q(member_name__icontains=search_query)
+                    )
+                    if search_query.isdigit():
+                        search_q |= Q(training_id=search_query)
                     
                 trainees = trainees.filter(search_q)
 
@@ -195,14 +198,17 @@ class FetchTraineesForTrainingPartnerView(APIView):
             
             # Search Filter (Mobile, Name, Aadhaar, or Training Request ID)
             if search_query:
-                search_q = (
-                    Q(full_name__icontains=search_query) |
-                    Q(mobile_no__icontains=search_query) |
-                    Q(aadhaar_no__icontains=search_query)
-                )
-                # SURGICAL FIX: If the search query is a number, also check training_id
-                if search_query.isdigit():
-                    search_q |= Q(training_id=search_query)
+                # SURGICAL FIX: If it exactly matches a valid Training ID, snap to it to prevent substring false positives
+                if search_query.isdigit() and training_requests.filter(id=search_query).exists():
+                    search_q = Q(training_id=search_query)
+                else:
+                    search_q = (
+                        Q(full_name__icontains=search_query) |
+                        Q(mobile_no__icontains=search_query) |
+                        Q(aadhaar_no__icontains=search_query)
+                    )
+                    if search_query.isdigit():
+                        search_q |= Q(training_id=search_query)
                     
                 optional_filters &= search_q
 

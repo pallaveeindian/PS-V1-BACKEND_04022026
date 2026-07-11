@@ -558,9 +558,24 @@ class TRBeneficiaryDetailSerializer(SoftDeleteModelSerializer):
 
 
 class TRTrainerSerializer(SoftDeleteModelSerializer):
+    district_name_en = serializers.SerializerMethodField()
+    block_name_en = serializers.SerializerMethodField()
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TRTrainer
         fields = "__all__"
+
+    def get_district_name_en(self, obj):
+        try:
+            return obj.district.district_name_en if obj.district else None
+        except:
+            return None
+
+    def get_block_name_en(self, obj):
+        try:
+            return obj.block.block_name_en if obj.block else None
+        except:
+            return None             
 
 
 class TRTrainerDetailSerializer(SoftDeleteModelSerializer):

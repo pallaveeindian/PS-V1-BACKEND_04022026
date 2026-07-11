@@ -154,7 +154,15 @@ class TicketListAPIView(generics.ListAPIView):
             return Ticket.objects.none()
 
         # Start with all active tickets; Optimize query by prefetching
-        qs = Ticket.objects.filter(is_active=True).select_related('ticket_body').prefetch_related('ticket_media')
+        qs = (
+            Ticket.objects.filter(is_active=True)
+            .select_related(
+                "ticket_body",
+                "ticket_body__district",
+                "ticket_body__block",
+            )
+            .prefetch_related("ticket_media")
+        )
 
         # Role Based Access logic
         # Assuming role_id is accessible via master_user.role_id (adjust based on your actual Core implementation)
@@ -180,3 +188,54 @@ class TicketDetailAPIView(generics.RetrieveAPIView):
         return Ticket.objects.filter(is_active=True)\
             .select_related('ticket_body')\
             .prefetch_related('ticket_media')
+
+
+# ==========================================
+# 5) TICKET RESOLUTION API
+# ==========================================
+class TicketResolveAPIView(APIView):
+    permission_classes = [IsAuthenticated] 
+
+    def patch(self, request, ticket_code, *args, **kwargs):
+        pmu_response = request.data.get('pmu_response')
+
+        if not pmu_response or str(pmu_response).strip() == "":
+            return Response(
+                {"error": "The 'pmu_response' field is required to resolve a ticket."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Fetch the active Ticket
+        try:
+            ticket = Ticket.objects.get(ticket_code=ticket_code, is_active=True)
+        except Ticket.DoesNotExist:
+            return Response(
+                {"error": "Active ticket not found."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Fetch the requesting user object to log in 'updated_by'
+        request_username = getattr(request, 'username', request.user.username if hasattr(request.user, 'username') else None)
+        updated_by_user = None
+        
+        if request_username:
+            try:
+                updated_by_user = MasterUser.objects.get(username=request_username)
+            except MasterUser.DoesNotExist:
+                pass
+
+        # Apply updates
+        ticket.pmu_response = str(pmu_response).strip()
+        ticket.is_solved = True
+        
+        if updated_by_user:
+            ticket.updated_by = updated_by_user
+            
+        ticket.save()
+
+        return Response({
+            "message": f"Ticket '{ticket_code}' has been successfully resolved.",
+            "ticket_code": ticket.ticket_code,
+            "is_solved": ticket.is_solved,
+            "pmu_response": ticket.pmu_response
+        }, status=status.HTTP_200_OK)
