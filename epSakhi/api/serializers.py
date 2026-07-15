@@ -1,7 +1,10 @@
 # epSakhi/api/serializers.py
 
 from django.db import transaction
-from rest_framework import serializers
+from rest_framework import serializers, viewsets, status
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.core.exceptions import PermissionDenied
 from epSakhi.utils.file_security import validate_and_rename
 
 from epSakhi.models import *
@@ -390,27 +393,19 @@ class CRPEPAnalyticsSerializer(serializers.ModelSerializer):
 # CRP-Panchayat mapping Form Serializers
 class CRPPanchayatBulkSerializer(serializers.Serializer):
     crp_id = serializers.IntegerField()
-    created_by = serializers.IntegerField()
+    created_by = serializers.IntegerField(required=False)
     allocated_panchayats = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False
     )
 
     def validate_crp_id(self, value):
-        """
-        Validate CRP exists
-        """
-        try:
-            CRPEP.objects.get(master_user_id=value)
-        except CRPEP.DoesNotExist:
+        if not CRPEP.objects.filter(master_user_id=value).exists():
             raise serializers.ValidationError("Invalid CRP ID")
 
         return value
 
     def validate_created_by(self, value):
-        """
-        Validate MasterUser exists
-        """
         if not MasterUser.objects.filter(id=value).exists():
             raise serializers.ValidationError("Invalid created_by ID")
         return value
@@ -431,10 +426,24 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
     def create(self, validated_data):
         crp_id = validated_data["crp_id"]
         panchayats = validated_data["allocated_panchayats"]
-        created_by = validated_data["created_by"]
+        created_by = validated_data.get("created_by")
 
-        master_user = MasterUser.objects.get(id=created_by)
+        if created_by:
+            master_user = MasterUser.objects.get(id=created_by)
+        else:
+            request = self.context["request"]
+            auth_user = request.user
 
+            try:
+                master_user = MasterUser.objects.get(
+                    username=auth_user.username
+                )
+            except MasterUser.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"created_by": "Authenticated user not found."}
+                )
+
+        # Check existing active allocations to avoid duplicates
         existing = set(
             CRPEPToPanchayat.objects.filter(
                 crp_id=crp_id,
@@ -447,7 +456,7 @@ class CRPPanchayatBulkSerializer(serializers.Serializer):
 
         with transaction.atomic():
             for panchayat_id in panchayats:
-
+                # Skip if already actively linked
                 if panchayat_id in existing:
                     continue
 
@@ -483,6 +492,7 @@ class CRPListSerializer(serializers.ModelSerializer):
         model = CRPEP
         fields = [
             "id",
+            "master_user_id",
             "name",
             "mobile_number",
             "lokos_shg_code",
@@ -503,7 +513,8 @@ class CRPListSerializer(serializers.ModelSerializer):
     def get_allocated_panchayats(self, obj):
 
         allocations = CRPEPToPanchayat.objects.filter(
-            crp=obj.master_user_id
+            crp=obj.master_user_id,
+            is_active=True
         ).values_list("allocated_panchayat_id", flat=True)
 
         panchayats = MasterPanchayat.objects.filter(panchayat_id__in=allocations)

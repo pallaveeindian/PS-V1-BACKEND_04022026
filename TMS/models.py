@@ -169,6 +169,20 @@ class MasterTrainer(SoftDeleteMixin):
     )
     aadhaar_no = models.CharField("Aadhaar No", max_length=20, blank=True, null=True)
 
+    theme = models.ForeignKey(
+        TrainingTheme, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='master_trainers'
+    )
+    induction = models.BooleanField("Induction (YES/NO)", default=False)
+    tot_smcb = models.BooleanField("TOT SMCB (YES/NO)", default=False)
+    tot_mffi = models.BooleanField("TOT MFFI (YES/NO)", default=False)
+    tot_sisd = models.BooleanField("TOT SISD (YES/NO)", default=False)
+    tot_farm_lh = models.BooleanField("TOT FARM LH (YES/NO)", default=False)
+    tot_non_farm_lh = models.BooleanField("TOT NON FARM LH (YES/NO)", default=False)
+    tot_model_clf = models.BooleanField("TOT MODEL CLF (YES/NO)", default=False)
+    tot_lokos = models.BooleanField("TOT LOKOS (YES/NO)", default=False)
+    # ------------------------------------------------------------
+
     empanel_district = models.ForeignKey(
         MasterDistrict, on_delete=models.DO_NOTHING, blank=True, null=True
     )

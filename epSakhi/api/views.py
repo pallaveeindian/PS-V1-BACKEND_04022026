@@ -1029,40 +1029,41 @@ class CRPListByClfView(APIView):
         return Response(result)
 
 class CRPListAPIView(ListAPIView):
-
     serializer_class = CRPListSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-
-        queryset = CRPEP.objects.select_related(
-            "district",
-            "block",
-            "panchayat"
+        queryset = (
+            CRPEP.objects.select_related(
+                "district",
+                "block",
+                "panchayat"
+            )
+            .filter(is_active=True)
         )
 
-        district = self.request.query_params.get("district")
-        block = self.request.query_params.get("block")
-        panchayat = self.request.query_params.get("panchayat")
-        search = self.request.query_params.get("search")
+        district = self.request.query_params.get("district", "").strip()
+        block = self.request.query_params.get("block", "").strip()
+        panchayat = self.request.query_params.get("panchayat", "").strip()
+        search = self.request.query_params.get("search", "").strip()
 
-        if district:
-            queryset = queryset.filter(district_id=district)
+        if district and district.lower() not in ("null", "undefined"):
+            queryset = queryset.filter(district_id=int(district))
 
-        if block:
-            queryset = queryset.filter(block_id=block)
+        if block and block.lower() not in ("null", "undefined"):
+            queryset = queryset.filter(block_id=int(block))
 
-        if panchayat:
-            queryset = queryset.filter(panchayat_id=panchayat)
+        if panchayat and panchayat.lower() not in ("null", "undefined"):
+            queryset = queryset.filter(panchayat_id=int(panchayat))
 
         if search:
             queryset = queryset.filter(
-                Q(name__icontains=search) |
-                Q(lokos_shg_code__icontains=search) |
-                Q(lokos_member_code__icontains=search)
+                Q(name__icontains=search)
+                | Q(lokos_shg_code__icontains=search)
+                | Q(lokos_member_code__icontains=search)
             )
 
-        return queryset
+        return queryset.order_by("id")
 
 class CRPDetailView(APIView):
     """
@@ -1612,15 +1613,14 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
     """
     Bulk Linking of CRP to Multiple Panchayats
     """
-
     serializer_class = CRPPanchayatBulkSerializer
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
         return CRPEPToPanchayat.objects.filter(is_active=True)
 
-    def create(self, request):
-
+    # Added *args, **kwargs to adhere to DRF standard signature
+    def create(self, request, *args, **kwargs):
         auth_user = request.user
 
         try:
@@ -1631,7 +1631,7 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
             raise PermissionDenied("Invalid user")
 
         # 🔐 ONLY recorder user allowed
-        allowed_ids = {2, 12}
+        allowed_ids = {1, 2, 3, 4, 9, 12}
 
         if master_user.role_id not in allowed_ids:
             raise PermissionDenied(
@@ -1643,6 +1643,7 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
             context={"request": request}
         )
 
+        # This will trigger the updated validate_crp_id method
         serializer.is_valid(raise_exception=True)
 
         rows = serializer.save()
@@ -1654,7 +1655,6 @@ class CRPPanchayatBulkViewSet(viewsets.GenericViewSet):
             },
             status=status.HTTP_201_CREATED
         )
-
 
 # EPSMS Dashboard APIs
 class BulkPanchayatDelete(APIView):

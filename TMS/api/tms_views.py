@@ -248,16 +248,17 @@ class MasterTrainerViewSet(BaseTMSModelViewSet):
     CRUD for MasterTrainer (BRP/DRP/SRP).
     """
     swagger_schema = MastersSchema
-    queryset = tms_models.MasterTrainer.objects.select_related("empanel_district", "empanel_block")
+    queryset = tms_models.MasterTrainer.objects.select_related("empanel_district", "empanel_block", "theme")
     serializer_class = MasterTrainerSerializer
     filterset_fields = [
         "designation",
         "empanel_district",
         "empanel_block",
         "gender",
+        "theme",
         "social_category",
     ]
-    search_fields = ["full_name", "mobile_no", "id"]
+    search_fields = ["full_name", "mobile_no", "id", "theme__theme_name"]
     pagination_class = TenPerPagePagination    
 
     @swagger_auto_schema(

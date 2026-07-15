@@ -1,0 +1,650 @@
+﻿S.N,NAME OF DRP ,FATHERS NAME/,DESIGNATION,Theme,DISTRICT ,MOBILE NUMBER,AADHAR NUMBER,Inducttion (YES/NO),TOT SMCB (YES/NO),TOT MFFI (YES/NO),TOT SISD (YES/NO),TOT FARM LH (YES/NO),TOT NON FARM LH (YES/NO),TOT MODEL CLF (YES/NO),TOT LOKOS (YES/NO)
+1,Niranjana Parle,Manish Kumar,DRP ,SMCB,Meerut,9528465769,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+2,Vijay Bahadur Katiyar,Shiv Narayan Katiyar,DRP ,MF&FI,Kannauj,9839545465,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+3,Mahesh Chandra Pal,Gangaram,DRP ,SMCB,Kannauj,7302646092,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+4,Pinki Devi,Naveen Sharma,DRP ,SMCB,Meerut,9389465393,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+5,Archana,Suneel Kumar,DRP ,SISD,Kannauj,6386418279,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+6,Rubi Yadav,Anil Kumar,DRP ,MF&FI,Kannauj,9719355987,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+7,Geeta,Prahlad Singh,DRP ,SMCB,Kannauj,7055742752,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+8,Madahav Sharan Sharma,Radha Krishna Verma,DRP ,Farm LH,Kannauj,6391776745,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+9,Km. Sonam,Radheshyam,DRP ,MF&FI,Kannauj,9198857707,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+10,Anjali,Varun Singh,DRP ,SISD,Kannauj,6386320179,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+11,Manoj Kumar Gupta,Lt. Vishnu Swaroop Rajvanshi,DRP ,MF&FI,Meerut,7388899002,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+12,Praveen Kumar Singh,Kunwar Pal Singh,DRP ,SMCB,Meerut,9911197133,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+13,Saili Goel,Brijendra Kumar Goyal,DRP ,SISD,Meerut,9927241668,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+14,Megha Verma,Satish Kumar,DRP ,MF&FI,Meerut,8266868862,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+15,Nirmal Kumar Ahivaar,Ratan Lal Ahiwar,DRP ,SISD,Meerut,7004457527,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+16,Abhishek kumar,Deendayal,DRP ,Farm LH,Meerut,8858520399,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+17,Dheeraj Kumar,Santosh Kumar,DRP ,Farm LH,Meerut,9336969978,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+18,Dr. Ved Kumar Mishra,Ashok Kumar Mishra,DRP,Farm LH,Sant Ravidas Nagar,9695253467,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+19,Ramesh kumar Baagi,Chotelal,DRP ,MF&FI,Sant Ravidas Nagar,8354824046,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+20,Saroj Devi,Ramesh Kumar Baagi,DRP ,SMCB,Sant Ravidas Nagar,7607241711,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+21,Mahesh Kumar Yadav,Shyam Bahadur Yadav,DRP ,SISD,Sant Ravidas Nagar,9452767803,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+22,Dhananjai Panday,Lt. Sudama Pandey,DRP ,SISD,Sant Ravidas Nagar,9115045245,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+23,Ishendra Kumar Dubey,Shyam Surat Dubey,DRP ,NONFARM LH,Sant Ravidas Nagar,9651546211,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+24,Rakesh Kumar,Mahendra Kumar,DRP ,Farm LH,Sant Ravidas Nagar,9696216088,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+25,Rajesh Kumar Bhartiya,Prempal,DRP ,MF&FI,Sant Ravidas Nagar,8423743957,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+26,Javed Ahemad,Khursheed Ahemad,DRP ,Farm LH,Bijnor,9012767818,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+27,Sarita,Bhagwat,DRP ,MF&FI,Bijnor,9634090291,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+28,Raaaki,Susheel Kumar,DRP ,SMCB,Bijnor,7078968050,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+29,Reeta Sharma,Rajneesh Kumar Sharma,DRP ,SISD,Bijnor,7037591274,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+30,Kulveer Singh,Peetam Singh,DRP ,Farm LH,Bijnor,9917319269,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+31,Alka Chaudhary,Varun Kumar,DRP ,SMCB,Bijnor,7060674392,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+32,Khajaan Singh,Kalyan Singh,DRP ,NONFARM LH,Bijnor,9319847221,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+33,Shalini Singh,Alok Singh,DRP ,SMCB,Bijnor,9990171242,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+34,Akila Nand Singh,Tribhuvan Singh,DRP ,SMCB,Sant Ravidas Nagar,8542931819,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+35,Lolarak Singh,Rajbahadur Singh,DRP ,MF&FI,Sant Ravidas Nagar,9559099051,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+36,Devendra Kumar Paanchaal,Shivraj Paanchal,DRP,MF&FI,Lucknow,9919374973,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+37,Sarvjeet,Ram Dheeraj,DRP,Farm LH,Lucknow,9415577698,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+38,Amrendra Yadav,Ram Murat Yadav,DRP,NONFARM LH,Lucknow,8765700673,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+39,Raja Ram Yadav,Lt. R.P. Yadav,DRP,SISD,Lucknow,9839200797,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+40,Pooja Gautam,Ashwani Gautam,DRP,SMCB,Lucknow,8317058748,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+41,Neelmani Pandey,Abhay Kumar Pandey,DRP,SISD,Lucknow,9415076704,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+42,Madhav Mishra,Ravindra Kumar Mishra,DRP,Farm LH,Etah,9411849920,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+43,Deependra Kumar,Ramnaresh,DRP,Farm LH,Etah,8218805525,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+44,Mohit Kumar Gautam,Bankelal,DRP,SMCB,Etah,9897400108,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+45,Himanshu Saxena,Awadhesh Chand Saxena,DRP,NONFARM LH,Etah,9084454777,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+46,Saroj,Durga Prasad,DRP,SMCB,Etah,6398299383,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+47,Shweta Bharti,Arvind Kumar,DRP,MF&FI,Etah,8076582815,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+48,Shama,Gul Mohammad,DRP,MF&FI,Etah,7037804645,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+49,Neetu,Rakesh Kumar,DRP,SISD,Etah,6396343876,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+50,Sangeeta Pandey,Om Prakash Pandey,DRP,SMCB,Etah,7300617080,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+51,Seema Singh,Bholaram,DRP,MF&FI,Etah,9557553080,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+52,Renu Yadav,Sanjeev Kumar,DRP,SISD,Etah,9027573005,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+53,Rajkumar Singh,Rati ram Ahirvar,DRP,SISD,Jhansi,9140229084,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+54,Ekta Devi,Vikas Singh,DRP,SMCB,Jhansi,7037833773,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+55,Deepak Verma,Mannu Lal Verma,DRP,Farm LH,Jhansi,9936332404,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+56,Mahendra Kumar,Halkuram,DRP,SMCB,Jhansi,9695169451,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+57,Deepanshu Shrivastava,Dinesh Kumar Shrivastava,DRP,NONFARM LH,Jhansi,6377503297,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+58,Tarun Kumar Khushwaha,Shivnarayan Singh Khushwaha,DRP,MF&FI,Jhansi,9990571848,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+59,Neetu Ahirwar,Ram Pal,DRP,SMCB,Jhansi,9621610122,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+60,Avinash Singh,Lallu Singh Khushwaha,DRP,Farm LH,Jhansi,6394534824,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+61,Asha Ram Bharti,Lt. Nannulal,DRP,MF&FI,Jhansi,9453172504,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+62,Suresh Pandey,Vijay Kant Panday,DRP,SMCB,Varanasi,9452698165,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+63,Ghanshyam Prajapati,Tilakdhari Prajapati,DRP,SMCB,Varanasi,7607061787,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+64,Neelu Shrivastava,Lt. Rajkishore Lal,DRP,SMCB,Varanasi,7905581871,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+65,Atul Kumar Pandey,Parmeshwar Saran Pandey,DRP,MF&FI,Varanasi,8299812577,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+66,Akhilesh Kumar Singh,Subhash Verma,DRP,Farm LH,Varanasi,8840364911,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+67,Nirmal,Girdhari,DRP,MF&FI,Varanasi,7985775199,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+68,Janardan Singh,Jagdish Singh,DRP,SISD,Varanasi,7355991207,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+69,Shashikant,Lt. Devdas,DRP,MF&FI,Varanasi,9450828927,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+70,Dr Archana Srivastava,Ravindra Kumar Shrivastava,DRP,SISD,Varanasi,9336747468,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+71,Sugandha Ganguly,Sushil Kumar Ganguly,DRP,Farm LH,Varanasi,9608341112,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+72,Brij Bihari Lal,Lt. J.L. Shrivastava,DRP,MF&FI,Jhansi,9936981086,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+73,Vinay Kumar Singh,Lalla Singh,DRP,MF&FI,Jalaun,9826383586,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+74,Sudha,Lokesh Kumar,DRP,MF&FI,Gautam Buddha Nagar,9311769039,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+75,Neeraj Devi,Devendra Kumar,DRP,SMCB,Mahoba,6387114722,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+76,Sanjay kumar Shrivastava,Lt. Brijendra Sharan,DRP,Farm LH,Mahoba,8115233684,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+77,Sanjay Kumar Upadhyay,Parshuram Upadhyay,DRP,Farm LH,Jalaun,9415923492,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+78,Rajesh Singh,Lt. Bhoop Singh,DRP,SISD,Jalaun,9198886570,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+79,Ram Kumar,Dev Singh,DRP,MF&FI,Jalaun,9450667101,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+80,Deepak Prajapati,Ramnaresh Prajapati,DRP,SMCB,Kaushambi,8933812735,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+81,Manoj Kumar Yadav,Asharfi lal Yadav,DRP,SMCB,Kaushambi,6306998677,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+82,Bhanu Prakash,Ramfer,DRP,MF&FI,Kaushambi,7068771507,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+83,Neeraj Dwivedi,Deepak Dwivedi,DRP,SMCB,Mainpuri,9412613448,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+84,Nitin Kumar Yadav,Arvind Kumar Yadav,DRP,MF&FI,Mahoba,9754747822,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+85,Arun Kumar Agnihotri,Bhaiyadeen Agnihotri,DRP,MF&FI,Mahoba,7999736992,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+86,Pankaj Saxena,S.C. Saxena,DRP,SMCB,Mahoba,9621361189,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+87,Mamta Dixit,Ram Swaroop Dixit,DRP,NONFARM LH,Jalaun,9794915161,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+88,Vineeta Batham,Munna Lal Batham,DRP,SMCB,Jalaun,6388318823,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+89,Sharad Yadav,Kishan Pal Singh,DRP,Farm LH,Bulandshahr,9997077737,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+90,Rashid Ali,Anwar Ilhaq,DRP,MF&FI,Bulandshahr,8439135046,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+91,Shrija Devi,Ramesh Chand,DRP,NONFARM LH,Bulandshahr,6396894028,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+92,Rani Devi,Shubhanand,DRP,SISD,Mainpuri,9045778350,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+93,Devki Rajput,Praveen Kumar Rajput,DRP,SISD,Mainpuri,9045709016,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+94,Pooja Devi,Deeepak Singh,DRP,SMCB,Bulandshahr,9870753883,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+95,Roopali,Dhanesh Kumar,DRP,SISD,Bulandshahr,8474942464,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+96,Dheeraj Sheelar,Hopendra Singh,DRP,SMCB,Bulandshahr,9450414212,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+97,Virendra Kumar Awasthi,Lt. Omkarnath Awasthi,DRP,Farm LH,Lucknow,9415464287,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+98,Aradhna Vishwakarma,Navalkishore Vishwakarma,DRP,SISD,Mahoba,8853885898,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+99,Sandeep Kumar,Sube Singh,DRP,MF&FI,Gautam Buddha Nagar,9634203409,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+100,Vikas Kumar,Mainpal,DRP,SMCB,Gautam Buddha Nagar,8449667523,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+101,Shalini Singh,Balendra Pratap Singh,DRP,MF&FI,Lucknow,9335174662,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+102,Roshini Mishra,Anuj Gaur,DRP,NONFARM LH,Mainpuri,8865808234,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+103,Poonam Pandey,Pramod Kumar Pandey,DRP,SISD,Jalaun,8303373960,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+104,Manmta Bhardwaj,Dushyant Bhardwaj,DRP,Farm LH,Gautam Buddha Nagar,7078633456,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+105,Sweta Sharma,Pramod Sharma,DRP,NONFARM LH,Gautam Buddha Nagar,9315933690,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+106,Pooja sharma,Manoj Kumar,DRP,SISD,Gautam Buddha Nagar,8700895280,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+107,Pooja Parasar,Hemendra Kumar Sharma,DRP,MF&FI,Gautam Buddha Nagar,9761325253,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+108,Km. Pratibha Shakya,Vivek Kumar,DRP,MF&FI,Mainpuri,9555701227,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+109,Jeetendra Kumar,Rakesh Kumar Saxena,DRP,SISD,Mahoba,9956958419,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+110,Mamta Rani,Tuneer,DRP,SISD,Bijnor,9758857566,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+111,Priyanjali Jaiswal,Om Prakash Jaiswal,DRP,NONFARM LH,Kaushambi,8081869792,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+112,Kalpana Devi,Dheeraj Lal,DRP,SISD,Kaushambi,9264970296,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+113,Vinay Singh Sengar,Brijendra Singh Sengar,DRP,SMCB,Jalaun,8115788797,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+114,Km. Vimlesh,Monu Kumar,DRP,MF&FI,Bulandshahr,8126191100,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+115,Roshini,Anshu Tripathi,DRP,SMCB,Mainpuri,9258770694,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+116,Bharti Kumari Shakya,Saurabh Shakya,DRP,SISD,Bulandshahr,7467089998,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+117,Rekharani,Jeetendra,DRP,Farm LH,Bulandshahr,8791460683,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+118,Sanjay Kumar Sachaan,Ram Prakash Sachaan,DRP,SMCB,Kaushambi,9838931000,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+119,Raghavendra Kumar Singh,Navratan Singh,DRP,SMCB,Mainpuri,9412595315,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+120,Hanif Khan,Basheer Khan,DRP,SMCB,Jalaun,6396008664,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+121,Rajkumar Singh Rathaur,Chandra Pal Singh Rathaur,DRP,Farm LH,Mainpuri,9927005221,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+122,Sikha Rani,Lakhmi Singh,DRP,SMCB,Bulandshahr,9627670020,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+123,Aarti Kumari,Pankaj Shakya,DRP,MF&FI,Mainpuri,9756992683,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+124,Subhash Chandra Dubey,Lt. Ram Ujagar Dubey,DRP,Farm LH,Kaushambi,9453929442,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+125,Rishabh Kumar Pandey,Suresh Kumar Pandey,DRP,Farm LH,Kaushambi,7607787369,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+126,Sandeep Kumar Shrivastava,Baijnaath Shrivastava,DRP,MF&FI,Kaushambi,9335726363,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+127,Rajeev Singh,Indrajeet Singh,DRP,MF&FI,Mahoba,8318667386,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+128,Kaushalendra Yadav,Arvind Singh Yadav,DRP,MF&FI,Mainpuri,7351613504,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+129,Manoj Kumar,Banwarilal,DRP,SISD,Kaushambi,8874495732,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+130,Ram Avtar,Lt. Ramnarayan,DRP,NONFARM LH,Mahoba,6394254964,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+131,Satyajeet Singh,Veerpal Singh,DRP,MF&FI,Jalaun,9369401752,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+132,Satyam Singh,Lolarak Singh,DRP,Farm LH,Gautam Buddha Nagar,6307799125,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+133,Savita,Saurabh Singh,DRP,Farm LH,Mainpuri,9675856258,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+134,Preeti Gupta,Vivek Gupta,DRP,SISD,Sultanpur,8173026947,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+135,Shiv Asare Pandey,Lt. Jageshwar Dayal Pandey,DRP,Farm LH,Kanpur Nagar,8115907110,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+136,Shikha Devi,Anand Kumar ,DRP,SISD,Kanpur Dehat,8840729515,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+137,Vibhuti Khushwaha,Lt. Shravan Khushwaha,DRP,SMCB,Gorakhpur,9450476986,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+138,Garima Omar,Harshit Gupta,DRP,SMCB,Kanpur Nagar,8318289110,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+139,Neeraj,Bhole Prasad,DRP,Farm LH,Sultanpur,9451828087,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+140,Swarnalata,Naveen Anjaneya,DRP,SMCB,Sultanpur,8423511317,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+141,Aneeta Gupta,Santosh Gupta,DRP,SMCB,Kanpur Dehat,9336236215,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+142,Rajendra Tripathi,Ram Tripathi,DRP,MF&FI,Gorakhpur,9455560546,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+143,Sandeep Singh,Santosh Singh,DRP,MF&FI,Farrukhabad,9621512517,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+144,Narendra Kumar,Kamta Prasad,DRP,Farm LH,Kanpur Nagar,9935458194,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+145,Mohd. Khalik,Masruddin,DRP,MF&FI,Kanpur Dehat,9026465024,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+146,Urmila Devi,Jagdamba Prasad Pandey,DRP,MF&FI,Sultanpur,9984768651,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+147,Shahid Hussain,Lt. Abrar Hussain,DRP,SMCB,Farrukhabad,9839852276,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+148,Vikas Singh,Ramesh Singh,DRP,SMCB,Gorakhpur,6387214511,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+149,Abhishek Singh,Jai Prakash Singh,DRP,Farm LH,Gorakhpur,6388586154,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+150,Peeyush Kumar Srivastava,Santosh Kumar Shrivastava,DRP,SISD,Gorakhpur,9936149696,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+151,Susheel Kumar Singh,Lt. Ravi Pratap Singh,DRP,SMCB,Sultanpur,9889807228,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+152,Dinesh Kumar Tripathi,Devraj Tripathi,DRP,Farm LH,Sultanpur,7317411034,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+153,Sandeep Kumar Sharma,Lt. Shyaam Lal Sharma,DRP,MF&FI,Kanpur Nagar,8299052663,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+154,Avneesh Pratap Singh,Vijay Pratap Singh,DRP,Farm LH,Farrukhabad,7071804471,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+155,Radheshyam,Lt. Rambali,DRP,SISD,Farrukhabad,7800695031,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+156,Sangeeta Devi,Ram Narayan Khushwaha,DRP,NONFARM LH,Kanpur Dehat,8840438458,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+157,Deep Shikha,Mata Badal,DRP,NONFARM LH,Gorakhpur,9911984497,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+158,Rajendra Singh,Amar Singh,DRP,Farm LH,Jalaun,9621965246,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+159,Yugesh Tiwari,Lt. Salik Ram Tiwari,DRP,SISD,Sultanpur,7800371255,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+160,Seema Khushwaha,Manendra Singh,DRP,Farm LH,Farrukhabad,6388825768,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+161,Ramu Singh,Balram Singh,DRP,Farm LH,Kanpur Dehat,9696908984,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+162,Shailendra Kumar Singh,Sheshnath Singh,DRP,Farm LH,Gorakhpur,7752811235,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+163,Suresh Chandra Shakya,Dwarka Prasad,DRP,MF&FI,Farrukhabad,9454957604,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+164,Mohd. Shafeek Khan,Hamid Khan,DRP,SISD,Kanpur Nagar,9450105180,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+165,Girish Kumar,Shiv Kumar Tiwari,DRP,MF&FI,Sultanpur,9236596932,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+166,Satya Narayan Pandey,Ram Shankar Pandey,DRP,SMCB,Sultanpur,9451777577,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+167,Shashi Singh,Satya Pal Singh,DRP,SISD,Gorakhpur,7379521733,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+168,Babli,Narendra Singh,DRP,MF&FI,Moradabad,8193884058,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+169,Meenakshi Dixit,Vipin Kumar,DRP,SMCB,Kanpur Nagar,8318170183,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+170,Rahul Kumar Pandey,Ram Prasad Pandey,DRP,MF&FI,Gorakhpur,8707777173,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+171,Saroj Kumari,Virendra Kumar,DRP,SISD,Kanpur Nagar,9795156001,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+172,Shivansh Katiyaar,Kamlesh Babu,DRP,SMCB,Kanpur Nagar,8707867715,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+173,Rajeev Agarwal,Lt. Ishwar Chandra Agarwal,DRP,MF&FI,Kanpur Nagar,9415359117,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+174,Shubham Kumar Tripathi,Paradeep Kumar Tripathi,DRP,SMCB,Gorakhpur,9554102744,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+175,Shefali Yadav,Kamlesh Yadav,DRP,MF&FI,Kanpur Nagar,9936704496,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+176,Shalini Agrahari,Shailendra Agnihotri,DRP,SMCB,Kanpur Dehat,8004411723,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+177,Richa tiwari,Krishna Kumar Tiwari,DRP,SMCB,Farrukhabad,8840750938,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+178,Prachi Devi,Madanpal Singh,DRP,MF&FI,Moradabad,9368117343,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+179,Anushka Khushwaha,Aakash Kumar,DRP,NONFARM LH,Farrukhabad,9260946886,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+180,Shiv Tripathi,Vijay Kumar,DRP,NONFARM LH,Kanpur Nagar,8869708944,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+181,Usha Devi,Shiv Sumer,DRP,SISD,Kanpur Dehat,9450461052,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+182,Arun Kumari,Mahaveer Prasad,DRP,MF&FI,Kanpur Dehat,6398589052,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+183,Vivek Kumar,Jairam,DRP,MF&FI,Kanpur Dehat,9759933116,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+184,Shailendra kumara Rao,Jagannath Rao,DRP,MF&FI,Gorakhpur,9628823004,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+185,Ranjeet Singh,Lt. Veer Singh,DRP,SMCB,Moradabad,7457840821,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+186,Zeeshan Fatima,Mohd. Sakdar Ali,DRP,SMCB,Kanpur Dehat,7905132570,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+187,Brijesh,Amit Kumar,DRP,SMCB,Moradabad,9675245606,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+188,Rekharani,Dharamendra Kumar,DRP,MF&FI,Moradabad,6398634519,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+189,Surendra Kumar Pandey,Babu Ram Pandey,DRP,SISD,Farrukhabad,9839161104,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+190,Kaveendra Nath Shukla,Mangla Prasad Shukla,DRP,Farm LH,MIRZAPUR ,9450585490,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+191,Alok Kumar Shukla,Vijay Kumar Shukla,DRP,SMCB,Sitapur,9807251018,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+192,Hariom Shukla,Kamlesh Chandra Shukla,DRP,Farm LH,Sitapur,8853883203,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+193,Atul Kant Ojha,Devishankar Ojha,DRP,SISD,Maharajganj,9616617776,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+194,Durgesh Mishra,Jaidrath Mishra,DRP,SISD,Maharajganj,6386212131,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+195,Vivek Kumar,Ram Pravesh,DRP,MF&FI,Maharajganj,9450444981,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+196,Anita Bharti,Subedaar,DRP,MF&FI,Kasganj,9528320656,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+197,Vijeta Pali,Hotamlal,DRP,MF&FI,Kasganj,8171267146,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+198,Sangeeta,Siyaramji,DRP,Farm LH,Kasganj,9719162755,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+199,Pradeep Kumar Shukla,PremShankar Shukla,DRP,NONFARM LH,Mirzapur,9569325152,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+200,Ravikant Mishra,Lalji Mishra,DRP,SMCB,Mirzapur,7007635770,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+201,Madhu Devi,Rajesh,DRP,SMCB,Mirzapur,7755062899,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+202,Hariom,Suresh Chandra,DRP,SMCB,Kasganj,8077706574,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+203,Pragyansh Yadav,Jawahar Singh,DRP,SMCB,Kasganj,9536358144,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+204,Raghavanand,Anokhelal,DRP,SMCB,Amroha,9457680840,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+205,Ashok Kumar Singh,Dheerendra Kumar Singh,DRP,MF&FI,Mirzapur,9695595690,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+206,Ajay Kumar Mishra,Shreepati Mishra,DRP,MF&FI,Mirzapur,7985240691,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+207,Satish Chandra,Ratiram,DRP,SISD,Kasganj,8958956067,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+208,Rinki,Vijay Singh,DRP,SISD,Amroha,8859088950,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+209,Kamini Priya Dwivedi,Sanajay Dwivedi,DRP,SMCB,Sitapur,9450813701,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+210,Shailendra Tiwari,Sachin Kumar Tiwari,DRP,MF&FI,Sitapur,7991230734,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+211,Prachi Shahi,Randheer Shahi,DRP,SMCB,Deoria,9919009737,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+212,Astha Shrivastava,Suneel Dutt Shrivastava,DRP,SISD,Deoria,8924843010,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+213,Lovlesh Kumar,Narayan Dutt,DRP,Farm LH,Kasganj,8954847705,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+214,Rakesh Kumar,Harinandan Prasad,DRP,MF&FI,Deoria,6387948366,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+215,Ramsagar Prasad,Bragunath Prasad,DRP,Farm LH,Deoria,7379042657,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+216,Vijay Kumar,Premchand,DRP,MF&FI,Deoria,9839627162,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+217,Mohit Kumar,RamAvtar,DRP,SMCB,Kasganj,9870916098,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+218,Brijeshwar Mishra,Sabhapati,DRP,SMCB,Deoria,9473866883,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+219,Shushma Devi,Shambhunath,DRP,SISD,Mirzapur,6306999937,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+220,Krishna Singh Baghel,Shyamendra Singh Baghel,DRP,MF&FI,Amroha,7693808939,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+221,Ashutosh Kumar,Kripa Shankar Tripathi,DRP,SISD,Mirzapur,9453182218,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+222,Susheela Devi,ManojKumar,DRP,MF&FI,Amroha,9027674764,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+223,Reenu Devi,Paramjeet Singh,DRP,MF&FI,Amroha,7988770169,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+224,Rekha,Abhishek Kumar,DRP,SISD,Amroha,8958603631,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+225,Komal Tripathi,Anuj Kumar,DRP,NONFARM LH,Sitapur,9511005099,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+226,Vanshika Maheshwari,Rajesh Maheshwari,DRP,MF&FI,Kasganj,7417470704,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+227,Vandana Maurya,Ramvachan Maurya,DRP,SMCB,Maharajganj,9984485745,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+228,Preeti Gupta,Mangesh Gupta,DRP,SMCB,Maharajganj,9532982854,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+229,Huma Parveen,Shakeel Khan,DRP,SISD,Kasganj,9917401262,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+230,Mahesh Singh,Mahendra Singh,DRP,SMCB,Amroha,9457422477,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+231,Santosh Kumar Vishwakarma,Bheemsen Prasad,DRP,SMCB,Maharajganj,9919581435,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+232,Gopal Agrahari,Dayaram Agrahari,DRP,MF&FI,Maharajganj,9519598981,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+233,Nandkishore Gupta,Sukhdev Gupta,DRP,Farm LH,Maharajganj,8931963195,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+234,Vikar Kumar Rauniyaar,Vijay Kumar Rauniyaar,DRP,MF&FI,Maharajganj,8400857100,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+235,Meenal Gupta,Ramasray Gupta,DRP,NONFARM LH,Maharajganj,8924989555,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+236,Sudeer Kumar Singh,Brigraj Gupta,DRP,SISD,Sitapur,9452040105,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+237,Neeraj Kumar Sachan,Lalji Sachan,DRP,SMCB,Lucknow,7505201201,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+238,Amar Singh,Kamlashankar Singh,DRP,SMCB,Mirzapur,9415934622,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+239,Saurabh Mishra,Ateesh Kumar Mishra,DRP,SMCB,Sitapur,9005366226,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+240,Arvind Kumar,Ram Avtaar,DRP,MF&FI,Sitapur,8318439079,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+241,Meenu Chauhan,Nagendra Singh Chauhan,DRP,SISD,Jhansi,8979610306,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+242,Archana Saxena,Naseem Azaad,DRP,SMCB,Amroha,9810965345,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+243,Amol Tewatiya,,DRP,SISD,Hapur,8279624716,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+244,Anuj Kumar,,DRP,NONFARM LH,Kheri,6393840179,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+245,Mohd. Suhaib Raza,,DRP,SMCB,HAPUR,6394036942,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+246,Nafees Ahemad,,DRP,NONFARM LH,HAPUR,8192915098,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+247,Tilak Maurya,,DRP,SMCB,Bareilly,8433079240,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+248,Darshana Rani,,DRP,MF&FI,Bareilly,9027927677,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+249,Pooja Singh,,DRP,SMCB,Bareilly,8218676780,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+250,Diwakar Shukla,,DRP,Farm LH,Kheri,8423905930,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+251,Suneel Kumar,,DRP,NONFARM LH,Pilibhit,9720344567,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+252,Veerpal,,DRP,Farm LH,Pilibhit,6397846646,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+253,Ramendra Gangwar,,DRP,MF&FI,Pilibhit,9412814173,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+254,Dimple Gaud,,DRP,SISD,Pilibhit,9219742015,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+255,Rakhi,,DRP,MF&FI,Hapur,8218514744,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+256,Ram Kishore Gupta,,DRP,MF&FI,Fatehpur,9415488996,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+257,Varsha,,DRP,SISD,Moradabad,9389600942,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+258,Madhubala,,DRP,SMCB,Hapur,8433006293,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+259,Susheel Kumar Maurya,,DRP,Farm LH,Kheri,9140824603,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+260,Guruvundar Kaul,,DRP,SISD,Kheri,7991263076,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+261,Renu Dinkar,,DRP,SISD,Kheri,8218520011,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+262,Meera Devi,,DRP,SMCB,Kheri,9651017785,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+263,Ajay Kumar Gautam,,DRP,MF&FI,Kheri,7275168745,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+264,Junaid Ahemad,,DRP,Farm LH,Hapur,9756945987,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+265,Manoj Kumar Pandey,,DRP,SMCB,Pilibhit,6395723380,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+266,Ganesh Chandra Bajpai,,DRP,MF&FI,Fatehpur,9936307513,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+267,Mahesh Pal,,DRP,SMCB,Pilibhit,8279605314,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+268,Manish Kumar Sharma,,DRP,SMCB,Fatehpur,7007816808,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+269,Vineeta,,DRP,SMCB,Pilibhit,9219191092,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+270,Vivek Kumar Singh,,DRP,MF&FI,Pilibhit,7752897551,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+271,Dipti Shrivastava,,DRP,NONFARM LH,Fatehpur,9919609947,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+272,Pooja Pal,,DRP,MF&FI,Hapur,8273001845,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+273,Aakash Shukla,,DRP,Farm LH,Pilibhit,9457690541,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+274,Rajesh Kumar Gupta,,DRP,Farm LH,Etawah,9105149875,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+275,Asha Tomar,,DRP,SMCB,Hapur,8077981191,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+276,Abhishek Kumar,,DRP,SMCB,Fatehpur,7786044264,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+277,Budhdh Prakash Maurya,,DRP,Farm LH,Fatehpur,8756642072,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+278,Shiv Kumar Gupta,,DRP,SISD,Fatehpur,8887879012,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+279,Ram Naresh Shrivastava,,DRP,SMCB,Chitrakoot,8878240175,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+280,Ajay Pal Singh Chauhan,,DRP,SMCB,Fatehpur,9918187470,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+281,Satish Kumar,,DRP,Farm LH,Hapur,7895979744,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+282,Upasana Singh,,DRP,SMCB,Ghazipur,9695749439,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+283,Jagat Prakash Singh,,DRP,Farm LH,Fatehpur,6394622303,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+284,Reetu Devi,,DRP,SMCB,Chitrakoot,9559041563,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+285,Vivek Tiwari,,DRP,SISD,Fatehpur,9984161896,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+286,Vishal,,DRP,SMCB,Bareilly,790651659,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+287,Rajesh Kumar,,DRP,NONFARM LH,Bareilly,6396015307,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+288,Rohit Sehgal,,DRP,MF&FI,Pilibhit,9759999306,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+289,Shanno,,DRP,SISD,Hapur,7011577169,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+290,Rajesh Kumar Dwivedi,,DRP,MF&FI,Bareilly,9450692339,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+291,Manju Sharma,,DRP,SISD,Bareilly,8433023146,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+292,Nabi Ahemad,,DRP,Farm LH,Bareilly,9911116277,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+293,Hema Maurya,,DRP ,SMCB,KHERI,6394536052,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+294,Dev prakash chauhan,,DRP ,MF&FI,Saharanpur ,8979500449,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+295,Rekha devi,,DRP ,SMCB,Saharanpur,9935111855,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+296,Umisha tiwari,,DRP ,SISD,Saharanpur,9536338554,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+297,Umang Tomer,,DRP ,SMCB,Saharanpur,8859033505,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+298,ANIL KUMAR MORYA,,DRP ,NONFARM LH,Saharanpur,8081386644,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+299,Virendra Pal singh ,,DRP ,MF&FI,Sambhal,7534012028,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+300,Khushiyal chaudhary ,,DRP ,Farm LH,Sambhal,9918956072,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+301,OMPAL SINGH,,DRP ,MF&FI,Sambhal,9761040922,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+302,Vipin Kumar ,,DRP ,SMCB,Sambhal,9140550476,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+303,Hemant Babu,,DRP ,SMCB,Sambhal,9548255088,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+304,Jitendra singh,,DRP ,NONFARM LH,Sambhal,9411233769,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+305,Vipin Kumar Sharma ,,DRP ,SISD,Sambhal,8650863636,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+306,Nitin kumar sharma,,DRP ,MF&FI,Sambhal,7014462939,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+307,RAMSAGAR SINGH,,DRP ,Farm LH,Sambhal,9140773874,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+308,Radha,,DRP ,SMCB,Sambhal,9412025772,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+309,Luxmi,,DRP ,SISD,Sambhal,6395019017,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+310,Ganga devi,,DRP ,MF&FI,Mirzapur,7518090378,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+311,Prabha Sharma,,DRP ,SISD,Muzaffarnagar,7017562622,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+312,Rimpy ,,DRP ,SMCB,Muzaffarnagar ,9999759808,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+313,Pradeep kumar ,,DRP ,Farm LH,Muzaffarnagar ,7742223060,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+314,Gagandeep ,,DRP ,SMCB,Muzaffarnagar ,6396076530,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+315,Sarita,,DRP ,SISD,Muzaffarnagar,7906810294,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+316,Pramod kumar,,DRP ,SMCB,Muzaffarnagar,9412637328,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+317,Harish kumar ,,DRP ,Farm LH,Muzaffarnagar ,9557706591,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+318,Pratibha kashyap ,,DRP ,NONFARM LH,Muzaffarnagar ,7983745093,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+319,Archana devi Srivastava ,,DRP ,SMCB,Amethi ,9454209894,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+320,Mahima Gupta ,,DRP ,SMCB,Amethi ,9838901922,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+321,Preeti Singh,,DRP ,SISD,Amethi ,9335575859,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+322,Anjali tiwari ,,DRP ,SMCB,Amethi ,6307756476,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+323,IRFAN ,,DRP ,MF&FI,Amethi ,9519794747,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+324,Ramakant patel,,DRP ,MF&FI,Fatehpur,8896078648,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+325,Neetu Rani,,DRP ,Farm LH,Amroha,7618465361,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+326,Kanchan Kumar,,DRP ,Farm LH,Amroha,9756372181,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+327,Douli ,,DRP ,NONFARM LH,Amroha,9637495546,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+328,Jay Prakash ,,DRP ,MF&FI,SONBHADRA ,7309246990,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+329,Samriddhi kushwaha,,DRP ,Farm LH,Sonbhadra,7394947012,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+330,Sanju kushwaha ,,DRP ,NONFARM LH,SONBHADRA ,7652074589,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+331,Pankaj kumar sharma,,DRP ,MF&FI,SONBHADRA ,9956427447,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+332,Ajay kumar yadav,,DRP ,SMCB,SONBHADRA ,9026101939,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+333,Ashish Kumar Patel ,,DRP ,SMCB,SONBHADRA ,7379032424,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+334,Sushil kumar,,DRP ,MF&FI,SONBHADRA ,7317594535,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+335,Dr. Kripa. Shanker,,DRP ,SMCB,SONBHADRA ,8707485025,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+336,Nitish kumar chandrawanshi,,DRP ,SISD,SONBHADRA ,9616916403,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+337,Vishakha garg,Shiv kumar garg,DRP ,MF&FI,Muzaffarnagar ,9536465731,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+338,Seema,Laxmi Chand,DRP ,MF&FI,Muzaffarnagar ,7579794811,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+339,Pradeep Kumar Garg ,Sh Sadhu Ram Garg ,DRP ,MF&FI,Muzaffarnagar ,9559034843,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+340,SANTOSH PRASAD ,GOBARI PRASAD,DRP ,MF&FI,KUSHI NAGAR ,9838568779,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+341,Anuj Kumar Chaurasia,Vinod Prasad Chaurasia,DRP ,MF&FI,KUSHI NAGAR ,7275536617,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+342,Sachin kumar Srivastava ,Late Ravi Pratap Srivastava ,DRP ,Farm LH,KUSHI NAGAR ,9565485290,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+343,Gunjan ,Satish Dwivedi ,DRP ,SMCB,KUSHI NAGAR ,7355559479,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+344,Deeksha Singh ,Sant Sharan Singh ,DRP ,MF&FI,KUSHI NAGAR ,8840331023,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+345,Amar Nath,Vidya Nand ,DRP ,SMCB,KUSHI NAGAR ,"7985300341 ,  9919059228",N/A,YES,NO,NO,NO,NO,NO,NO,NO
+346,Markandey kumar tripathi,Vikrama prasad tripathi,DRP ,SISD,KUSHI NAGAR ,9838482917,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+347,Km. Vidya singh,Bramha chaudhari,DRP ,SMCB,KUSHI NAGAR ,8601688411,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+348,Guddi singh,Shailesh,DRP ,SISD,KUSHI NAGAR ,9919313173,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+349,Neelu,Laxmi Narayan Maurya ,DRP ,SMCB,Hathras ,8279809043,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+350,Jyoti Bhalla,Kartar Chand Bhalla / Ajay Kumar Bhola,DRP ,SMCB,Hathras,9981576297,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+351,Rishabh Tomar ,Lokendra Singh Tomar ,DRP ,Farm LH,Hathras ,9045638633,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+352,Mahesh Kumar Sharma,Shri Hanuman prasad Sharma,DRP ,MF&FI,Amethi ,8869874282,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+353,Varsha tiwari ,Bhumanidin tiwari ,DRP ,SMCB,Banda ,6260365651,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+354,Nisha Rajpoot,W/o kapil dev,DRP ,Farm LH,Banda,9670315634,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+355,Ashok Kumar ,baba deen,DRP ,SISD,Banda ,9919569685,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+356,Awadhesh kumar,Shri Mahesh kumar,DRP ,MF&FI,Banda,9450226418,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+357,Kamal kumar mishra,Lat Gaulal mishra,DRP ,Farm LH,Banda,9450169654,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+358,Mohit Kumar ,Jagdeesh Prasad ,DRP ,SMCB,Banda,8858151828,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+359,Manoj kumar yadav, Jay ram yadav,DRP ,MF&FI,Banda,9450105195,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+360,Dhirendra kumar Gautam ,Surendra Gautam ,DRP ,MF&FI,Banda ,9451594374,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+361,Ajay Kumar Nigam ,Ram Kishor Nigam,DRP ,SISD,Banda,8601474719,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+362,JAGMOHAN LAL,RAMDEEN ,DRP ,SMCB,BANDA,9519592281,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+363,Abdul Kadir ,Nisar Ahmad ,DRP ,SMCB,Ghaziabad ,8958858455,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+364,AMAN GOEL ,RAVISH GOEL ,DRP ,SISD,GHAZIABAD ,8368355033,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+365,Depa ,Mohit,DRP ,MF&FI,GHAZIABAD ,9627351182,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+366,Vimlesh sharma,Rajendra kumar sharma,DRP ,SMCB,Ghaziabad,6388932921,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+367,Durgesh Kumari ,Krishan Raj Sharma,DRP ,SMCB,Ghaziabad ,6395525730,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+368,Mansoor Ahmad ,Mohammad Muslim,DRP ,NONFARM LH,Ghaziabad ,8126548342,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+369,Avinash Gupta ,Krishna kumar gupta ,DRP ,SISD,Shravasti ,8423332121,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+370,Sudheer Kumar ,Ram Manohar,DRP ,SMCB,Shravasti ,9076973430,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+371,Sandeep kumar kasaudhan,Raj Narayan Kasaudhan,DRP ,NONFARM LH,Shravasti ,9453082743,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+372,Sachin kumar ,Jagdamba prasad,DRP ,SMCB,Shravasti ,9603909071,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+373,Vivek pandey,Brahm deo Pandey ,DRP ,MF&FI,Shravasti ,7007414458,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+374,Krishna Murari Yadav ,Chhote Lal Yadav ,DRP ,MF&FI,Shravasti ,9670810423,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+375,Arun Kumar ,Ram kishor,DRP ,Farm LH,Shravasti ,8948627121,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+376,Chanchal Devi,Milki Ram,DRP ,MF&FI,Shravasti ,6307313345,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+377,Shailendra Kumar ,Suresh Babu,DRP ,SISD,Shravasti ,7080727755,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+378,Indu Gautam,Shri Pradeep kumar,DRP ,SMCB,Shravasti ,8953015291,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+379,Santosh Kumar Balmiki ,Baburam Balmiki ,DRP ,Farm LH,Shravasti ,8853217600,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+380,Zeba umar khan,Tahir umar khan,DRP ,SMCB,Ayodhya,7355784992,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+381,Pradeep Kumar Shukla ,Shri Kant Shukla ,DRP ,Farm LH,Ayodhya,7800917700,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+382,Jaswant Singh Arora ,Late S Santokh Singh ,DRP ,MF&FI,Ayodhya,9838961572,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+383,Mukesh kumar verma,Krishna Prasad verma,DRP ,Farm LH,Ayodhya,9452559178,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+384,Shaveena Khatoon ,Mo Shafeek khan ,DRP ,SISD,Ayodhya,7054051729,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+385,Poonam Kumari ,Ramdayal,DRP ,SISD,Ayodhya,9648202232,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+386,Ravinder kaur,Jagjeet singh bagga,DRP ,SMCB,Ayodhya,9532631313,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+387,SAMAR BAHADUR,SURAJ DEEN,DRP ,NONFARM LH,Ayodhya,7905220807,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+388,Deepa verma ,Anand Patel,DRP ,MF&FI,Ayodhya,8707627025,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+389,Manesha Devi ,Ashish Kumar ,DRP ,SMCB,Ayodhya,9455707025,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+390,DEEPAK PRAJAPATI ,,DRP ,MF&FI,Ayodhya,7309132231,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+391,Indu Chaudhary ,,DRP ,MF&FI,Aligarh ,8433267278,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+392,Kushum,,DRP ,MF&FI,Aligarh ,7060606566,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+393,Rajesh Kumar Raghav,,DRP ,Farm LH,Aligarh,9926361988,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+394,Geetu Harkut,,DRP ,SISD,Aligarh,6398325129,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+395,Kavita,,DRP ,MF&FI,Aligarh,7456958753,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+396,Mrs Madhujadoun,,DRP ,SMCB,Aligarh,6398229108,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+397,Lokendra Mishra,,DRP ,SMCB,Aligarh,9410209353,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+398,Aravind Rajput ,,DRP ,MF&FI,Auraiya ,9936772425,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+399,Sumit Srivastava ,,DRP ,SISD,Auraiya ,9839195587,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+400,Awadhesh Kumar,,DRP ,MF&FI,Auraiya ,7355119701,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+401,Tauqeer Zia ,,DRP ,SMCB,Auraiya ,9452630077,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+402,Avneesh Kumar Singh ,,DRP ,MF&FI,Auraiya ,8467060554,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+403,Suresh Chandra ,,DRP ,SMCB,Auraiya ,6397851692,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+404,Geetam Kumar ,,DRP ,SISD,Auraiya ,9410877666,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+405,Omkar,,DRP ,NONFARM LH,Auraiya ,9761480585,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+406,ujjwal shukla,,DRP ,Farm LH,Auraiya ,9627324880,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+407,Sunil Kumar Upadhyay,,DRP ,Farm LH,Auraiya ,8279944139,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+408,Smt. Vidyawati Singh,,DRP ,SMCB,Auraiya ,9027079318,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+409,Ram milan ,,DRP ,MF&FI,Chitrakoot ,7355053989,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+410,Ashok kumar mishra,,DRP ,Farm LH,Chitrakoot ,9522311189,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+411,RAM MANOHAR,,DRP ,MF&FI,Chitrakoot ,8960815279,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+412,Balbir Singh,,DRP ,MF&FI,Chitrakoot ,9450580342,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+413,Akhilesh Pandey,,DRP ,NONFARM LH,Chitrakoot ,7302751841,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+414,Aman Sharma ,,DRP ,SISD,Firozabad ,8273262712,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+415,Madan gopal ,,DRP ,SISD,Firozabad ,9528017262,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+416,Pankaj Upadhyay ,,DRP ,Farm LH,Firozabad ,7906737756,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+417,Lakshman prasad,,DRP ,SMCB,Firozabad ,6396333350,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+418,Amar Singh,,DRP ,Farm LH,Firozabad ,9621977116,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+419,Jyoti yadav,,DRP ,MF&FI,Firozabad ,9456806011,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+420,Shivpal Singh Kashyap,,DRP ,MF&FI,Firozabad ,9368629085,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+421,Smt. Anjana Saxena,,DRP ,SMCB,Firozabad ,7017535225,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+422,Mo 0 part,,DRP ,SMCB,Firozabad ,8707229223,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+423,Ramakant,,DRP ,MF&FI,Firozabad ,7302751840,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+424,Sunil kumar jain,,DRP ,SMCB,Lalitpur,9450038283,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+425,Nitin kumar jain ,,DRP ,Farm LH,Lalitpur ,9795454730,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+426,Shradha tiwari,,DRP ,SISD,Lalitpur,9770970742,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+427,Sandeep Bablani,,DRP ,MF&FI,Lalitpur ,8299434644,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+428,Pramod Kumar ,,DRP ,MF&FI,Lalitpur ,7985421633,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+429,Dipti rai,,DRP ,Farm LH,Lalitpur ,7999951773,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+430,Pratibha Tiwari,,DRP ,SMCB,Lalitpur ,9111831861,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+431,K SAYEBU ,,DRP ,MF&FI,Lalitpur ,6397487813,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+432,Pratibha Tiwari,,DRP ,SMCB,Lalitpur ,9111831861,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+433,Roshni chand ,,DRP ,SISD,Lalitpur ,9935746999,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+434,Anand Pratap Singh,,DRP ,MF&FI,Pratapgarh,9118266594,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+435,Shlok Mishra ,,DRP ,Farm LH,Pratapgarh,9170840004,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+436,Hanuman Prasad Tripathi,,DRP ,MF&FI,Pratapgarh,9838347450,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+437,Sudha singh,,DRP ,SMCB,Pratapgarh,8949717661,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+438,Ram Prakash Pandey,,DRP ,SMCB,Pratapgarh,9453900590,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+439,Shivshankar Chourasiya,,DRP ,SMCB,Pratapgarh,8004732064,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+440,Mahesh Narayan Mishra,,DRP ,SISD,Pratapgarh,9336445025,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+441,Ajay Pratap Singh,,DRP ,SISD,Pratapgarh,9651913155,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+442,Sushil Kumar Yadav,,DRP ,NONFARM LH,Pratapgarh,8299571178,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+443,Anoop Kumar Srivastava,,DRP ,Farm LH,Pratapgarh,9450340323,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+444,Abhishek Kumar Singh,,DRP ,MF&FI,Pratapgarh,9454535533,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+445,Bindu Shukla,,DRP ,NONFARM LH,Rae Bareli,6394164829,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+446,Ram Raksha Pal Singh,,DRP ,MF&FI,Rae Bareli,9415790818,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+447,Rohit Kumar Verma,,DRP ,Farm LH,Rae Bareli,8009920122,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+448,Akinchhan Kumar Yadav,,DRP ,Farm LH,Rae Bareli,7985332408,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+449,Jyotima,,DRP ,SISD,Rae Bareli,7800084850,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+450,Mr.Ajay Kumar Bajpai,,DRP ,SMCB,Rae Bareli,7007142826,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+451,Ramkumar Singh,,DRP ,SMCB,Rae Bareli,9984685005,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+452,Anamika Mishra,,DRP ,SISD,Rae Bareli,9260997298,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+453,Vishnu Kumar,,DRP ,SMCB,Rae Bareli,9454121788,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+454,Vijay Kumar Dixit,,DRP ,MF&FI,Rae Bareli,9616558825,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+455,Poonam yadav ,,DRP ,SISD,Sant Kabeer Nagar,8423865400,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+456,Amitabh Pandey,,DRP ,Farm LH,Sant Kabeer Nagar,8299134665,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+457,Sarita,,DRP ,SMCB,Sant Kabeer Nagar,7607735346,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+458,Madhuri,,DRP ,Farm LH,Sant Kabeer Nagar,7985729534,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+459,Deepmala mishra ,,DRP ,MF&FI,Sant Kabeer Nagar,8340240612,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+460,Sunita Pandey,,DRP ,SISD,Sant Kabeer Nagar,8090422164,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+461,Sadhana Ranjan,,DRP ,SMCB,Sant Kabeer Nagar,9838385111,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+462,Brijmohan Singh,,DRP ,MF&FI,Sant Kabeer Nagar,9450886341,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+463,Pawan Kumar Lal,,DRP ,NONFARM LH,Sant Kabeer Nagar,9415069437,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+464,Prem Prakash Pandey,,DRP ,MF&FI,Sant Kabeer Nagar,8090128720,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+465,Shravan Kumar Singh,,DRP ,SMCB,Sant Kabeer Nagar,9517483348,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+466,SANJEEV KUMAR ,AWADH BIHARI ,DRP ,SISD,Agra,8176014199,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+467,Durgesh Kumar,Radhe Shyam,DRP ,MF&FI,Basti,9918532821,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+468,Shaireen jauhari ,Rachit Bhatnagar ,DRP ,SISD,Rampur ,9084943577,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+469,Rudra Pratap,Tej Bahadur Singh,DRP ,SISD,Mau,9415391619,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+470,Ravi Pandey,Dinesh Kumar Pandey,DRP ,MF&FI,Etawah ,9557217322,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+471,Sher Narayan Singh ,Ramsurat Singh,DRP ,SISD,Mau,9451132516,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+472,Rishikant Vishwakarma ,Late lal jee Vishwakarma ,DRP ,MF&FI,Ballia ,7388573018,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+473,Ajay Kumar ,Shri Kshetrapal Singh ,DRP ,MF&FI,Agra,9058222777,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+474,Kumud Ranjan Singh,Ashok Kumar Singh,DRP ,SISD,Etawah ,7004171170,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+475,Jyoti Devi,Rajeev kumar,DRP ,MF&FI,Rampur,9557751381,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+476,Sapna upadhyay ,Lokesh kumar ,DRP ,SMCB,Agra,9.26E+11,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+477,Kumkum,Yogendrasingh,DRP ,MF&FI,Agra,7668855968,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+478,Rachit Bhatnagar ,Mr bipin chandra ,DRP ,MF&FI,Rampur,7017842279,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+479,Dhannjay Kumar,Pradip Kanoujiya ,DRP ,SMCB,Etawah ,7881113470,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+480,Vikash Kumar soni ,Amar prasad ,DRP ,MF&FI,Ballia ,9305807171,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+481,Lalita Verma,Lt Mansha Ram,DRP ,SMCB,Mau,7080378269,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+482,Suresh Chandra ,Shri Madan Singh ,DRP ,SISD,Rampur ,9917028966,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+483,Surendra Pratap Singh,Ramsanehi singh ,DRP ,SMCB,Mau,9506574334,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+484,Ankit Tiwari ,Narendra Nath Tiwari ,DRP ,MF&FI,Ballia ,6393597101,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+485,Sakshi Tripathi ,Akshay Kumar Dixit ,DRP ,MF&FI,Agra,9690505909,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+486,Ravi dixit,BM dixit,DRP ,NONFARM LH,Agra,9808319356,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+487,Rabendra kumar ,Hari baboo,DRP ,SISD,Agra,9720650948,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+488,Salman Khan ,Sahadat khan ,DRP ,NONFARM LH,Rampur ,7906040426,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+489,Ashakiran ,Lt virendra Kumar Chaudhary ,DRP ,SMCB,Basti,8423119165,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+490,Ajay Kumar ,Ram Jatan ,DRP ,Farm LH,Basti,8418857811,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+491,Mayank Mishra,Dr.Ashok Kr Mishra,DRP ,SMCB,Agra,9839090690,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+492,SAPNA DEVI,SHASHI KUMAR Sharma ,DRP ,SMCB,RAMPUR ,9058239220,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+493,Panna Lala Mishra,Braj Kumar Mishra,DRP ,SISD,Etawah ,6394625333,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+494,Niharika,Ashish shukla,DRP ,NONFARM LH,Etawah ,9457019933,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+495,Amit Kumar Upadhayay,Avadh Bihari,DRP ,Farm LH,Agra,9761752915,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+496,CHANDAN PRAJAPATI ,SURENDRA PRAJAPATI ,DRP ,SMCB,MAU,7084547453,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+497,Bihari Singh,Bhaw Singh,DRP ,SMCB,Etawah ,9412502138,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+498,Pushpa Gautam ,Bamba Prasad ,DRP ,NONFARM LH,Basti,9721224486,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+499,Sudhir Singh Chauhan ,Ramraj Singh ,DRP ,Farm LH,Etawah ,9027640772,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+500,Pankaj kumar singh,Shatrudhan singh,DRP ,SMCB,Ballia ,9455363143,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+501,Prabhat Kumar Singh ,Lt. Sri Devendra Kumar Singh ,DRP ,SMCB,Ballia ,9140226400,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+502,Mousumi verma,W/osanjay verma,DRP ,MF&FI,Mau,6392305211,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+503,Amrendra Singh Chauhan ,Kailash Singh ,DRP ,SISD,Sitapur ,9452233652,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+504,Desh Deepak Patel ,Ram Shabd verma ,DRP ,SISD,Basti,8738943386,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+505,Sanjay Kumar Mishra ,Let Murali Dhar Mishra ,DRP ,MF&FI,Mau,94158 36938 ,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+506,Shobha saini,Ramkumar saini,DRP ,Farm LH,Rampur ,9267655390,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+507,Ramesh Chandra,Shiv Charan Lal,DRP ,MF&FI,Basti,6394113716,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+508,NEELAM YADAV ,Sri Prakash Yadav ,DRP ,SISD,Ballia ,7523849991,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+509,Manoj kumar,Chote singh,DRP ,MF&FI,Rampur ,7817930312,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+510,Shaheen bi,Sageer ahmad ,DRP ,Farm LH,Rampur ,7668942080,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+511,Amit Tyagi,Rakesh Chand Tyagi,DRP ,SMCB,Agra,9761126327,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+512,Mamta Verma ,Chandan verma,DRP ,SMCB,Ballia ,9839381376,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+513,Neelam devi ,Ravichad ra,DRP ,SMCB,Basti,7081213082,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+514,Rakesh Kumar Dwivedi ,Krishna Kumar Dwivedi ,DRP ,Farm LH,Etawah ,7905158326,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+515,mandavi mishra,Ram pratap Dubey ,DRP ,SMCB,Etawah ,9953605141,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+516,Shri Nath ,Hundar Prasad ,DRP ,MF&FI,Basti,9919656778,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+517,Surendra Sagar,Mohar Singh,DRP ,SMCB,Rampur,7351597151,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+518,Mohd Rizwan,Riyasan Hussain,DRP ,SMCB,Rampur,9149032130,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+519,Suman Kumari,Dal Chandra Pal,DRP ,SMCB,Hathras,9528674653,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+520,Suresh Kumar,Kalluram,DRP ,SISD,Basti,9795111511,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+521,Rustam Singh,Bijendra Singh,DRP ,Farm LH,Agra,7017256467,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+522,UMA,ARUN,DRP ,SISD,Baghpat ,8193078252,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+523,Mamta sharma,Gaurav sharma,DRP ,NONFARM LH,Baghpat,9105773062,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+524,Rajiv Kumar ,Omparakash ,DRP ,Farm LH,Baghpat ,9756775456,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+525,Priyanka,Sunder,DRP ,SISD,Baghpat,9315951825,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+526,Babita ,Subhash ,DRP ,SMCB,Baghpat ,8869873616,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+527,Shweta rajput,Yash pal singh,DRP ,SMCB,Baghpat ,8868009201,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+528,Nisha Sharma ,Birjesh Sharma ,DRP ,SMCB,Baghpat ,8433195138,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+529,Deepa ,Vinod kumar ,DRP ,MF&FI,Baghpat ,8171205175,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+530,Ramrati ,Satish Chand ,DRP ,MF&FI,Baghpat ,9634561760,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+531,Sonia,Ranjeet singh,DRP ,MF&FI,Baghpat ,9548780299,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+532,Jyoti ,Kapil chouhan ,DRP ,Farm LH,Baghpat ,9536948270,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+533,Kumar Prins,Ramesh Rai,DRP ,MF&FI,Ghazipur,9305647243,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+534,Sachin yadav ,Vindhyachal ,DRP ,SISD,Ghazipur ,9454927778,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+535,Rajkumar,Ramraj,DRP ,MF&FI,Ghazipur,8887399027,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+536,Ashutosh Sharma ,Rishabha dev Sharma ,DRP ,SMCB,Ghazipur ,7007675500,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+537,Shivam Singh ,Mr. Dileep Kumar Singh ,DRP ,NONFARM LH,Ghazipur ,7007543452,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+538,Kanhaiya Ram,Shri Birju Ram,DRP ,SMCB,Ghazipur,9565947585,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+539,Anarma prasad,Late Basant,DRP ,Farm LH,Ghazipur,8299801934,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+540,Rakesh Kumar Arya,Amarnath,DRP ,SMCB,Ghazipur,8931831295,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+541,Ajeet kumar,Mool chandra,DRP ,SMCB,Hamirpur,9454101025,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+542,puneet narayan,shri narayan tiwari,DRP ,SMCB,hamirpur,9956989588,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+543,Ram kishor,Shiv prasad,DRP ,SISD,Hamirpur ,9198065467,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+544,Prachi bajpai,Ramesh prasad,DRP ,MF&FI,Hamirpur ,9369192805,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+545,Suresh kumar sharma,Ram Narayan sharma,DRP ,MF&FI,Hamirpur,9550263282,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+546,Reshma devi ,KALKA,DRP ,Farm LH,Hamirpur ,7905911511,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+547,Rahul Pal,Virendra kumar,DRP ,NONFARM LH,Hamirpur,9450423934,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+548,Shivani Tiwari ,Umashankar Tiwari ,DRP ,SISD,Hamirpur,9517693511,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+549,Mahendra Kumar ,Anand Kumar ,DRP ,MF&FI,Hamirpur ,9369190049,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+550,Chandrajeet Singh, Shri Shiv Bali Singh,DRP ,SMCB,Hamirpur,6387939374,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+551,Shawez Khan,Ashiq Ali khan,DRP ,MF&FI,Kheri,7007578332,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+552,Kripashankar ,Babu ram ,DRP ,MF&FI,Prayagraj,8787056483,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+553,Safirun Nisha,Ali Husain,DRP ,SISD,Prayagraj,7505355442,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+554,Priyanka Singh ,Mr. Bhupendra Pratap Singh ,DRP ,NONFARM LH,Prayagraj,6386574709,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+555,Ravi Kumar ,Mr. Arjun Lal,DRP ,SMCB,Prayagraj,7505030003,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+556,Kamrun nisha,Nawab ali,DRP ,MF&FI,Prayagraj,9004983748,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+557,Dr. Yogesh kumar singh,Shri Virendra Pratap Singh ,DRP ,SMCB,Prayagraj,9369557989,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+558,Ratnesh Sharma ,Suresh chandra Sharma ,DRP ,SMCB,Prayagraj,9415128398,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+559,Pooja Singh,Rambahadur singh,DRP ,SISD,Prayagraj,9555182452,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+560,Rakesh Kumar ,Rampal singh ,DRP ,Farm LH,Shamli ,9568497793,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+561,SUNIL KUMAR ,RAJPAL SINGH ,DRP ,MF&FI,Shamli ,8859742007,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+562,Arvind Kumar ,Gordhan ,DRP ,Farm LH,Shamli ,7088780346,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+563,Dayavanti ,RAJESH KUMAR,DRP ,SISD,Shamli ,8755856818,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+564,Deepshikha ,Deepak Kumar ,DRP ,MF&FI,Shamli ,7454961770,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+565,Km.Minakshi,Sonu,DRP ,SMCB,Shamli ,8708312604,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+566,Meenu saini ,Vikas Kumar ,DRP ,SMCB,Shamli ,9084689805,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+567,Mamta devi,Upendra singh,DRP ,SISD,Shamli ,7004689312,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+568,Vikas Agarwal ,Shri Rajendra Prasad Agarwal ,DRP ,MF&FI,Shamli ,7011109073,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+569,Mukeah kumar jaiswal,Ambika prasad ,DRP ,SMCB,Shamli ,8687848788,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+570,Vivek Yadav,Ram Samujh Yadav,DRP ,SMCB,Azamgarh ,8115933393,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+571,Goldy parashar,Krishna murari parashar,DRP ,SISD,Gonda,7906190979,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+572,Shravan Kumar ,Kamal Kishor Upadhyay ,DRP ,NONFARM LH,Gonda,9415427157,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+573,Pankaj singh,Gulab singh,DRP ,MF&FI,Azamgarh ,7376201393,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+574,Roshan jahan,Mo. Ismail khan,DRP ,SISD,Gonda,7607943728,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+575,Yogesh Kumar Yadav,Triveni Prasad Yadav,DRP ,MF&FI,Gonda,6387784478,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+576,Gyan Prakash ,Mr Dinbandhu mishra ,DRP ,MF&FI,Gonda ,9506058852,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+577,Sonu Maurya ,Pujari Lal Maurya ,DRP ,SMCB,Gonda ,9794730309,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+578,Anil Kumar ,Suraj pal singh ,DRP ,MF&FI,Budaun ,8630458313,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+579,Shaista Bano,Mohd Akhtar ,DRP ,SISD,Unnao ,8543980614,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+580,Anita,Rambriksh,DRP ,SMCB,Unnao,8931044690,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+581,Gurbhej Singh ,Sukhvinder Singh ,DRP ,MF&FI,Unnao ,9721397804,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+582,Ashok Kumar Yadav ,Indrajeet Yadav ,DRP ,MF&FI,Azamgarh,9455186680,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+583,Manish kumar Pandey ,Vinod Kumar Pandey ,DRP ,Farm LH,Unnao ,9793215245,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+584,Vijaykumarverma,SRI DARWARI LAL VERMA,DRP ,MF&FI,UNNAO,9452673656,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+585,Suman Singh ,VP SINGH ,DRP ,MF&FI,Azamgarh ,8840194242,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+586,Sushma rathore ,Manoj kumar,DRP ,SMCB,Budaun,6398393317,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+587,Prem Chand Yadav,Raghubansh Yadav,DRP ,SISD,Azamgarh,8808871298,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+588,RUBY KUMARI,Mr. Devendra singh,DRP ,SISD,Mathura,7409866953,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+589,Santosh Kumar ,Ram Kumar ,DRP ,MF&FI,Gonda ,9161927858,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+590,Manish Kumar Singh,Abhimanyu Singh,DRP ,NONFARM LH,Azamgarh,8795098898,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+591,Rizwan khan ,Mazidulla khan ,DRP ,SMCB,Unnao,9528718811,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+592,Satish chandra,Rambabu,DRP ,MF&FI,Unnao,9305684458,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+593,Vinit kumar pandey ,VirendrA pandey ,DRP ,SISD,Azamgarh ,7800155330,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+594,AMIT KUMAR SINGH TOMAR ,Jagveer Pal Singh Tomar ,DRP ,SMCB,Budaun,9219208698,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+595,Jaswant singh ,Gokul singh,DRP ,Farm LH,Gonda ,9161872324,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+596,Jyotsna gupta ,Dev krishna gupta ,DRP ,SISD,Unnao ,9140618952,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+597,Beena tiwari ,Mr. Radhika prasad tiwari ,DRP ,Farm LH,Gonda ,6388837314,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+598,Ranjeet Kumar Chaudhary ,Late Sita Ram,DRP ,SMCB,Azamgarh ,9598417005,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+599,Pooja gupta,Tirth gupta,DRP ,MF&FI,Budaun ,7819036186,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+600,Surendra Kumar Singh,Shree Suresh Chandra Singh,DRP ,SMCB,Budaun ,9458057471,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+601,Satish Kumar Bajpai ,Chote Lal  Bajpai,DRP ,SMCB,Gonda,9454392915,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+602,Madhuri singh,Gopal pratap singh,DRP ,SMCB,Unnao,9838235318,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+603,Chanchal,Ajai prakash mishra,DRP ,SMCB,Gonda,7985720287,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+604,Umesh pal,Shri Ahivaran Singh,DRP ,SISD,Budaun ,9690939196,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+605,BALVEER SINGH ,BAMBOO RAM SINGH ,DRP ,SISD,Budaun ,9997035873,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+606,Ajay  Prakash Yadav,Hariram Yadav ,DRP ,SMCB,Azamgarh ,9451484456,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+607,Sandeep Shukla ,Vinay Prakash Shukla ,DRP ,MF&FI,Barabanki ,9415088896,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+608,Sohit,Ram sahare,DRP ,Farm LH,Barabanki ,9454987929,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+609,Akanksha Kushawaha ,Pradeep Kumar ,DRP ,SISD,Shahjahanpur ,8756836746,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+610,Dileep Kumar ,Bihari Lal,DRP ,NONFARM LH,Barabanki ,7081559034,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+611,Anita,Subash Chandra sharma,DRP ,MF&FI,Chandauli,9984396634,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+612,Ram Kumar ,Gaya Prasad ,DRP ,SMCB,Siddharth Nagar ,9984404593,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+613,Vipin Kumar,Sohan Lal Verma,DRP ,MF&FI,Balrampur,9554622622,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+614,Suman Dube ,Vishwanath Dube,DRP ,SISD,Siddharth Nagar ,9721719388,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+615,Kiran Verma ,Chedi Lal,DRP ,SMCB,Balrampur ,9555170050,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+616,Dileep Mishra ,Vimlesh Mishra ,DRP ,MF&FI,Barabanki ,9450499031,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+617,Vivek kumar,Phool singh ,DRP ,SMCB,Shahjahanpur ,965303199,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+618,Ramesh Kumar yadav ,Babu lal yadav,DRP ,Farm LH,Siddharth Nagar ,9628576679,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+619,Abhishek kumar,Chhail Bihari,DRP ,MF&FI,Shahjahanpur ,8953813505,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+620,Amit Kumar Singh ,Narendra Pratap Singh ,DRP ,MF&FI,Siddharth Nagar ,9554322004,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+621,Ravish Khan,Monis Khan,DRP ,SMCB,Shahjahanpur ,9044935109,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+622,Jagveer Singh yadav ,Lt pyare singh yadav ,DRP ,MF&FI,Shahjahanpur ,8318336562,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+623,Kumari Sanupama Bhartii,Anil kumar,DRP ,Farm LH,Chandauli,7518722129,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+624,Krishna Murari Mishra ,Shahdev Prshad,DRP ,MF&FI,Barabanki,9140788388,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+625,Deep Shikha Tripathi ,Sanjeev shekhar Tripathi ,DRP ,SISD,Barabanki,8957731552,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+626,Nima ,Balwant ,DRP ,SMCB,Chandauli,9793821600,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+627,ASHEESH KUMAR,SHIV KUMAR SINGH,DRP ,MF&FI,Shahjahanpur ,6396670530,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+628,Sadhvi,Jitendra Kumar ,DRP ,SISD,Balrampur ,9580042488,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+629,Naveen Kumar ,Shanti Sharan,DRP ,SISD,Shahjahanpur ,9411260655,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+630,Vimla verma ,Yogesh verma ,DRP ,MF&FI,Chandauli,7524959711,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+631,Shivendra ,Kapil Dev,DRP ,SMCB,Siddharth Nagar ,9794656511,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+632,Khushboo vishwakarma ,Bablu vishwakarma ,DRP ,NONFARM LH,Chandauli,8957911719,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+633,Hasib Ur Rahman ,Late Qazi Mohd Shafiqur Rahman,DRP ,MF&FI,Siddharth Nagar ,9839612117,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+634,Sarvesh kumar mishra,Ayodhya prasad mishra,DRP ,SMCB,Balrampur,9455751751,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+635,Radhe shyam yadav,Heera prasad,DRP ,SMCB,Chandauli,8858253562,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+636,Atul  Singh,Sunrendra Pratap Singh,DRP ,SMCB,Barabanki,9454709639,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+637,Shashi Sharma ,Rakesh Kumar ,DRP ,SMCB,Chandauli,8953228303,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+638,Poonam ,Abhimanyu papa ,DRP ,SISD,Balrampur,7388844425,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+639,Madhuri singh,Mr. Ashok kumar Singh,DRP ,SMCB,Barabanki,8004976958,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+640,Sandip kumar singh,Lt.awadhesh narayan singh,DRP ,MF&FI,Chandauli,9453677210,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+641,K M C Verma ,Sri Manni Verma ,DRP ,MF&FI,Siddharth Nagar ,7080974234,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+642,Neelam Shrivastava ,Shri.vishv prakash Shrivastava ,DRP ,SMCB,Balrampur ,8874595945,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+643,Ashwani kumar vishwakarma,Ramsanehi,DRP ,Farm LH,Barabanki,8517842710,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+644,Sanjeev Shekhar Tripathi,Hari Shankar Tripathi,DRP ,MF&FI,Balrampur,8655588815,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+645,Reetu Kharwar,Ishwar,DRP ,SISD,Siddharth Nagar ,8953391155,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+646,Bandana singh ,Saurabh Singh ,DRP ,SISD,Chandauli,9598430037,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+647,Dharmendra kumar,Bhullur prasad,DRP ,SMCB,Siddharth Nagar ,6388652565,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+648,Asha yadav,Umesh yadav,DRP ,SMCB,Barabanki ,9336225645,N/A,YES,NO,NO,NO,NO,NO,NO,NO
+649,Komal Tewari,Raj Kumar,DRP ,SMCB,Shahjahanpur ,9044467544,N/A,YES,NO,NO,NO,NO,NO,NO,NO

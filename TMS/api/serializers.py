@@ -79,6 +79,7 @@ class TrainingThemeDetailSerializer(SoftDeleteModelSerializer):
 class MasterTrainerSerializer(SoftDeleteModelSerializer):
     block_name_en = serializers.SerializerMethodField()
     district_name_en = serializers.SerializerMethodField()
+    theme_name = serializers.SerializerMethodField()
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.MasterTrainer
@@ -93,6 +94,12 @@ class MasterTrainerSerializer(SoftDeleteModelSerializer):
     def get_district_name_en(self, obj):
         try:
             return obj.empanel_district.district_name_en if obj.empanel_district else None
+        except:
+            return None
+
+    def get_theme_name(self, obj):
+        try:
+            return obj.theme.theme_name if obj.theme else None
         except:
             return None
 
