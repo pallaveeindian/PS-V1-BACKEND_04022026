@@ -6,7 +6,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from core.models import MasterUser, MasterDistrict, MasterBlock, MasterPanchayat, MasterVillage
-from django.db.models import Max
+from django.db.models import Max, UniqueConstraint, Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -489,7 +489,13 @@ class TPCPToCentre(SoftDeleteMixin):
 
     class Meta:
         db_table = 'tms_tpcp_centre'
-        unique_together = ('contact_person', 'allocated_centre')
+        constraints = [
+            UniqueConstraint(
+                fields=['contact_person', 'allocated_centre'],
+                condition=Q(is_active=True),
+                name='unique_active_tpcp_centre'
+            )
+        ]
         managed = True
 
     def __str__(self):
@@ -914,29 +920,44 @@ class Batch(SoftDeleteMixin):
 
     def save(self, *args, **kwargs):
         if not self.code:
-            # Extract names or fallback to "XXX"
+            # 1. Extract Financial Year Short Code (e.g., '2026-27' -> '26')
+            fy_code = "XX"
+            if self.financial_year and len(self.financial_year) >= 4:
+                # Take the last two digits of the starting year (e.g., "2026" -> "26")
+                fy_code = self.financial_year[2:4]
+
+            # 2. Extract District Short Name
             district = "XXX"
             if self.district:
                 district = self.district.district_short_name_en or "XXX"
 
-            block = "XXX"
-            if self.block:
-                block = self.block.block_name_local or "XXX"
-                
+            # 3. Extract Training Partner Short Name
             tp = "XXX"
             if self.partner:
                 tp = self.partner.tp_short_name or "XXX"
-                
+
+            # 4. Extract Plan ID
             plan_id = 0
             if self.training_plan:
                 plan_id = self.training_plan.id or 0
 
-            # 2. Construct the prefix
-            prefix = f"{district}-{block}-{tp}-{plan_id}"
+            # 5. Determine Logic Path based on Block and Batch Type
+            if not self.block:
+                # If No Block is given (State/District Level without specific block)
+                prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
+            elif self.batch_type == 'COMBINED':
+                # If Combined Batch (Has block but is combined)
+                prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"
+            else:
+                # If Separate Batch (Has block and is separate)
+                block_name = self.block.block_name_local or "XXX"
+                prefix = f"{fy_code}-{district}-{block_name}-{tp}-{plan_id}"
 
-            # 3. Sequence Generation with Race-Condition Protection
+            # 6. Sequence Generation with Race-Condition Protection
             with transaction.atomic():
-                # select_for_update() locks these rows until the save is complete
+                # Extract the base prefix without the financial year to ensure the sequence 
+                # continues correctly even if the year prefix format changed slightly.
+                # However, since you want sequence to be unique per prefix, we filter by the EXACT prefix.
                 last_batch = Batch.objects.select_for_update().filter(
                     code__startswith=prefix
                 ).aggregate(max_seq=Max("code"))

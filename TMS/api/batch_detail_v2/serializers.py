@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from TMS.models import *
-from core.models import MasterBlock
+from core.models import MasterBlock, MasterDistrict
 
 # ---------------------------------------------------------
 # 1. Base / Configuration Serializers
@@ -60,11 +60,30 @@ class TrainingPartnerCentreSerializer(serializers.ModelSerializer):
 # 2. Base Participant Serializers
 # ---------------------------------------------------------
 class TRBeneficiarySerializer(serializers.ModelSerializer):
+    district_name_en = serializers.CharField(
+        source="district.district_name_en",
+        read_only=True
+    )
+    block_name_en = serializers.CharField(
+        source="block.block_name_en",
+        read_only=True
+    )
+
     class Meta:
         model = TRBeneficiary
         fields = '__all__'
 
+
 class TRTrainerSerializer(serializers.ModelSerializer):
+    district_name_en = serializers.CharField(
+        source="district.district_name_en",
+        read_only=True
+    )
+    block_name_en = serializers.CharField(
+        source="block.block_name_en",
+        read_only=True
+    )
+
     class Meta:
         model = TRTrainer
         fields = '__all__'
@@ -161,6 +180,9 @@ class BatchMediaSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class BatchParticipantCertificateSerializer(serializers.ModelSerializer):
+    tr_beneficiary = TRBeneficiarySerializer(read_only=True)
+    tr_trainer = TRTrainerSerializer(read_only=True)
+
     class Meta:
         model = BatchParticipantCertificate
         fields = '__all__'

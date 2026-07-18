@@ -13,6 +13,9 @@ from TMS.api.user_mgmnt import *
 # Custom TP target assignment API
 from TMS.api.tp_assign_v2.views import *
 
+# Dashboard APIs
+from TMS.api.TPHomepageV2.views import *
+
 # NEW TC MODULE APIs
 from TMS.api.tc_module_apis.trainees_list import *
 from TMS.api.tc_module_apis.batch_creator_v2 import *
@@ -22,6 +25,7 @@ from TMS.api.tc_module_apis.batch_review import *
 from TMS.api.tc_module_apis.tpcp_creator_v2 import *
 from TMS.api.tc_module_apis.target_ach_v2 import *
 from TMS.api.tc_module_apis.tr_participants import *
+from TMS.api.mt_apis_v2.views import *
 
 router = DefaultRouter()
 
@@ -369,4 +373,18 @@ urlpatterns = [
         ),
         name="public-training-plan-list",
     ), 
+
+    # Master Trainer V2 Endpoints
+    path('mt-list/', MasterTrainerListAPIView.as_view(), name='master-trainer-list'),
+    path('mt-detail/<int:pk>/', MasterTrainerDetailAPIView.as_view(), name='master-trainer-detail'),
+    path('mt-create/', MasterTrainerCreateAPIView.as_view(), name='master-trainer-create'),
+    path('mt/<int:pk>/update/', MasterTrainerUpdateAPIView.as_view(), name='master-trainer-update'),
+    path('mt/<int:pk>/delete/', MasterTrainerDeleteAPIView.as_view(), name='master-trainer-delete'),
+
+    # Bulk Certificate Endpoints
+    path('mt/<int:pk>/certificates/upload/', CertificateBulkUploadAPIView.as_view(), name='master-trainer-cert-upload'),
+    path('mt/<int:trainer_id>/certificates/<int:cert_id>/delete/', CertificateDeleteAPIView.as_view(), name='master-trainer-cert-delete'),    
+
+    # TP Dashboard Metrics
+    path('tp/dashboard-metrics/', TrainingPartnerDashboardView.as_view(), name='tms-partner-dashboard-metrics'),
 ]

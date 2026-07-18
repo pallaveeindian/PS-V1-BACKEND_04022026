@@ -1573,6 +1573,40 @@ class BatchViewSet(BaseTMSModelViewSet):
         response["Content-Disposition"] = f'inline; filename="{filename}"'
         return response
 
+    @swagger_auto_schema(
+            method="get",
+            operation_summary="Retrieve full status history for a batch from start to end",
+            responses={200: "List of batch history records"},
+        )
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        """
+        Returns all status transitions and history records for a specific batch,
+        ordered chronologically (from oldest to newest).
+        """
+        batch = self.get_object()
+        
+        # Fetch history and override default ordering to be start -> end (chronological)
+        history_qs = tms_models.BatchHistory.objects.filter(
+            batch=batch, 
+            is_active=True
+        ).select_related("created_by").order_by("created_at")
+        
+        # Manually constructing the dictionary ensures it works immediately 
+        # without needing to define and import a separate BatchHistorySerializer.
+        history_data = [
+            {
+                "id": record.id,
+                "status": record.status,
+                "remarks": record.remarks,
+                "created_at": record.created_at,
+                "created_by_username": record.created_by.username if record.created_by else None,
+            }
+            for record in history_qs
+        ]
+        
+        return Response(history_data, status=status.HTTP_200_OK)
+
 class BatchListPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = None

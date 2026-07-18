@@ -103,7 +103,9 @@ class TicketBody(SoftDeleteMixin):
     block = models.ForeignKey(
         MasterBlock, 
         on_delete=models.PROTECT, 
-        verbose_name="Block"
+        verbose_name="Block",
+        null=True,
+        blank=True
     )
     username = models.CharField(max_length=150, verbose_name="Username")
 

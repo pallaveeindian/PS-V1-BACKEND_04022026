@@ -36,12 +36,13 @@ class PublicCadreSelectionSummaryView(APIView):
         district_wise_cadre_summary = request.query_params.get('district_wise_cadre_summary') == '1'
         dist_trgt_prcnt = request.query_params.get('dist_trgt_prcnt') == '1'
         dist_theme_prcnt = request.query_params.get('dist_theme_prcnt') == '1'
+        theme_wise_summary = request.query_params.get('theme_wise_summary') == '1' 
 
         # Validate Mandatory Parameters for the New Endpoints
-        if (dist_trgt_prcnt or dist_theme_prcnt) and not financial_year:
+        if (dist_trgt_prcnt or dist_theme_prcnt or theme_wise_summary) and not financial_year:
             return Response({
                 "status": "error",
-                "message": "financial_year is MANDATORY when dist_trgt_prcnt or dist_theme_prcnt is requested."
+                "message": "financial_year is MANDATORY for target vs cadre percentage calculations."
             }, status=400)
 
         # 3. Apply Filters to Base Queryset
@@ -245,7 +246,67 @@ class PublicCadreSelectionSummaryView(APIView):
                 reverse=True
             )
 
-        # 6. Default Branch: Fetch Detailed Records 
+        # 5d. Branch: Theme Wise Summary (Aggregated across all districts)
+        if theme_wise_summary:
+            target_qs = TrainingPartnerTargets.objects.filter(
+                financial_year=financial_year
+            )
+            # Propagate stackable filters
+            if district_id:
+                target_qs = target_qs.filter(district_id=district_id)
+            if theme_id:
+                target_qs = target_qs.filter(training_plan__theme_id=theme_id)
+            if plan_id:
+                target_qs = target_qs.filter(training_plan_id=plan_id)
+
+            # Group targets exclusively by theme
+            target_data = target_qs.annotate(
+                resolved_theme=Coalesce('training_plan__theme__theme_name', 'theme')
+            ).filter(
+                resolved_theme__isnull=False
+            ).values('resolved_theme').annotate(total_target=Sum('target_count'))
+
+            theme_target_map = {
+                item['resolved_theme']: item['total_target'] or 0 
+                for item in target_data
+            }
+
+            # Group achieved (cadre) exclusively by theme
+            cadre_data = queryset.filter(
+                training_plan__theme__isnull=False
+            ).values('training_plan__theme__theme_name').annotate(
+                b_count=Count('beneficiary_registrations', distinct=True),
+                t_count=Count('trainer_registrations', distinct=True)
+            )
+
+            theme_cadre_map = {
+                item['training_plan__theme__theme_name']: item['b_count'] + item['t_count']
+                for item in cadre_data
+            }
+
+            # Combine unique theme keys from both targets and actuals
+            all_themes = set(theme_target_map.keys()).union(set(theme_cadre_map.keys()))
+            theme_summary_data = []
+
+            for t_name in all_themes:
+                t_target = theme_target_map.get(t_name, 0)
+                t_cadre = theme_cadre_map.get(t_name, 0)
+                percentage = round((t_cadre / t_target * 100), 2) if t_target > 0 else 0.0
+
+                theme_summary_data.append({
+                    "theme_name": t_name,
+                    "theme_target": t_target,
+                    "total_on_boarded": t_cadre,
+                    "percentage": percentage
+                })
+
+            response_payload["theme_wise_summary"] = sorted(
+                theme_summary_data,
+                key=lambda x: x['total_on_boarded'],
+                reverse=True
+            )
+
+        # 6. Default Branch: Fetch Detailed Records
         # (Executed regardless or can be wrapped in an else clause depending on your design)
         detailed_data = queryset.select_related(
             'created_by', 'district', 'block', 'training_plan'

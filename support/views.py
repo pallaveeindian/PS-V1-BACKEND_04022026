@@ -37,14 +37,38 @@ class TicketCreateAPIView(APIView):
         data = request.data
         username = data.get('username')
         district_id = data.get('district_id')
-        block_id = data.get('block_id')
+        block_id = data.get("block_id")
+        if not block_id or block_id == '':
+            block_id = None
         problem_message = data.get('problem_message')
         mobile_no = data.get('mobile_no')
         screenshots = request.FILES.getlist('screenshots')
 
+        # Mandatory field validation
+        required_fields = {
+            "district_id": district_id,
+            "username": username,
+            "problem_message": problem_message,
+            "mobile_no": mobile_no,
+        }
+
+        missing_fields = [
+            field for field, value in required_fields.items()
+            if value is None or str(value).strip() == ""
+        ]
+
+        if missing_fields:
+            return Response(
+                {
+                    "error": "The following fields are required.",
+                    "missing_fields": missing_fields
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         if len(screenshots) > 3:
             return Response(
-                {"error": "A maximum of 3 screenshots are allowed per ticket."}, 
+                {"error": "A maximum of 3 screenshots are allowed per ticket."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -52,7 +76,10 @@ class TicketCreateAPIView(APIView):
         try:
             master_user = MasterUser.objects.get(username=username, is_active=True)
         except MasterUser.DoesNotExist:
-            return Response({"error": f"Active user with username '{username}' not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": f"Active user with username '{username}' not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             with transaction.atomic():
@@ -60,7 +87,7 @@ class TicketCreateAPIView(APIView):
                 ticket = Ticket.objects.create(
                     master_user=master_user,
                     created_by=master_user,
-                    pmu_response="" # default empty
+                    pmu_response=""  # default empty
                 )
 
                 # 2. Create the TicketBody instance
@@ -82,11 +109,14 @@ class TicketCreateAPIView(APIView):
                         created_by=master_user
                     )
 
-            return Response({
-                "message": "Ticket created successfully.", 
-                "ticket_code": ticket.ticket_code
-            }, status=status.HTTP_201_CREATED)
-            
+            return Response(
+                {
+                    "message": "Ticket created successfully.",
+                    "ticket_code": ticket.ticket_code
+                },
+                status=status.HTTP_201_CREATED
+            )
+
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
