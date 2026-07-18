@@ -38,6 +38,7 @@ class FetchTraineesForTrainingPartnerView(APIView):
         training_request_id = request.query_params.get("training_request_id")
 
         # Extract Optional Filter query parameters
+        district_id = request.query_params.get("district_id") 
         block_id = request.query_params.get("block_id")
         gender = request.query_params.get("gender")
         designation = request.query_params.get("designation")
@@ -96,9 +97,32 @@ class FetchTraineesForTrainingPartnerView(APIView):
         tr_filters = {
             "financial_year": financial_year,
             "training_plan_id": training_plan_id,
-            "district_id__in": district_ids
         }
         
+        # SURGICAL FIX: Route Training Request filters dynamically based on participant type
+        if participant_type == "trainer":
+            # 3a. TRAINERS: Resolve Partner ID and filter requests assigned to this partner + district
+            dtp = DistrictTP.objects.select_related('partner').filter(master_user=master_user).first()
+            if not dtp:
+                return Response(
+                    {"error": "No DistrictTP partner mapping found for this user."}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            tr_filters["training_type"] = "TRAINER"
+            tr_filters["partner_id"] = dtp.partner_id
+            
+            if district_id:
+                tr_filters["district_id"] = district_id
+                
+        else:
+            # 3b. BENEFICIARIES: Filter requests based on user's authorized geoscope districts
+            tr_filters["training_type"] = "BENEFICIARY"
+            tr_filters["district_id__in"] = district_ids
+            
+            if district_id:
+                tr_filters["district_id"] = district_id
+            
         if training_request_id:
             tr_filters["id"] = training_request_id
 
@@ -107,7 +131,7 @@ class FetchTraineesForTrainingPartnerView(APIView):
             # If batch_id is provided, we must include requests that might be PENDING 
             # because they were fully mapped to this specific batch.
             training_requests = TrainingRequest.objects.filter(**tr_filters).filter(
-                Q(status="BATCHING") | Q(status="PENDING")
+                Q(status="BATCHING") | Q(status="COMPLETED")
             )
         else:
             tr_filters["status"] = "BATCHING"

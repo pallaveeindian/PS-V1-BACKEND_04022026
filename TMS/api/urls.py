@@ -26,6 +26,7 @@ from TMS.api.tc_module_apis.tpcp_creator_v2 import *
 from TMS.api.tc_module_apis.target_ach_v2 import *
 from TMS.api.tc_module_apis.tr_participants import *
 from TMS.api.mt_apis_v2.views import *
+from TMS.api.mt_availibilityV2.views import *
 
 router = DefaultRouter()
 
@@ -384,6 +385,9 @@ urlpatterns = [
     # Bulk Certificate Endpoints
     path('mt/<int:pk>/certificates/upload/', CertificateBulkUploadAPIView.as_view(), name='master-trainer-cert-upload'),
     path('mt/<int:trainer_id>/certificates/<int:cert_id>/delete/', CertificateDeleteAPIView.as_view(), name='master-trainer-cert-delete'),    
+
+    # Master Trainer Status Check
+    path('mt/<int:trainer_id>/availability/', CheckTrainerAvailabilityView.as_view(), name='check_trainer_availability'),
 
     # TP Dashboard Metrics
     path('tp/dashboard-metrics/', TrainingPartnerDashboardView.as_view(), name='tms-partner-dashboard-metrics'),

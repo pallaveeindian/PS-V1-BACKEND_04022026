@@ -59,6 +59,14 @@ class TrainingPartnerCentreSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------
 # 2. Base Participant Serializers
 # ---------------------------------------------------------
+class MasterTrainerSerializer(serializers.ModelSerializer):
+    theme = TrainingThemeSerializer(read_only=True)
+    
+    class Meta:
+        model = MasterTrainer
+        fields = '__all__'
+
+
 class TRBeneficiarySerializer(serializers.ModelSerializer):
     district_name_en = serializers.CharField(
         source="district.district_name_en",
@@ -83,14 +91,10 @@ class TRTrainerSerializer(serializers.ModelSerializer):
         source="block.block_name_en",
         read_only=True
     )
+    trainer = MasterTrainerSerializer(read_only=True)
 
     class Meta:
         model = TRTrainer
-        fields = '__all__'
-
-class MasterTrainerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MasterTrainer
         fields = '__all__'
 
 # ---------------------------------------------------------

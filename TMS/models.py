@@ -876,6 +876,15 @@ class Batch(SoftDeleteMixin):
         through='BatchTrainer',
     )
 
+    LEVEL_CHOICES = [
+        ('BLOCK', 'Block'),
+        ('DISTRICT', 'District'),
+        ('STATE', 'State'),
+    ]
+    level = models.CharField(
+        max_length=50, choices=LEVEL_CHOICES, default='BLOCK', blank=True, null=True
+    )
+
     PARTICIPANT_TYPE_CHOICES = [
         ('BENEFICIARY', 'Beneficiary'),
         ('TRAINER', 'Master Trainer'),

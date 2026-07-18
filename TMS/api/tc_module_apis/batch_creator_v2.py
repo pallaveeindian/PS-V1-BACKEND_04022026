@@ -40,8 +40,8 @@ class CreateOneShotBatchAPIView(APIView):
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            if not p_ids or not block_id:
-                return Response({"error": "SEPARATE batch requires 'participant_ids' and 'block_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            if not p_ids or (not block_id and participant_type != "TRAINER"):
+                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is also required unless participant_type is TRAINER."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
             for pid in all_participant_ids:
@@ -113,6 +113,7 @@ class CreateOneShotBatchAPIView(APIView):
                     district_id=data.get("district_id"),
                     block_id=data.get("block_id") if batch_type == "SEPARATE" else None,
                     batch_type=batch_type,
+                    level=data.get("level", "BLOCK"),
                     status=data.get("status", "DRAFT"),
                     financial_year=data.get("financial_year"),
                     start_date=data.get("start_date"),
@@ -220,8 +221,8 @@ class OneShotUpdateBatchAPIView(APIView):
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            if not p_ids or not block_id:
-                return Response({"error": "SEPARATE batch requires 'participant_ids' and 'block_id'."}, status=status.HTTP_400_BAD_REQUEST)
+            if not p_ids or (not block_id and participant_type != "TRAINER"):
+                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is also required unless participant_type is TRAINER."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
             for pid in all_participant_ids:
@@ -311,6 +312,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 batch.district_id = data.get("district_id")
                 batch.block_id = data.get("block_id") if batch_type == "SEPARATE" else None
                 batch.batch_type = batch_type
+                batch.level = data.get("level", batch.level) 
                 batch.status = data.get("status", batch.status)
                 batch.financial_year = data.get("financial_year")
                 batch.start_date = data.get("start_date")

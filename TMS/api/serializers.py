@@ -848,6 +848,7 @@ class BatchListSerializer(serializers.ModelSerializer):
             'end_date',
             'time_of_training',
             'centre',
+            'level',
             'district',
             'participant_type',
             'block',
@@ -1154,6 +1155,8 @@ class BatchMediaReportSerializer(SoftDeleteModelSerializer):
         fields = ['id', 'date', 'category', 'file', 'notes', 'batch']
         
 class BatchCertificateSerializer(SoftDeleteModelSerializer):
+    batch = BatchSerializer(read_only=True)
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.BatchReport
         fields = "__all__"

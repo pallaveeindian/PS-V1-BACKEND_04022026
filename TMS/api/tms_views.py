@@ -1608,9 +1608,9 @@ class BatchViewSet(BaseTMSModelViewSet):
         return Response(history_data, status=status.HTTP_200_OK)
 
 class BatchListPagination(PageNumberPagination):
-    page_size = 10
+    page_size = 50
     page_size_query_param = None
-    max_page_size = 10
+    max_page_size = 1000
 
 class BatchesListView(APIView):
     """
@@ -1694,6 +1694,7 @@ class BatchesListView(APIView):
         centre_id = params.get("centre_id")
         batch_type = params.get("batch_type")
         status = params.get("status")
+        level = params.get("level")
 
         if centre_id:
             qs = qs.filter(centre_id=centre_id)
@@ -1703,6 +1704,9 @@ class BatchesListView(APIView):
 
         if status:
             qs = qs.filter(status=status)
+
+        if level:
+            qs = qs.filter(level=level)
 
         # -------------------------
         # TRAINING PLAN FILTERS 
