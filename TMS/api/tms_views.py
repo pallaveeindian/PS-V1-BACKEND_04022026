@@ -735,17 +735,33 @@ class TPCPCentreDetailViewSet(BaseTMSModelViewSet):
         if not master_user:
             return qs.none()
 
+        # Check role scopes
         is_tp_owner = tms_models.TrainingPartner.objects.filter(master_user=master_user).exists()
         is_tpcp = tms_models.TrainingPartnerCP.objects.filter(master_user=master_user).exists()
         is_dtp = tms_models.DistrictTP.objects.filter(master_user=master_user).exists()
         is_admin = not (is_tp_owner or is_tpcp or is_dtp)
 
+        # Enforce Base Role Filtering
         if not is_admin:
             qs = qs.filter(
                 Q(contact_person__partner__master_user=master_user) |               # TP Owner
                 Q(contact_person__master_user=master_user) |                        # Contact Person Specific
                 Q(contact_person__partner__district_nodes__master_user=master_user) # District TP Node
             ).distinct()
+
+        # ---------------------------------------------------------
+        # Apply custom filters passed from frontend linkParams
+        # ---------------------------------------------------------
+        partner_id = self.request.query_params.get('partner')
+        district_id = self.request.query_params.get('district_id')
+
+        # Filter by allocated centre's partner
+        if partner_id:
+            qs = qs.filter(allocated_centre__partner_id=partner_id)
+
+        # Filter by allocated centre's district
+        if district_id:
+            qs = qs.filter(allocated_centre__district_id=district_id)
 
         return qs
 

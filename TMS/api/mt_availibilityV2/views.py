@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 
 from TMS.models import MasterTrainer, TRTrainer, BatchTrainer, BatchMasterTrainer
 from .serializers import AvailabilityTrainingRequestSerializer, AvailabilityBatchSerializer
@@ -12,59 +13,83 @@ class CheckTrainerAvailabilityView(APIView):
     Checks if a MasterTrainer is available for assignment.
     A trainer is considered BUSY and UNAVAILABLE if:
     1. They are in a TRTrainer where TrainingRequest status == 'BATCHING'.
-       - EXCEPT: If they are already mapped to a BatchTrainer, their status depends purely on that Batch's status.
-    2. They are in a BatchTrainer where Batch status is DRAFT, PENDING, or ONGOING.
-    3. They are in a BatchMasterTrainer where Batch status is DRAFT, PENDING, or ONGOING.
+    2. They are in an active Batch (DRAFT, PENDING, ONGOING, SCHEDULED, REJECTED) AND the 
+       requested assignment dates overlap based on the batch's current status.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, trainer_id, *args, **kwargs):
         trainer = get_object_or_404(MasterTrainer, id=trainer_id)
-
-        # Defines statuses that mean the batch is active and occupying the trainer
-        busy_batch_statuses = ['DRAFT', 'PENDING', 'ONGOING']
+        
+        # Intercept the requested assignment's start_date and end_date from query params
+        req_start_date = request.query_params.get('start_date')
+        req_end_date = request.query_params.get('end_date')
 
         # ---------------------------------------------------------
         # CONDITION 1: Check TRTrainer (Training Request Phase)
         # ---------------------------------------------------------
-        tr_trainers_batching = TRTrainer.objects.filter(
+        busy_tr = TRTrainer.objects.filter(
             trainer=trainer,
             training__status='BATCHING',
             is_active=True
-        ).select_related('training')
+        ).select_related('training', 'training__district', 'training__block').first()
 
-        for tr_t in tr_trainers_batching:
-            # Check if this TRTrainer has already been assigned to a BatchTrainer
-            linked_batches = BatchTrainer.objects.filter(trainer=tr_t, is_active=True).select_related('batch')
-            
-            if linked_batches.exists():
-                # If they are already in a batch, apply the batch status condition again
-                busy_bt = linked_batches.filter(batch__status__in=busy_batch_statuses).first()
-                if busy_bt:
-                    return Response({
-                        "is_available": False,
-                        "busy_type": "BATCH",
-                        "busy_reason": f"Trainer is assigned as a participant in a Batch currently in {busy_bt.batch.status} phase.",
-                        "busy_context": AvailabilityBatchSerializer(busy_bt.batch).data
-                    }, status=status.HTTP_200_OK)
-                # If all linked batches are in a 'free' status (COMPLETED, CLOSED, REJECTED, SCHEDULED),
-                # the trainer is considered FREE regarding this mapping. We pass and continue.
-            else:
-                # If they are NOT linked to any batch yet, they are actively waiting in the BATCHING queue
-                return Response({
-                    "is_available": False,
-                    "busy_type": "TRAINING_REQUEST",
-                    "busy_reason": "Trainer is currently tied to a Training Request in the BATCHING phase.",
-                    "busy_context": AvailabilityTrainingRequestSerializer(tr_t.training).data
-                }, status=status.HTTP_200_OK)
+        if busy_tr:
+            tr = busy_tr.training
+            return Response({
+                "is_available": False,
+                "busy_type": "TRAINING_REQUEST",
+                "busy_reason": "Trainer is currently tied to a Training Request in the BATCHING phase.",
+                "training_request_id": tr.id,
+                "district_name_en": tr.district.district_name_en if tr.district else None,
+                "block_name_en": tr.block.block_name_en if tr.block else None,
+                "busy_context": AvailabilityTrainingRequestSerializer(tr).data
+            }, status=status.HTTP_200_OK)
 
         # ---------------------------------------------------------
-        # CONDITION 2: Check BatchTrainer (Trainee inside a Batch)
-        # Note: BatchTrainer points to TRTrainer, which points to MasterTrainer
+        # CONDITION 2: Check Active Batches (Trainee or Lead Trainer)
         # ---------------------------------------------------------
+        # If batch is COMPLETED, REVIEW, CLOSED -> Trainer is FREE.
+        # Otherwise (ONGOING, SCHEDULED) -> Check dates for overlap.
+        active_batch_statuses = ['ONGOING', 'SCHEDULED']
+        
+        # Base query: Are they in an active batch status?
+        batch_busy_q = Q(batch__status__in=active_batch_statuses)
+
+        # Date Overlap Evaluation Logic
+        date_overlap_q = Q()
+
+        # RULE A: For SCHEDULED (and other pre-execution phases)
+        # Trainer is strictly busy if there is ANY date overlap: (batch_start <= req_end AND batch_end >= req_start)
+        if req_start_date and req_end_date:
+            date_overlap_q |= Q(batch__status__in=['SCHEDULED']) & \
+                              ((Q(batch__start_date__lte=req_end_date) & Q(batch__end_date__gte=req_start_date)) | \
+                               Q(batch__start_date__isnull=True) | Q(batch__end_date__isnull=True))
+        elif req_end_date:
+            date_overlap_q |= Q(batch__status__in=['SCHEDULED']) & \
+                              (Q(batch__start_date__lte=req_end_date) | Q(batch__start_date__isnull=True))
+        elif req_start_date:
+            date_overlap_q |= Q(batch__status__in=['SCHEDULED']) & \
+                              (Q(batch__end_date__gte=req_start_date) | Q(batch__end_date__isnull=True))
+        else:
+            date_overlap_q |= Q(batch__status__in=['SCHEDULED'])
+
+        # RULE B: For ONGOING phase
+        # Trainer is FREE if the requested start_date is AFTER the batch's end_date
+        # Therefore, they are BUSY if the batch ends ON or AFTER the req_start_date
+        if req_start_date:
+            date_overlap_q |= Q(batch__status='ONGOING') & \
+                              (Q(batch__end_date__gte=req_start_date) | Q(batch__end_date__isnull=True))
+        else:
+            date_overlap_q |= Q(batch__status='ONGOING')
+
+        # Combine the base active status query with the targeted date overlap logic
+        batch_busy_q &= date_overlap_q
+
+        # Check BatchTrainer (Trainee role)
         busy_bt = BatchTrainer.objects.filter(
+            batch_busy_q,
             trainer__trainer=trainer,
-            batch__status__in=busy_batch_statuses,
             is_active=True
         ).select_related('batch').first()
 
@@ -72,16 +97,14 @@ class CheckTrainerAvailabilityView(APIView):
             return Response({
                 "is_available": False,
                 "busy_type": "BATCH",
-                "busy_reason": f"Trainer is assigned as a participant in a Batch currently in {busy_bt.batch.status} phase.",
+                "busy_reason": f"Trainer is assigned as a participant in a Batch currently in {busy_bt.batch.status} phase with overlapping dates.",
                 "busy_context": AvailabilityBatchSerializer(busy_bt.batch).data
             }, status=status.HTTP_200_OK)
 
-        # ---------------------------------------------------------
-        # CONDITION 3: Check BatchMasterTrainer (Lead Trainer of a Batch)
-        # ---------------------------------------------------------
+        # Check BatchMasterTrainer (Lead Trainer role)
         busy_bmt = BatchMasterTrainer.objects.filter(
+            batch_busy_q,
             master_trainer=trainer,
-            batch__status__in=busy_batch_statuses,
             is_active=True
         ).select_related('batch').first()
 
@@ -89,7 +112,7 @@ class CheckTrainerAvailabilityView(APIView):
             return Response({
                 "is_available": False,
                 "busy_type": "BATCH",
-                "busy_reason": f"Trainer is leading a Batch currently in {busy_bmt.batch.status} phase.",
+                "busy_reason": f"Trainer is leading a Batch currently in {busy_bmt.batch.status} phase with overlapping dates.",
                 "busy_context": AvailabilityBatchSerializer(busy_bmt.batch).data
             }, status=status.HTTP_200_OK)
 

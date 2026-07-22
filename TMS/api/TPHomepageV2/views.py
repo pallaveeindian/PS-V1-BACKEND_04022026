@@ -15,6 +15,7 @@ class TrainingPartnerDashboardView(APIView):
     Central API Engine for the Training Partner Executive Dashboard.
     Enforces financial year constraint and aggregates targets, closures, 
     centres, and district team tracking metrics.
+    Supports 'batches' param ('closed' or 'created') to toggle achievement logic.
     """
     permission_classes = [IsAuthenticated]
 
@@ -32,6 +33,21 @@ class TrainingPartnerDashboardView(APIView):
                 {"detail": "Invalid financial_year format. Expected format like '2026-27'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # SURGICAL ADDITION: Extract 'batches' toggle (Defaults to 'closed')
+        batches_toggle = request.query_params.get('batches', 'closed').strip().lower()
+
+        # Build dynamic Q filters based on the batches_toggle
+        if batches_toggle == 'created':
+            # Include ALL active batches EXCEPT rejected ones
+            rel_batch_status_q = ~Q(batch__status='REJECTED')
+            batch_status_q = ~Q(status='REJECTED')
+            strict_closed_q = ~Q(status='REJECTED')
+        else:
+            # Default behavior: strictly closed or completed
+            rel_batch_status_q = Q(batch__status='CLOSED')
+            batch_status_q = Q(status__in=['COMPLETED', 'CLOSED'])
+            strict_closed_q = Q(status='CLOSED')
 
         # 2. Resolve Active Training Partner Scope from Context User
         auth_user = request.user
@@ -66,10 +82,12 @@ class TrainingPartnerDashboardView(APIView):
         ).count()
 
         total_trained_beneficiaries = tms_models.BatchBeneficiary.objects.filter(
-            batch__partner=partner, batch__financial_year=financial_year, batch__status='CLOSED', is_active=True
+            rel_batch_status_q,
+            batch__partner=partner, batch__financial_year=financial_year, is_active=True
         ).count()
         total_trained_trainers = tms_models.BatchTrainer.objects.filter(
-            batch__partner=partner, batch__financial_year=financial_year, batch__status='CLOSED', is_active=True
+            rel_batch_status_q,
+            batch__partner=partner, batch__financial_year=financial_year, is_active=True
         ).count()
 
         kpi_data = {
@@ -90,7 +108,8 @@ class TrainingPartnerDashboardView(APIView):
         target_lookup = {item['district_id']: item['total_target'] or 0 for item in target_aggregations}
 
         achievement_aggregations = tms_models.Batch.objects.filter(
-            partner=partner, financial_year=financial_year, status__in=['COMPLETED', 'CLOSED'], is_active=True, district__isnull=False
+            batch_status_q,
+            partner=partner, financial_year=financial_year, is_active=True, district__isnull=False
         ).values('district_id').annotate(total_achieved=Count('id'))
         achievement_lookup = {item['district_id']: item['total_achieved'] or 0 for item in achievement_aggregations}
 
@@ -113,8 +132,8 @@ class TrainingPartnerDashboardView(APIView):
         theme_target_lookup = {item['theme']: item['total_target'] or 0 for item in theme_targets}
 
         theme_achievements = tms_models.Batch.objects.filter(
-            partner=partner, financial_year=financial_year, status__in=['COMPLETED', 'CLOSED'],
-            is_active=True, training_plan__theme__isnull=False
+            batch_status_q,
+            partner=partner, financial_year=financial_year, is_active=True, training_plan__theme__isnull=False
         ).values('training_plan__theme__theme_name').annotate(total_achieved=Count('id'))
         theme_achievement_lookup = {item['training_plan__theme__theme_name']: item['total_achieved'] or 0 for item in theme_achievements}
 
@@ -159,7 +178,8 @@ class TrainingPartnerDashboardView(APIView):
         dtp_created_lookup = {item['district_id']: item['total_created'] or 0 for item in dtp_created_batches}
 
         dtp_closed_batches = tms_models.Batch.objects.filter(
-            partner=partner, financial_year=financial_year, status='CLOSED', is_active=True, district__isnull=False
+            strict_closed_q,
+            partner=partner, financial_year=financial_year, is_active=True, district__isnull=False
         ).values('district_id').annotate(total_closed=Count('id'))
         dtp_closed_lookup = {item['district_id']: item['total_closed'] or 0 for item in dtp_closed_batches}
 

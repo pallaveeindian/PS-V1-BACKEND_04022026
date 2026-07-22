@@ -1576,7 +1576,6 @@ class TrainingPartnerAchievement(SoftDeleteMixin):
     def __str__(self):
         return f"{self.partner.name} - {self.title}"
 
-
 class TMSFirstLoginTracker(models.Model):
     master_user = models.OneToOneField(
         MasterUser, 
