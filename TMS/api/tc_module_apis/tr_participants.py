@@ -8,7 +8,7 @@ from TMS.models import *
 
 class TrainingRequestParticipantsAPIView(APIView):
     """
-    Fetches ALL participants (Beneficiary or Trainer) for a given Training Request ID.
+    Fetches ALL participants (Beneficiary, Trainer, or Staff) for a given Training Request ID.
     If a participant has CB_selected=True, it includes fully nested Batch details.
     """
     permission_classes = [IsAuthenticated]
@@ -175,7 +175,64 @@ class TrainingRequestParticipantsAPIView(APIView):
                 }
                 results.append(data)
 
+        # ==========================================
+        # 3C. Process STAFF Training Requests (SURGICAL ADDITION)
+        # ==========================================
+        elif tr.training_type == 'STAFF':
+            participants = (
+                TRStaff.objects.filter(training=tr, is_active=True)
+                .select_related(
+                    "staff",
+                    "theme",
+                    "district",
+                    "block",
+                )
+            )
+            
+            # Pre-fetch batches for selected participants to avoid N+1 DB queries
+            selected_ids = participants.filter(CB_selected=True).values_list('id', flat=True)
+            
+            batch_mappings = BatchStaff.objects.filter(
+                staff_id__in=selected_ids,
+                batch__is_active=True
+            ).select_related(
+                'batch', 
+                'batch__training_plan', 
+                'batch__training_plan__theme',
+                'batch__district', 
+                'batch__block', 
+                'batch__partner', 
+                'batch__centre'
+            )
+            
+            # Create an O(1) lookup dictionary: staff_id -> batch object
+            batch_map = {mapping.staff_id: mapping.batch for mapping in batch_mappings}
+
+            for p in participants:
+                data = {
+                    "id": p.id,
+                    "full_name": p.full_name,
+                    "designation": p.designation,
+                    "employee_id": p.staff.employee_id if p.staff else None,
+                    "theme_name": p.theme.theme_name if p.theme else None,
+                    "district_id": p.district_id,
+                    "district_name_en": (
+                        p.district.district_name_en if p.district else None
+                    ),
+                    "block_id": p.block_id,
+                    "block_name_en": (
+                        p.block.block_name_en if p.block else None
+                    ),
+                    "CB_selected": p.CB_selected,
+                    "attended": p.attended,
+                    "is_replaced": p.is_replaced,
+                    "batch_details": serialize_batch(batch_map.get(p.id)) if p.CB_selected else None
+                }
+                results.append(data)
+
+        # ==========================================
         # 4. Return Output
+        # ==========================================
         return Response({
             "training_request_id": tr.id,
             "training_type": tr.training_type,

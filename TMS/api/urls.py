@@ -16,6 +16,9 @@ from TMS.api.tp_assign_v2.views import *
 # Dashboard APIs
 from TMS.api.TPHomepageV2.views import *
 
+# New Staff TR Creation APIs
+from TMS.api.StaffList.views import *
+
 # NEW TC MODULE APIs
 from TMS.api.tc_module_apis.trainees_list import *
 from TMS.api.tc_module_apis.batch_creator_v2 import *
@@ -116,6 +119,11 @@ router.register(
     r"training-request-trainers",
     tms_views.TRTrainerViewSet,
     basename="tms-tr-trainer",
+)
+router.register(
+    r"training-request-staff",
+    tms_views.TRStaffViewSet,
+    basename="tms-tr-staff",
 )
 router.register(
     r"batches",
@@ -391,4 +399,9 @@ urlpatterns = [
 
     # TP Dashboard Metrics
     path('tp/dashboard-metrics/', TrainingPartnerDashboardView.as_view(), name='tms-partner-dashboard-metrics'),
+
+    # Staff TR Creation APIs
+    path('staff/filter-options/', StaffFilterOptionsAPIView.as_view(), name='staff-filter-options'),
+    path('staff/', StaffListAPIView.as_view(), name='staff-list'),
+    path('staff/<str:employee_id>/', StaffDetailAPIView.as_view(), name='staff-detail'),
 ]

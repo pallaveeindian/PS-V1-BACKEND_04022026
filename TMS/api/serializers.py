@@ -235,8 +235,14 @@ class TrainingPartnerCPSerializer(SoftDeleteModelSerializer):
 
         return attrs
 
+class MasterDistrictTargetSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = core_models.MasterDistrict
+        fields = ['district_id', 'district_name_en', 'district_short_name_en']
 
 class TrainingPartnerCentreSerializer(SoftDeleteModelSerializer):
+    district_full = MasterDistrictTargetSerializer(source='district', read_only=True)
+
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingPartnerCentre
         fields = "__all__"
@@ -458,11 +464,6 @@ class TrainingPartnerDetailSerializer(SoftDeleteModelSerializer):
 # TrainingPartnerTargets
 # ----------------------------
 
-class MasterDistrictTargetSerializer(SoftDeleteModelSerializer):
-    class Meta(SoftDeleteModelSerializer.Meta):
-        model = core_models.MasterDistrict
-        fields = ['district_id', 'district_name_en', 'district_short_name_en']
-
 class TrainingPartnerTargetsSerializer(SoftDeleteModelSerializer):
     partner_full = TrainingPartnerSerializer(source='partner', read_only=True)
     training_plan_full = TrainingPlanSerializer(source='training_plan', read_only=True)
@@ -584,6 +585,25 @@ class TRTrainerSerializer(SoftDeleteModelSerializer):
         except:
             return None             
 
+class TRStaffSerializer(SoftDeleteModelSerializer):
+    district_name_en = serializers.SerializerMethodField()
+    block_name_en = serializers.SerializerMethodField()
+
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.TRStaff
+        fields = "__all__"
+
+    def get_district_name_en(self, obj):
+        try:
+            return obj.district.district_name_en if obj.district else None
+        except:
+            return None
+
+    def get_block_name_en(self, obj):
+        try:
+            return obj.block.block_name_en if obj.block else None
+        except:
+            return None   
 
 class TRTrainerDetailSerializer(SoftDeleteModelSerializer):
     """
@@ -594,6 +614,14 @@ class TRTrainerDetailSerializer(SoftDeleteModelSerializer):
         fields = "__all__"
         depth = 1
 
+class TRStaffDetailSerializer(SoftDeleteModelSerializer):
+    """
+    DETAIL serializer for TRStaff – includes nested staff + training.
+    """
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.TRStaff
+        fields = "__all__"
+        depth = 1
 
 class TrainingRequestDetailSerializer(SoftDeleteModelSerializer):
     beneficiary_registrations = serializers.SerializerMethodField()
@@ -1346,6 +1374,8 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
                 return obj.beneficiary_registrations.filter(deleted_at__isnull=True).count()
             elif obj.training_type == 'TRAINER':
                 return obj.trainer_registrations.filter(deleted_at__isnull=True).count()
+            elif obj.training_type == 'STAFF':
+                return obj.staff_registrations.filter(deleted_at__isnull=True).count()                
         except:
             pass
         return 0

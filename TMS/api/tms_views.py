@@ -1293,6 +1293,41 @@ class TRTrainerViewSet(BaseTMSModelViewSet):
         serializer = TRTrainerDetailSerializer(tr_trainer, context={"request": request})
         return Response(serializer.data)
 
+class TRStaffViewSet(BaseTMSModelViewSet):
+    """
+    CRUD for TRStaff (staff registrations against TrainingRequest).
+    """
+    swagger_schema = RequestsSchema
+    
+    queryset = tms_models.TRStaff.objects.select_related(
+        "training", "staff", "theme", "district", "block"
+    )
+    
+    serializer_class = TRStaffSerializer
+    filterset_fields = [
+        "training", 
+        "district", 
+        "block", 
+        "theme", 
+        "staff",
+        "training__partner"
+    ]
+    
+    search_fields = [
+        "full_name", 
+        "designation", 
+        "staff__employee_id"
+    ]
+
+    @swagger_auto_schema(
+        operation_summary="Retrieve staff registration with nested training request",
+        responses={200: TRStaffDetailSerializer},
+    )
+    @action(detail=True, methods=["get"], url_path="detail")
+    def detail_view(self, request, pk=None):
+        tr_staff = self.get_object()
+        serializer = TRStaffDetailSerializer(tr_staff, context={"request": request})
+        return Response(serializer.data)
 
 # -------------------------------------------------------------------
 # Batches (TP → DMMU) & Attendance
@@ -2234,7 +2269,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
 
     Input:
     {
-        "participant_type": "BENEFICIARY" | "TRAINER",
+        "participant_type": "BENEFICIARY" | "TRAINER" | "STAFF",
         "financial_year": "2023-24",  # Optional but recommended
         "ids": ["id1", "id2", ...]
     }
@@ -2251,7 +2286,8 @@ class BulkTrainingEngagementCheckAPI(APIView):
         financial_year = request.data.get("financial_year")
         ids = request.data.get("ids", [])
 
-        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+        # SURGICAL FIX: Allow STAFF
+        if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response(
                 {"error": "Invalid participant_type"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -2340,6 +2376,36 @@ class BulkTrainingEngagementCheckAPI(APIView):
             engaged_ids = set(map(str, engaged_tr_trainers)) \
                 .union(set(map(str, engaged_batch_master_trainers))) \
                 .union(set(map(str, engaged_batch_trainers)))
+
+        # -------------------------------
+        # STAFF CASE (SURGICAL ADDITION)
+        # -------------------------------
+        elif participant_type == "STAFF":
+            # Rule 6: Check TRStaff (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
+            tr_staff_qs = tms_models.TRStaff.objects.exclude(
+                training__status__in=["COMPLETED", "REJECTED"]
+            ).filter(
+                staff_id__in=ids
+            )
+            
+            if financial_year:
+                tr_staff_qs = tr_staff_qs.filter(training__financial_year=financial_year, is_active=True)
+                
+            engaged_tr_staff = tr_staff_qs.values_list("staff_id", flat=True)
+
+            # Rule 7: Check BatchStaff (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            batch_staff_qs = tms_models.BatchStaff.objects.exclude(
+                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+            ).filter(
+                staff__staff_id__in=ids
+            )
+            
+            if financial_year:
+                batch_staff_qs = batch_staff_qs.filter(batch__financial_year=financial_year, is_active=True)
+                
+            engaged_batch_staff = batch_staff_qs.values_list("staff__staff_id", flat=True)
+
+            engaged_ids = set(map(str, engaged_tr_staff)).union(set(map(str, engaged_batch_staff)))
 
         # -------------------------------
         # FINAL RESPONSE

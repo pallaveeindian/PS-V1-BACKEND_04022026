@@ -4,6 +4,7 @@ import random
 import string
 from django.db import models, transaction
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from core.models import MasterUser, MasterDistrict, MasterBlock, MasterPanchayat, MasterVillage
 from django.db.models import Max, UniqueConstraint, Q
@@ -58,6 +59,45 @@ class SoftDeleteMixin(models.Model):
 
     def hard_delete(self):
         super().delete()
+
+# ----------------------------
+# Bank models
+# ----------------------------
+
+class Bank(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    bank_name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'tms_bank'
+        managed = True
+
+    def __str__(self):
+        return self.bank_name or str(self.id)    
+
+class BankBranch(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    branch_name = models.CharField(max_length=255)
+    bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, related_name='BANK_BRANCH')
+
+    class Meta:
+        db_table = 'tms_bankbranch'
+        managed = True
+
+    def __str__(self):
+        return self.branch_name or str(self.id)
+
+class BankIFSC(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    ifsc_code = models.CharField(max_length=255)
+    bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, related_name='BANK_IFSC')
+
+    class Meta:
+        db_table = 'tms_bankifsc'
+        managed = True
+
+    def __str__(self):
+        return self.ifsc_code or str(self.id)
 
 # ----------------------------
 # TrainingPlan Related
@@ -149,6 +189,74 @@ class TrainingPlan(SoftDeleteMixin):
 
     def __str__(self):
         return self.training_name or str(self.id)
+
+# ----------------------------
+# Staff Profiles
+# ----------------------------
+
+class StaffProfile(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    mobile = models.CharField(max_length=20, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    employee_id = models.CharField(max_length=100, null=True, blank=True)
+    
+    full_name = models.CharField(max_length=255)
+    designation = models.CharField(max_length=255)
+    employment_type = models.CharField(max_length=255, null=True, blank=True)
+    theme = models.ForeignKey(
+        TrainingTheme,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='staff_theme'
+    )
+    doj = models.DateTimeField(null=True, blank=True)
+    dob = models.DateTimeField(null=True, blank=True)
+
+    gender = models.CharField(max_length=50, null=True, blank=True)
+    marital_status = models.CharField(max_length=50)
+
+    district = models.ForeignKey(
+        MasterDistrict, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+    block = models.ForeignKey(
+        MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+
+    perma_address = models.TextField("Permanent Address", blank=True, null=True)
+    current_address = models.TextField("Current Address", blank=True, null=True)
+
+    program = models.CharField(max_length=255)
+    social_category = models.CharField(max_length=255, null=True, blank=True)
+    
+    aadhar = models.BigIntegerField(
+        validators=[
+            MinValueValidator(100000000000),   
+            MaxValueValidator(999999999999),   
+        ]
+    )
+    pan = models.CharField(max_length=255)
+    uan = models.CharField(max_length=255)
+    epf = models.CharField(max_length=255)
+    esic = models.CharField(max_length=255)
+
+    bank = models.ForeignKey(Bank, on_delete=models.DO_NOTHING, blank=True, null=True)
+    bank_branch = models.ForeignKey(BankBranch, on_delete=models.DO_NOTHING, blank=True, null=True)
+    bank_ifsc = models.ForeignKey(BankIFSC, on_delete=models.DO_NOTHING, blank=True, null=True)
+    bank_account_no = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'tms_staffprofile'
+        managed = True
+        indexes = [
+            models.Index(fields=['employee_id']),
+            models.Index(fields=['theme']),
+            models.Index(fields=['aadhar']),
+            models.Index(fields=['district']),
+            models.Index(fields=['block']),
+        ]
+
+    def __str__(self):
+        return f"{self.full_name} ({self.employee_id})"    
 
 # ----------------------------
 # MasterTrainer & Certificates
@@ -561,6 +669,7 @@ class TrainingPartnerTargets(SoftDeleteMixin):
         null=True, blank=True,
     )
     theme = models.CharField(max_length=200, blank=True, null=True)
+    budget_head = models.CharField(max_length=200, blank=True, null=True)
 
     target_count = models.PositiveIntegerField("Target count (batches)", default=0)
     notes = models.TextField("Notes / rationale", blank=True, null=True)
@@ -671,6 +780,7 @@ class TrainingRequest(SoftDeleteMixin):
     TRAINING_TYPE_CHOICES = [
         ('BENEFICIARY', 'Beneficiary'),
         ('TRAINER', 'Master Trainer'),
+        ('STAFF', 'Staff'),
     ]
     training_type = models.CharField(
         "Applicable For", max_length=20, choices=TRAINING_TYPE_CHOICES
@@ -831,6 +941,58 @@ class TRTrainer(SoftDeleteMixin):
         return f"TRTrainer({self.trainer_id}) for TR {self.training_id}"
 
 # ----------------------------
+# Training Request to Staff Joint
+# ----------------------------
+
+class TRStaff(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    training = models.ForeignKey(
+        TrainingRequest, on_delete=models.CASCADE,
+        related_name='staff_registrations'
+    )
+
+    staff = models.ForeignKey(
+        StaffProfile, on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    full_name = models.CharField(max_length=255)
+    designation = models.CharField(max_length=255)
+    theme = models.ForeignKey(
+        TrainingTheme,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='trstaff_theme'
+    )
+
+    district = models.ForeignKey(
+        MasterDistrict, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+    block = models.ForeignKey(
+        MasterBlock, on_delete=models.DO_NOTHING, blank=True, null=True
+    )
+
+    remarks = models.TextField(blank=True, null=True)
+    attended = models.BooleanField(default=False)
+    is_replaced = models.BooleanField(default=False)
+    registered_on = models.DateTimeField(auto_now_add=True)
+
+    CB_selected = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'tms_trstaff'
+        managed = True
+        indexes = [
+            models.Index(fields=['training']),
+            models.Index(fields=['staff']),
+            models.Index(fields=['theme']),
+            models.Index(fields=['district']),
+            models.Index(fields=['block']),
+        ]
+
+    def __str__(self):
+        return f"{self.full_name} ({self.designation})"
+
+# ----------------------------
 # Batch
 # ----------------------------
 
@@ -875,6 +1037,12 @@ class Batch(SoftDeleteMixin):
         related_name='trainers_for_batch',
         through='BatchTrainer',
     )
+    staff = models.ManyToManyField(
+        TRStaff,
+        blank=True,
+        related_name='staff_for_batch',
+        through='BatchStaff',
+    )
 
     LEVEL_CHOICES = [
         ('BLOCK', 'Block'),
@@ -888,6 +1056,7 @@ class Batch(SoftDeleteMixin):
     PARTICIPANT_TYPE_CHOICES = [
         ('BENEFICIARY', 'Beneficiary'),
         ('TRAINER', 'Master Trainer'),
+        ('STAFF', 'Staff'),
     ]
     participant_type = models.CharField(
         "Applicable For", max_length=20, choices=PARTICIPANT_TYPE_CHOICES, null=True, blank=True
@@ -1110,6 +1279,37 @@ class BatchTrainer(SoftDeleteMixin):
         return f"BatchTrainer({self.trainer_id}) in Batch {self.batch_id}"
 
 
+class BatchStaff(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    batch = models.ForeignKey(
+        Batch, on_delete=models.CASCADE, related_name='staff_participations'
+    )
+    staff = models.ForeignKey(
+        TRStaff, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    
+    training_request = models.ForeignKey(
+        TrainingRequest, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='batch_staff_mappings'
+    )
+
+    registered_on = models.DateTimeField(auto_now_add=True)
+    attended = models.BooleanField(default=False)
+    is_replaced = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'tms_batchstaff'
+        managed = True
+        indexes = [
+            models.Index(fields=['batch']),
+            models.Index(fields=['staff']),
+            models.Index(fields=['training_request']),
+        ]
+
+    def __str__(self):
+        return f"BatchStaff({self.staff_id}) in Batch {self.batch_id}"
+
+
 # ----------------------------
 # Batch Block Coverage Tracker
 # ----------------------------
@@ -1249,6 +1449,10 @@ class TPBatchCostBreakup(SoftDeleteMixin):
     )
 
     # Directly link to the specific participant (only one will be populated per row)
+    batch_mastertrainer = models.ForeignKey(
+        'BatchMasterTrainer', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='cost_breakup'
+    )    
     batch_beneficiary = models.ForeignKey(
         'BatchBeneficiary', on_delete=models.CASCADE,
         null=True, blank=True, related_name='cost_breakup'
@@ -1257,13 +1461,18 @@ class TPBatchCostBreakup(SoftDeleteMixin):
         'BatchTrainer', on_delete=models.CASCADE,
         null=True, blank=True, related_name='cost_breakup'
     )
-
+    batch_staff = models.ForeignKey(
+        'BatchStaff', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='cost_breakup'
+    )    
     participant_type = models.CharField(
         max_length=20,
-        choices=[('BENEFICIARY', 'Beneficiary'), ('TRAINER', 'Trainer')]
+        choices=[('BENEFICIARY', 'Beneficiary'), ('TRAINER', 'Trainer'), ('MASTER_TRAINER', 'Master Trainer'), ('STAFF', 'Staff')]
     )
-
+    trainer_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    training_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hra = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    lm_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     ta_da = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0) # hra + ta_da
 
@@ -1427,7 +1636,10 @@ class BatchParticipantCertificate(SoftDeleteMixin):
         TRTrainer, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='certificates'
     )
-
+    tr_staff = models.ForeignKey(
+        TRStaff, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='certificates'
+    )
     issued_on = models.DateTimeField(blank=True, null=True)
     issue_code = models.CharField(max_length=255, db_index=True, blank=True, null=True)
     attendance_rate = models.CharField(max_length=50, blank=True, null=True)
@@ -1442,10 +1654,10 @@ class BatchParticipantCertificate(SoftDeleteMixin):
 
     def clean(self):
         # must have exactly one participant
-        if self.tr_beneficiary and self.tr_trainer:
-            raise ValidationError("Only one of tr_beneficiary or tr_trainer can be set.")
-        if not self.tr_beneficiary and not self.tr_trainer:
-            raise ValidationError("Either tr_beneficiary or tr_trainer must be set.")
+        if self.tr_beneficiary and self.tr_trainer and self.tr_staff:
+            raise ValidationError("Only one of tr_beneficiary or tr_trainer or tr_staff can be set.")
+        if not self.tr_beneficiary and not self.tr_trainer and not self.tr_staff:
+            raise ValidationError("Either tr_beneficiary or tr_trainer or tr_staff must be set.")
 
         # must be consistent with batch.participant_type if possible
         if self.batch and self.batch.participant_type:
@@ -1454,6 +1666,10 @@ class BatchParticipantCertificate(SoftDeleteMixin):
                 raise ValidationError("For BENEFICIARY participant_type, use tr_beneficiary, not tr_trainer.")
             if t_type == 'TRAINER' and self.tr_beneficiary:
                 raise ValidationError("For TRAINER participant_type, use tr_trainer, not tr_beneficiary.")
+            if t_type == 'BENEFICIARY' and self.tr_staff:
+                raise ValidationError("For BENEFICIARY participant_type, use tr_beneficiary, not tr_staff.")
+            if t_type == 'TRAINER' and self.tr_staff:
+                raise ValidationError("For TRAINER participant_type, use tr_trainer, not tr_staff.")
 
     def save(self, *args, **kwargs):
         from django.utils import timezone
@@ -1476,6 +1692,8 @@ class BatchParticipantCertificate(SoftDeleteMixin):
                 participant_id_part = str(self.tr_beneficiary_id)
             elif self.tr_trainer_id:
                 participant_id_part = str(self.tr_trainer_id)
+            elif self.tr_staff_id:
+                participant_id_part = str(self.tr_staff_id)
 
             self.issue_code = f"{training_plan_id}D{date_part}I{participant_id_part}"
 
@@ -1493,9 +1711,16 @@ class BeneficiaryAttendanceSummary(SoftDeleteMixin):
         'BatchBeneficiary', on_delete=models.CASCADE, related_name='attendance_summary',
         null=True, blank=True
     )
-    # NEW: Added batch_trainer
     batch_trainer = models.OneToOneField(
         'BatchTrainer', on_delete=models.CASCADE, related_name='attendance_summary',
+        null=True, blank=True
+    )
+    batch_staff = models.OneToOneField(
+        'BatchStaff', on_delete=models.CASCADE, related_name='attendance_summary',
+        null=True, blank=True
+    )
+    batch_master_trainer = models.OneToOneField(
+        'BatchMasterTrainer', on_delete=models.CASCADE, related_name='attendance_summary',
         null=True, blank=True
     )
     batch = models.ForeignKey(
@@ -1529,17 +1754,31 @@ class BeneficiaryAttendanceSummary(SoftDeleteMixin):
 
     def clean(self):
         # Validation to ensure exactly ONE participant type is linked
-        if self.batch_beneficiary and self.batch_trainer:
-            raise ValidationError("Only one of batch_beneficiary or batch_trainer can be set.")
-        if not self.batch_beneficiary and not self.batch_trainer:
-            raise ValidationError("Either batch_beneficiary or batch_trainer must be set.")
+        participants = [
+            self.batch_beneficiary, 
+            self.batch_trainer, 
+            self.batch_staff, 
+            self.batch_master_trainer
+        ]
+        
+        # Count how many participant records are attached
+        active_links = sum(1 for p in participants if p is not None)
+        
+        if active_links == 0:
+            raise ValidationError("A participant (Beneficiary, Trainer, Master Trainer, or Staff) MUST be linked to this attendance summary.")
+        elif active_links > 1:
+            raise ValidationError("Only ONE participant type can be linked to a single attendance summary.")
 
     def __str__(self):
         # Safely fetch the name depending on which participant is linked
         if self.batch_beneficiary:
             name = getattr(self.batch_beneficiary.beneficiary, 'member_name', 'Unknown')
+        elif self.batch_master_trainer:
+            name = getattr(self.batch_master_trainer.master_trainer, 'full_name', getattr(self.batch_master_trainer.master_trainer, 'member_name', 'Unknown'))    
         elif self.batch_trainer:
             name = getattr(self.batch_trainer.trainer, 'full_name', getattr(self.batch_trainer.trainer, 'member_name', 'Unknown'))
+        elif self.batch_staff:
+            name = getattr(self.batch_staff.staff, 'full_name', getattr(self.batch_staff.staff, 'full_name', 'Unknown'))
         else:
             name = "Unknown"
             

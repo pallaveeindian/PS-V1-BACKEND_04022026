@@ -23,10 +23,15 @@ class CreateOneShotBatchAPIView(APIView):
         batch_type = data.get("batch_type", "").upper()
         district_tp_user_id = data.get("district_tp_user_id")
         
-        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+        # SURGICAL FIX: Allow STAFF
+        if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
         if batch_type not in ["SEPARATE", "COMBINED"]:
             return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # SURGICAL FIX: Enforce STAFF constraints
+        if participant_type == "STAFF" and batch_type != "SEPARATE":
+            return Response({"error": "STAFF batches must be SEPARATE batches."}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
             user = MasterUser.objects.get(username=request.user.username)
@@ -40,12 +45,16 @@ class CreateOneShotBatchAPIView(APIView):
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            if not p_ids or (not block_id and participant_type != "TRAINER"):
-                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is also required unless participant_type is TRAINER."}, status=status.HTTP_400_BAD_REQUEST)
+            # SURGICAL FIX: Exclude STAFF and TRAINER from block_id requirement
+            if not p_ids or (not block_id and participant_type not in ["TRAINER", "STAFF"]):
+                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is required unless participant_type is TRAINER or STAFF."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
+            # Force block_id to None if STAFF
+            final_block_id = None if participant_type == "STAFF" else block_id
+            
             for pid in all_participant_ids:
-                parsed_mappings.append({'p_id': pid, 'block_id': block_id})
+                parsed_mappings.append({'p_id': pid, 'block_id': final_block_id})
                 
         elif batch_type == "COMBINED":
             blocks_data = data.get("blocks", [])
@@ -63,8 +72,13 @@ class CreateOneShotBatchAPIView(APIView):
         if not all_participant_ids:
             return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Select Model Class
-        ParticipantModel = TRBeneficiary if participant_type == "BENEFICIARY" else TRTrainer
+        # SURGICAL FIX: Select Model Class including STAFF
+        if participant_type == "BENEFICIARY":
+            ParticipantModel = TRBeneficiary
+        elif participant_type == "TRAINER":
+            ParticipantModel = TRTrainer
+        else:
+            ParticipantModel = TRStaff
 
         # BEGIN ATOMIC TRANSACTION
         try:
@@ -104,6 +118,11 @@ class CreateOneShotBatchAPIView(APIView):
                 
                 p_db_map = {p.id: p for p in participants_db}
                 
+                # SURGICAL FIX: Ensure block_id is strictly None for STAFF
+                batch_block_id = data.get("block_id") if batch_type == "SEPARATE" else None
+                if participant_type == "STAFF":
+                    batch_block_id = None
+
                 # 3. Create the Batch
                 batch = Batch.objects.create(
                     training_plan_id=data.get("training_plan_id"),
@@ -111,7 +130,7 @@ class CreateOneShotBatchAPIView(APIView):
                     participant_type=participant_type,
                     centre_id=data.get("centre_id"),
                     district_id=data.get("district_id"),
-                    block_id=data.get("block_id") if batch_type == "SEPARATE" else None,
+                    block_id=batch_block_id,
                     batch_type=batch_type,
                     level=data.get("level", "BLOCK"),
                     status=data.get("status", "DRAFT"),
@@ -129,7 +148,7 @@ class CreateOneShotBatchAPIView(APIView):
                     p_id = mapping['p_id']
                     p_obj = p_db_map[p_id]
                     
-                    # Fix FK Error: Resolve TR ID directly and safely from the validated database participant object!
+                    # Resolve TR ID directly and safely from the validated database participant object!
                     tr_id = p_obj.training_id
                     touched_tr_ids.add(tr_id)
                     
@@ -138,16 +157,23 @@ class CreateOneShotBatchAPIView(APIView):
                         b_id = mapping['block_id']
                         combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
 
+                    # SURGICAL FIX: Branch mapping creation for STAFF
                     if participant_type == "BENEFICIARY":
                         BatchBeneficiary.objects.create(
                             batch=batch, 
                             beneficiary=p_obj, 
                             training_request_id=tr_id
                         )
-                    else:
+                    elif participant_type == "TRAINER":
                         BatchTrainer.objects.create(
                             batch=batch, 
                             trainer=p_obj, 
+                            training_request_id=tr_id
+                        )
+                    elif participant_type == "STAFF":
+                        BatchStaff.objects.create(
+                            batch=batch,
+                            staff=p_obj,
                             training_request_id=tr_id
                         )
 
@@ -170,7 +196,7 @@ class CreateOneShotBatchAPIView(APIView):
                     # Count how many of them have been selected
                     selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
                     
-                    # If all participants in the request are now selected, mark as PENDING
+                    # If all participants in the request are now selected, mark as PENDING (or COMPLETED logically)
                     if total_p > 0 and total_p == selected_p:
                         TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
 
@@ -202,10 +228,14 @@ class OneShotUpdateBatchAPIView(APIView):
         batch_type = data.get("batch_type", "").upper()
         district_tp_user_id = data.get("district_tp_user_id")
         
-        if participant_type not in ["BENEFICIARY", "TRAINER"]:
+        # SURGICAL FIX: Allow STAFF
+        if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
         if batch_type not in ["SEPARATE", "COMBINED"]:
             return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
+        # SURGICAL FIX: Enforce STAFF constraints
+        if participant_type == "STAFF" and batch_type != "SEPARATE":
+            return Response({"error": "STAFF batches must be SEPARATE batches."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = MasterUser.objects.get(username=request.user.username)
@@ -221,12 +251,15 @@ class OneShotUpdateBatchAPIView(APIView):
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            if not p_ids or (not block_id and participant_type != "TRAINER"):
-                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is also required unless participant_type is TRAINER."}, status=status.HTTP_400_BAD_REQUEST)
+            # SURGICAL FIX: Exclude STAFF and TRAINER from block requirement
+            if not p_ids or (not block_id and participant_type not in ["TRAINER", "STAFF"]):
+                return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is required unless participant_type is TRAINER or STAFF."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
+            final_block_id = None if participant_type == "STAFF" else block_id
+            
             for pid in all_participant_ids:
-                parsed_mappings.append({'p_id': pid, 'tr_id': None, 'block_id': block_id})
+                parsed_mappings.append({'p_id': pid, 'tr_id': None, 'block_id': final_block_id})
                 
         elif batch_type == "COMBINED":
             blocks_data = data.get("blocks", [])
@@ -245,9 +278,19 @@ class OneShotUpdateBatchAPIView(APIView):
         if not all_participant_ids:
             return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        ParticipantModel = TRBeneficiary if participant_type == "BENEFICIARY" else TRTrainer
-        MappingModel = BatchBeneficiary if participant_type == "BENEFICIARY" else BatchTrainer
-        mapping_filter_kwarg = "beneficiary_id" if participant_type == "BENEFICIARY" else "trainer_id"
+        # SURGICAL FIX: Dynamic routing based on 3 participant types
+        if participant_type == "BENEFICIARY":
+            ParticipantModel = TRBeneficiary
+            MappingModel = BatchBeneficiary
+            mapping_filter_kwarg = "beneficiary_id"
+        elif participant_type == "TRAINER":
+            ParticipantModel = TRTrainer
+            MappingModel = BatchTrainer
+            mapping_filter_kwarg = "trainer_id"
+        else:
+            ParticipantModel = TRStaff
+            MappingModel = BatchStaff
+            mapping_filter_kwarg = "staff_id"
 
         try:
             with transaction.atomic():
@@ -304,13 +347,18 @@ class OneShotUpdateBatchAPIView(APIView):
                     removed_mappings.delete()
                     ParticipantModel.objects.filter(id__in=removed_ids).update(CB_selected=False)
 
+                # SURGICAL FIX: Nullify block if STAFF
+                batch_block_id = data.get("block_id") if batch_type == "SEPARATE" else None
+                if participant_type == "STAFF":
+                    batch_block_id = None
+
                 # 5. Update Batch Details
                 batch.training_plan_id = data.get("training_plan_id")
                 batch.partner = partner
                 batch.participant_type = participant_type
                 batch.centre_id = data.get("centre_id")
                 batch.district_id = data.get("district_id")
-                batch.block_id = data.get("block_id") if batch_type == "SEPARATE" else None
+                batch.block_id = batch_block_id
                 batch.batch_type = batch_type
                 batch.level = data.get("level", batch.level) 
                 batch.status = data.get("status", batch.status)
@@ -321,7 +369,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 batch.save()
 
                 # 6. Rebuild Mappings & Coverages
-                # Clear old coverages first (simplest way to handle changing batch_types or blocks)
+                # Clear old coverages first
                 BatchBlockCoverage.objects.filter(batch=batch).delete()
                 
                 combined_block_counts = {}
@@ -335,10 +383,13 @@ class OneShotUpdateBatchAPIView(APIView):
                         tr_id = mapping['tr_id'] or p_obj.training_id
                         touched_tr_ids.add(tr_id)
                         
+                        # SURGICAL FIX: Create appropriate mapping for STAFF
                         if participant_type == "BENEFICIARY":
                             MappingModel.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
-                        else:
+                        elif participant_type == "TRAINER":
                             MappingModel.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id)
+                        elif participant_type == "STAFF":
+                            MappingModel.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id)
                     else:
                         # Existing participant, just trace their TR for re-evaluation if needed
                         p_obj = p_db_map[p_id]
@@ -366,7 +417,7 @@ class OneShotUpdateBatchAPIView(APIView):
                     total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
                     selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
                     
-                    # If all are selected -> PENDING. If not -> revert to BATCHING.
+                    # If all are selected -> COMPLETED. If not -> revert to BATCHING.
                     if total_p > 0 and total_p == selected_p:
                         TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
                     else:
@@ -404,6 +455,7 @@ class OneShotDeleteBatchAPIView(APIView):
             with transaction.atomic():
                 b_bens = BatchBeneficiary.objects.filter(batch=batch)
                 b_trainers = BatchTrainer.objects.filter(batch=batch)
+                b_staff = BatchStaff.objects.filter(batch=batch) # SURGICAL ADDITION
                 
                 touched_tr_ids = set()
 
@@ -428,6 +480,17 @@ class OneShotDeleteBatchAPIView(APIView):
                     TRTrainer.objects.filter(id__in=p_ids).update(CB_selected=False)
                     # Hard delete mappings
                     b_trainers.delete()
+
+                # SURGICAL ADDITION: Handle Staff
+                if b_staff.exists():
+                    p_ids = list(b_staff.values_list('staff_id', flat=True))
+                    tr_ids = list(b_staff.values_list('training_request_id', flat=True))
+                    touched_tr_ids.update(tr_ids)
+                    
+                    # Free up participants
+                    TRStaff.objects.filter(id__in=p_ids).update(CB_selected=False)
+                    # Hard delete mappings
+                    b_staff.delete()
 
                 # Revert Training Request Statuses
                 valid_tr_ids = [tid for tid in touched_tr_ids if tid is not None]

@@ -28,10 +28,10 @@ class TrainingRequestCustomDeleteView(APIView):
         role_id = getattr(master_user, 'role_id', None)
         role_name = getattr(getattr(master_user, 'role', None), 'name', '').upper()
         
-        is_dmmu_role = (role_id == 2) or ("DMMU" in role_name)
+        is_dmmu_role = (role_id == 2) or ("DMMU" in role_name) or (role_id == 3) or ("SMMU" in role_name)
 
         if not is_dmmu_role:
-            raise PermissionDenied("Access Denied: Only DMMU operators can execute this deletion.")
+            raise PermissionDenied("Access Denied: Only SMMU/DMMU operators can execute this deletion.")
 
         return master_user
 
