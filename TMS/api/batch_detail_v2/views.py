@@ -45,5 +45,7 @@ class ComprehensiveBatchDetailView(generics.RetrieveAPIView):
             'beneficiary_participations__attendance_summary',
             'trainer_participations__trainer__block',
             'trainer_participations__attendance_summary',
+            'staff_participations__staff__block',    
+            'staff_participations__attendance_summary',
             'master_trainer_participations__master_trainer'
         )

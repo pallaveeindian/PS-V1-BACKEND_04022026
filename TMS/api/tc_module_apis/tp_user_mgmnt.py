@@ -89,7 +89,11 @@ class UserManagementAPIView(APIView):
                     return Response({"error": "TPCP not found under your purview."}, status=status.HTTP_404_NOT_FOUND)
 
                 # Fetch assigned centres
-                assigned_centres = TrainingPartnerCentre.objects.filter(tpcptocentre__contact_person=tpcp)
+                assigned_centres = TrainingPartnerCentre.objects.filter(
+                    is_active=True,
+                    tpcptocentre__contact_person=tpcp,
+                    tpcptocentre__is_active=True,
+                ).distinct()
                 if dtp_obj:
                     assigned_centres = assigned_centres.filter(district=dtp_obj.district)
 
@@ -120,7 +124,11 @@ class UserManagementAPIView(APIView):
             results = []
             for dtp in dtps:
                 # Count centres in this DTP's district
-                centre_count = TrainingPartnerCentre.objects.filter(partner=tp_obj, district=dtp.district).count()
+                centre_count = TrainingPartnerCentre.objects.filter(
+                    partner=tp_obj,
+                    district=dtp.district,
+                    is_active=True,
+                ).count()
                 results.append({
                     "id": dtp.id,
                     "master_user_id": dtp.master_user.id if dtp.master_user else None,
@@ -133,18 +141,28 @@ class UserManagementAPIView(APIView):
 
         elif target_role == 'tpcp':
             if dtp_obj:
-                # DTP viewing TPCPs -> Only those mapped to centres in DTP's district
+                # DTP viewing TPCPs -> Only active TPCPs mapped to active centres in DTP's district
                 tpcps = TrainingPartnerCP.objects.filter(
                     partner=tp_obj,
-                    tpcptocentre__allocated_centre__district=dtp_obj.district
+                    is_active=True,
+                    tpcptocentre__is_active=True,
+                    tpcptocentre__allocated_centre__is_active=True,
+                    tpcptocentre__allocated_centre__district=dtp_obj.district,
                 ).distinct().select_related('master_user')
             else:
-                # TP viewing TPCPs -> All
-                tpcps = TrainingPartnerCP.objects.filter(partner=tp_obj).select_related('master_user')
+                # TP viewing all active TPCPs
+                tpcps = TrainingPartnerCP.objects.filter(
+                    partner=tp_obj,
+                    is_active=True,
+                ).select_related('master_user')
 
             results = []
             for tpcp in tpcps:
-                centres = TrainingPartnerCentre.objects.filter(tpcptocentre__contact_person=tpcp)
+                centres = TrainingPartnerCentre.objects.filter(
+                    is_active=True,
+                    tpcptocentre__contact_person=tpcp,
+                    tpcptocentre__is_active=True,
+                ).distinct()
                 if dtp_obj:
                     centres = centres.filter(district=dtp_obj.district)
                     

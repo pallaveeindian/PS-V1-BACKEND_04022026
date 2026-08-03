@@ -65,19 +65,28 @@ class TrainingPartnerDashboardView(APIView):
         # ------------------------------------------------------------
         # METRIC A: KPI CARD PROCESSING ENGINE
         # ------------------------------------------------------------
+        # SURGICAL FIX: Aggregate counts for all 8 batch statuses dynamically
         batch_stats = tms_models.Batch.objects.filter(
             partner=partner, financial_year=financial_year, is_active=True
         ).aggregate(
             total=Count('id'),
-            ongoing=Count('id', filter=Q(status='ONGOING')),
+            draft=Count('id', filter=Q(status='DRAFT')),
             pending=Count('id', filter=Q(status='PENDING')),
-            closed=Count('id', filter=Q(status='CLOSED'))
+            ongoing=Count('id', filter=Q(status='ONGOING')),
+            scheduled=Count('id', filter=Q(status='SCHEDULED')),
+            completed=Count('id', filter=Q(status='COMPLETED')),
+            review=Count('id', filter=Q(status='REVIEW')),
+            closed=Count('id', filter=Q(status='CLOSED')),
+            rejected=Count('id', filter=Q(status='REJECTED')),
         )
 
         total_allotted_beneficiaries = tms_models.TRBeneficiary.objects.filter(
             training__partner=partner, training__financial_year=financial_year, is_active=True
         ).count()
         total_allotted_trainers = tms_models.TRTrainer.objects.filter(
+            training__partner=partner, training__financial_year=financial_year, is_active=True
+        ).count()
+        total_allotted_staff = tms_models.TRStaff.objects.filter(
             training__partner=partner, training__financial_year=financial_year, is_active=True
         ).count()
 
@@ -89,14 +98,25 @@ class TrainingPartnerDashboardView(APIView):
             rel_batch_status_q,
             batch__partner=partner, batch__financial_year=financial_year, is_active=True
         ).count()
+        total_trained_staff = tms_models.BatchStaff.objects.filter(
+            rel_batch_status_q,
+            batch__partner=partner, batch__financial_year=financial_year, is_active=True
+        ).count()
 
         kpi_data = {
             "total_batches_created": batch_stats['total'] or 0,
-            "ongoing_batches": batch_stats['ongoing'] or 0,
+            # ALL 8 Statuses Included Below
+            "draft_batches": batch_stats['draft'] or 0,
             "pending_batches": batch_stats['pending'] or 0,
+            "ongoing_batches": batch_stats['ongoing'] or 0,
+            "scheduled_batches": batch_stats['scheduled'] or 0,
+            "completed_batches": batch_stats['completed'] or 0,
+            "review_batches": batch_stats['review'] or 0,
             "closed_batches": batch_stats['closed'] or 0,
-            "total_participants_allotted": total_allotted_beneficiaries + total_allotted_trainers,
-            "total_participants_trained": total_trained_beneficiaries + total_trained_trainers
+            "rejected_batches": batch_stats['rejected'] or 0,
+            # Updated calculations to include staff
+            "total_participants_allotted": total_allotted_beneficiaries + total_allotted_trainers + total_allotted_staff,
+            "total_participants_trained": total_trained_beneficiaries + total_trained_trainers + total_trained_staff
         }
 
         # ------------------------------------------------------------

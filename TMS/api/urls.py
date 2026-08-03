@@ -404,4 +404,10 @@ urlpatterns = [
     path('staff/filter-options/', StaffFilterOptionsAPIView.as_view(), name='staff-filter-options'),
     path('staff/', StaffListAPIView.as_view(), name='staff-list'),
     path('staff/<str:employee_id>/', StaffDetailAPIView.as_view(), name='staff-detail'),
+
+    # Batch Reschedule View
+    path('batch/<int:batch_id>/reschedule/', tms_views.BatchRescheduleAPIView.as_view(), name='batch-reschedule'),
+    
+    # NEW CENTRE DELETION VIEW
+    
 ]

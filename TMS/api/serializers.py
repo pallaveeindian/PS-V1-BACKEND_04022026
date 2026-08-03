@@ -858,12 +858,20 @@ class BatchTRSerializer(SoftDeleteModelSerializer):
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingRequest
         fields = "__all__"
-       
+
+class BatchTrainingPlanNestSerializer(SoftDeleteModelSerializer):
+    theme = TrainingThemeSerializer(read_only=True)
+
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = tms_models.TrainingPlan
+        fields = "__all__"
+
 class BatchListSerializer(serializers.ModelSerializer):
     district = BatchDistrictSerializer(read_only=True)
     block = BatchBlockSerializer(read_only=True)
     centre = BatchCentreSerializer()
     pax_count = serializers.IntegerField(read_only=True)
+    training_plan = BatchTrainingPlanNestSerializer(read_only=True)
 
     class Meta:
         model = tms_models.Batch
@@ -881,6 +889,7 @@ class BatchListSerializer(serializers.ModelSerializer):
             'participant_type',
             'block',
             'pax_count',
+            'training_plan'
         ]
 
 

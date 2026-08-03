@@ -20,12 +20,11 @@ from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.db.models import QuerySet
 from django.utils import timezone
-
 from rest_framework.views import APIView
 from rest_framework import status,generics
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
-from datetime import datetime
+from datetime import datetime, timedelta
 from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication
 from rest_framework import viewsets, permissions, status
@@ -533,6 +532,69 @@ class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
         centre = self.get_object()
         serializer = TrainingPartnerCentreDetailSerializer(centre, context={"request": request})
         return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Custom highly-destructive (but safe/soft) delete operation.
+        When a TP deletes a Centre, it immediately neutralizes:
+        1. The Centre itself
+        2. All associated TrainingPartnerCentreRooms
+        3. All associated TrainingPartnerSubmissions (Media)
+        4. All TPCPToCentre link rows (Contact Persons assigned to this centre)
+        """
+        instance = self.get_object()
+        master_user = core_models.MasterUser.objects.filter(
+            username=request.user.username
+        ).first()
+
+        active_batches = tms_models.Batch.objects.filter(
+            centre=instance,
+            is_active=True,
+        ).exclude(status="REJECTED")
+
+        if active_batches.exists():
+            return Response(
+                {
+                    "detail": (
+                        "This training centre cannot be deleted because it is "
+                        "already assigned to one or more batches."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            # 1. Neutralize Rooms
+            tms_models.TrainingPartnerCentreRooms.objects.filter(centre=instance, is_active=True).update(
+                is_active=False,
+                deleted_by=master_user,
+                deleted_at=timezone.now()
+            )
+            
+            # 2. Neutralize Media / Submissions
+            tms_models.TrainingPartnerSubmission.objects.filter(centre=instance, is_active=True).update(
+                is_active=False,
+                deleted_by=master_user,
+                deleted_at=timezone.now()
+            )
+            
+            # 3. Neutralize Contact Person Mappings
+            tms_models.TPCPToCentre.objects.filter(allocated_centre=instance, is_active=True).update(
+                is_active=False,
+                deleted_by=master_user,
+                deleted_at=timezone.now()
+            )
+            
+            # 4. Soft-Delete the primary Centre Record
+            instance.is_active = False
+            instance.deleted_by = master_user
+            instance.deleted_at = timezone.now()
+            instance.save()
+        
+        return Response(
+            {"detail": f"Centre '{instance.venue_name}' and all associated records have been successfully deleted."},
+            status=status.HTTP_200_OK
+        )        
 
 class TrainingPartnerCentreRoomsViewSet(BaseTMSModelViewSet):
     """
@@ -1708,7 +1770,7 @@ class BatchesListView(APIView):
                 "centre__partner",
             )
             .annotate(
-                pax_count=Count('beneficiary', distinct=True) + Count('trainer', distinct=True)
+                pax_count=Count('beneficiary', distinct=True) + Count('trainer', distinct=True) + Count('staff', distinct=True)
             )
         )
 
@@ -1764,7 +1826,7 @@ class BatchesListView(APIView):
         # -------------------------
 
         training_plan_id = params.get("training_plan_id")
-        theme_id = params.get("theme_id")
+        theme_id = params.get("theme_id") or params.get("theme")
         partner_id = params.get("partner_id")
         training_type = params.get("training_type")
 
@@ -2043,6 +2105,19 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
                     tr_trainer=bt.trainer
                 )
 
+            # 3. Generate Certificates for SUCCESSFUL Staff (SURGICAL ADDITION)
+            successful_staff = tms_models.BatchStaff.objects.filter(
+                batch=batch,
+                attendance_summary__is_successful=True,
+                is_active=True
+            ).select_related('staff')
+
+            for bs in successful_staff:
+                tms_models.BatchParticipantCertificate.objects.get_or_create(
+                    batch=batch,
+                    tr_staff=bs.staff
+                )
+
     # ------------------------------------------------------------------
     # NEW: TP submits full closure package atomically
     # ------------------------------------------------------------------
@@ -2083,7 +2158,7 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
         validated = serializer.validated_data
 
         batch = validated['batch_id']                          # Batch instance
-        training_request = validated['training_request_id']   # TrainingRequest instance
+        training_request = validated['training_request_id']    # TrainingRequest instance
 
         with transaction.atomic():
             # ── STEP 1: Bulk-create TPBatchCostBreakup rows ──────────────
@@ -2091,14 +2166,24 @@ class BatchClosureRequestViewSet(BaseTMSModelViewSet):
             for item in validated['participant_costs']:
                 ben_obj     = item.get('batch_beneficiary_id')   # BatchBeneficiary | None
                 trainer_obj = item.get('batch_trainer_id')       # BatchTrainer     | None
+                staff_obj   = item.get('batch_staff_id')         # BatchStaff       | None (SURGICAL ADDITION)
 
-                participant_type = 'BENEFICIARY' if ben_obj else 'TRAINER'
+                # Dynamically determine participant type
+                if ben_obj:
+                    participant_type = 'BENEFICIARY'
+                elif trainer_obj:
+                    participant_type = 'TRAINER'
+                elif staff_obj:
+                    participant_type = 'STAFF'
+                else:
+                    participant_type = 'OTHER'
 
                 cost_breakup_objs.append(
                     tms_models.TPBatchCostBreakup(
                         batch=batch,
                         batch_beneficiary=ben_obj,
                         batch_trainer=trainer_obj,
+                        batch_staff=staff_obj,  # SURGICAL ADDITION
                         participant_type=participant_type,
                         hra=item['hra'],
                         ta_da=item['ta_da'],
@@ -2654,3 +2739,195 @@ class TMSFirstLoginPasswordChangeView(APIView):
             {"detail": "Password updated successfully."}, 
             status=status.HTTP_200_OK
         )
+
+# Batch Reschedule View
+class BatchRescheduleAPIView(APIView):
+    """
+    API View to strictly update the start_date and end_date of a Batch.
+
+    Additional validation:
+    - Prevents rescheduling if any assigned Master Trainer is already engaged
+      in another batch on the selected start date.
+    - Suggests the next earliest date when ALL trainers become available.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, batch_id, *args, **kwargs):
+        return self._reschedule(request, batch_id)
+
+    def post(self, request, batch_id, *args, **kwargs):
+        return self._reschedule(request, batch_id)
+
+    def _reschedule(self, request, batch_id):
+
+        try:
+            batch = tms_models.Batch.objects.get(
+                id=batch_id,
+                is_active=True
+            )
+        except tms_models.Batch.DoesNotExist:
+            return Response(
+                {"detail": "Batch not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        start_date_str = request.data.get("start_date")
+        end_date_str = request.data.get("end_date")
+
+        if not start_date_str or not end_date_str:
+            return Response(
+                {
+                    "detail": "Both 'start_date' and 'end_date' are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            new_start_date = datetime.strptime(
+                start_date_str,
+                "%Y-%m-%d"
+            ).date()
+
+            new_end_date = datetime.strptime(
+                end_date_str,
+                "%Y-%m-%d"
+            ).date()
+
+        except ValueError:
+            return Response(
+                {
+                    "detail": "Invalid date format. Expected YYYY-MM-DD."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_start_date > new_end_date:
+            return Response(
+                {
+                    "detail": "start_date cannot be after end_date."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ============================================================
+        # MASTER TRAINER AVAILABILITY VALIDATION (STRICT OVERLAP CHECK)
+        # ============================================================
+
+        trainer_ids = list(
+            tms_models.BatchMasterTrainer.objects.filter(
+                batch=batch,
+                is_active=True
+            ).values_list(
+                "master_trainer_id",
+                flat=True
+            )
+        )
+
+        if trainer_ids:
+            # SURGICAL FIX: Strict overlap logic: 
+            # Two date ranges [start1, end1] and [start2, end2] overlap IF: 
+            # start1 <= end2 AND end1 >= start2
+            conflicting_batches = (
+                tms_models.BatchMasterTrainer.objects
+                .filter(
+                    master_trainer_id__in=trainer_ids,
+                    is_active=True,
+                    batch__is_active=True,
+                    batch__status__in=["SCHEDULED", "ONGOING"],
+                    batch__start_date__lte=new_end_date,   # Condition 1
+                    batch__end_date__gte=new_start_date    # Condition 2
+                )
+                .exclude(batch=batch)
+                .select_related(
+                    "master_trainer",
+                    "batch",
+                )
+                .order_by("master_trainer__full_name")
+            )
+
+            if conflicting_batches.exists():
+                conflicts = []
+                suggested_start_date = new_start_date
+
+                for conflict in conflicting_batches:
+                    available_from = (
+                        conflict.batch.end_date + timedelta(days=1)
+                        if conflict.batch.end_date
+                        else new_start_date
+                    )
+
+                    suggested_start_date = max(
+                        suggested_start_date,
+                        available_from
+                    )
+
+                    conflicts.append(
+                        {
+                            "trainer_id": conflict.master_trainer.id,
+                            "trainer_name": conflict.master_trainer.full_name,
+                            "batch_id": conflict.batch.id,
+                            "batch_code": conflict.batch.code,
+                            "batch_start_date": conflict.batch.start_date,
+                            "batch_end_date": conflict.batch.end_date,
+                            "available_from": available_from,
+                        }
+                    )
+
+                return Response(
+                    {
+                        "detail": "Master Trainer is engaged in another batch during these dates.",
+                        "suggested_start_date": suggested_start_date,
+                        "conflicts": conflicts,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # ============================================================
+        # UPDATE BATCH
+        # ============================================================
+
+        batch.start_date = new_start_date
+        batch.end_date = new_end_date
+
+        master_user = MasterUser.objects.filter(
+            username=request.user.username
+        ).first()
+
+        if master_user:
+            batch.updated_by = master_user
+
+        # ============================================================
+        # AUTO STATUS TOGGLE
+        # ============================================================
+
+        today = timezone.now().date()
+
+        if batch.status == "ONGOING" and new_start_date > today:
+            batch.status = "SCHEDULED"
+        elif batch.status == "SCHEDULED" and new_start_date <= today:
+            batch.status = "ONGOING"
+
+        batch.save(
+            update_fields=[
+                "start_date",
+                "end_date",
+                "status",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Batch rescheduled successfully.",
+                "batch_id": batch.id,
+                "code": batch.code,
+                "new_start_date": batch.start_date,
+                "new_end_date": batch.end_date,
+                "status": batch.status,
+            },
+            status=status.HTTP_200_OK
+        )
+
+# NEW CENTRE DELETION VIEW

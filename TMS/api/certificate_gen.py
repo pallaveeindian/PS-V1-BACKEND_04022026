@@ -23,7 +23,7 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
         "BLOCK": "ब्लॉक", "DISTRICT": "जिला", "STATE": "राज्य", 
         "VILLAGE": "ग्राम", "SHG": "एसएचजी", "CLF": "सीएलएफ"
     }
-    TYPE_HI = {"BENEFICIARY": "लाभार्थी", "TRAINER": "मास्टर ट्रेनर"}
+    TYPE_HI = {"BENEFICIARY": "लाभार्थी", "TRAINER": "मास्टर ट्रेनर", "STAFF": "स्टाफ"}
     PLAN_TYPE_HI = {
         "RES": "आवासीय",
         "NON RES": "गैर-आवासीय",
@@ -45,7 +45,7 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
 
     cost_map = {}
     for c in cost_list:
-        key = c.batch_beneficiary_id if c.batch_beneficiary_id else c.batch_trainer_id
+        key = c.batch_beneficiary_id or c.batch_trainer_id or c.batch_staff_id
         if key:
             cost_map[key] = c
 
@@ -64,12 +64,12 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
                 
                 # --- SURGICAL ADDITION: Inject Costings ---
                 cost_record = cost_map.get(bb.id)
-                bb.beneficiary.hra = cost_record.hra if cost_record else 0
-                bb.beneficiary.ta_da = cost_record.ta_da if cost_record else 0
+                bb.beneficiary.hra = cost_record.ta_da if cost_record else 0
                 bb.beneficiary.total_cost = cost_record.total_cost if cost_record else 0
                 
                 participants.append(bb.beneficiary)
-    else:
+                
+    elif training_type == "TRAINER":
         # SURGICAL FIX: Unified Trainer logic utilizing attendance_summary
         bts = batch.trainer_participations.select_related('trainer', 'attendance_summary').filter(
             attendance_summary__is_successful=True, 
@@ -77,16 +77,37 @@ def generate_batch_certificate_pdf(batch, financial_year, master_user, role_labe
         )
         for bt in bts:
             if bt.trainer:
-                # डायनामिक रूप से उपस्थिति प्रतिशत जोड़ें
                 bt.trainer.attendance_pct = bt.attendance_summary.attendance_percentage if hasattr(bt, 'attendance_summary') and bt.attendance_summary else 0
                 
-                # --- SURGICAL ADDITION: Inject Costings ---
                 cost_record = cost_map.get(bt.id)
-                bt.trainer.hra = cost_record.hra if cost_record else 0
-                bt.trainer.ta_da = cost_record.ta_da if cost_record else 0
+                bt.trainer.hra = cost_record.ta_da if cost_record else 0
                 bt.trainer.total_cost = cost_record.total_cost if cost_record else 0
                 
                 participants.append(bt.trainer)
+                
+    elif training_type == "STAFF":
+        # SURGICAL ADDITION: Staff Participant Logic
+        # Added 'staff__staff' to select_related to efficiently fetch the underlying StaffProfile
+        bss = batch.staff_participations.select_related('staff__staff', 'attendance_summary').filter(
+            attendance_summary__is_successful=True, 
+            is_active=True
+        )
+        for bs in bss:
+            if bs.staff:
+                bs.staff.attendance_pct = bs.attendance_summary.attendance_percentage if hasattr(bs, 'attendance_summary') and bs.attendance_summary else 0
+                
+                cost_record = cost_map.get(bs.id)
+                bs.staff.hra = cost_record.hra if cost_record else 0
+                bs.staff.ta_da = cost_record.ta_da if cost_record else 0
+                bs.staff.total_cost = cost_record.total_cost if cost_record else 0
+                
+                # SURGICAL FIX: Map deep nested StaffProfile fields to the TRStaff object for the template
+                staff_profile = bs.staff.staff
+                bs.staff.employee_id = staff_profile.employee_id if staff_profile and staff_profile.employee_id else "—"
+                bs.staff.mobile = staff_profile.mobile if staff_profile and staff_profile.mobile else "—"
+                bs.staff.designation = bs.staff.designation or "—"
+                
+                participants.append(bs.staff)
 
     master_trainers = batch.master_trainer_participations.select_related('master_trainer').filter(is_active=True)
 

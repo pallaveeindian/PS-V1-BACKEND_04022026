@@ -14,9 +14,14 @@ class ThemeTargetAchievementSerializer(serializers.Serializer):
 
 class KpiCardInfoSerializer(serializers.Serializer):
     total_batches_created = serializers.IntegerField()
-    ongoing_batches = serializers.IntegerField()
-    pending_batches = serializers.IntegerField()
-    closed_batches = serializers.IntegerField()
+    draft_batches = serializers.IntegerField(default=0)
+    pending_batches = serializers.IntegerField(default=0)
+    ongoing_batches = serializers.IntegerField(default=0)
+    scheduled_batches = serializers.IntegerField(default=0)
+    completed_batches = serializers.IntegerField(default=0)
+    review_batches = serializers.IntegerField(default=0)
+    closed_batches = serializers.IntegerField(default=0)
+    rejected_batches = serializers.IntegerField(default=0)
     total_participants_allotted = serializers.IntegerField()
     total_participants_trained = serializers.IntegerField()
 

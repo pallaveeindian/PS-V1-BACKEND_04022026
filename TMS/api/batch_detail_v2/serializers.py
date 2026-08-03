@@ -22,6 +22,11 @@ class TrainingPartnerSerializer(serializers.ModelSerializer):
         model = TrainingPartner
         fields = '__all__'
 
+class MasterDistrictSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MasterDistrict
+        fields = '__all__'
+
 class MasterBlockSerializer(serializers.ModelSerializer):
     class Meta:
         model = MasterBlock
@@ -55,6 +60,24 @@ class TrainingPartnerCentreSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'tpcptocentre_set'):
             return TPCPToCentreSerializer(obj.tpcptocentre_set.all(), many=True).data
         return []
+
+class MasterStaffProfile(serializers.ModelSerializer):
+    theme_name = serializers.CharField(
+        source="theme.theme_name",
+        read_only=True
+    )
+    district_name_en = serializers.CharField(
+        source="district.district_name_en",
+        read_only=True
+    )
+    block_name_en = serializers.CharField(
+        source="block.block_name_en",
+        read_only=True
+    )
+
+    class Meta:
+        model = StaffProfile
+        fields = '__all__'
 
 # ---------------------------------------------------------
 # 2. Base Participant Serializers
@@ -97,6 +120,36 @@ class TRTrainerSerializer(serializers.ModelSerializer):
         model = TRTrainer
         fields = '__all__'
 
+class TRStaffSerializer(serializers.ModelSerializer):
+    district_name_en = serializers.CharField(
+        source="district.district_name_en",
+        read_only=True
+    )
+    block_name_en = serializers.CharField(
+        source="block.block_name_en",
+        read_only=True
+    )
+    employee_id = serializers.CharField(
+        source="staff.employee_id",
+        read_only=True
+    )
+    mobile = serializers.CharField(
+        source="staff.mobile",
+        read_only=True
+    )
+    gender = serializers.CharField(
+        source="staff.gender",
+        read_only=True
+    )
+    theme_name = serializers.CharField(
+        source="theme.theme_name",
+        read_only=True
+    )
+
+    class Meta:
+        model = TRStaff
+        fields = '__all__'
+
 # ---------------------------------------------------------
 # 3. Batch Participation & Attendance Aggregation
 # ---------------------------------------------------------
@@ -125,6 +178,14 @@ class BatchTrainerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BatchTrainer
+        fields = '__all__'
+
+class BatchStaffSerializer(serializers.ModelSerializer):
+    staff = TRStaffSerializer(read_only=True)
+    attendance_summary = BeneficiaryAttendanceSummarySerializer(read_only=True)
+
+    class Meta:
+        model = BatchStaff
         fields = '__all__'
 
 class BatchMasterTrainerSerializer(serializers.ModelSerializer):
@@ -186,6 +247,7 @@ class BatchMediaSerializer(serializers.ModelSerializer):
 class BatchParticipantCertificateSerializer(serializers.ModelSerializer):
     tr_beneficiary = TRBeneficiarySerializer(read_only=True)
     tr_trainer = TRTrainerSerializer(read_only=True)
+    tr_staff = TRStaffSerializer(read_only=True)
 
     class Meta:
         model = BatchParticipantCertificate
@@ -203,6 +265,7 @@ class ComprehensiveBatchDetailSerializer(serializers.ModelSerializer):
     # All Participants (Trainees + Master Trainers)
     beneficiary_participations = BatchBeneficiarySerializer(many=True, read_only=True)
     trainer_participations = BatchTrainerSerializer(many=True, read_only=True)
+    staff_participations = BatchStaffSerializer(many=True, read_only=True)
     master_trainer_participations = BatchMasterTrainerSerializer(many=True, read_only=True)
 
     # Dynamic Block-wise grouping for Combined Batches
@@ -221,6 +284,15 @@ class ComprehensiveBatchDetailSerializer(serializers.ModelSerializer):
     batch_closing = BatchClosingSerializer(read_only=True)
     batch_pictures = BatchMediaSerializer(many=True, read_only=True)
     batch_certificates = BatchParticipantCertificateSerializer(many=True, read_only=True)
+
+    district_name_en = serializers.CharField(
+        source="district.district_name_en",
+        read_only=True,
+    )
+    block_name_en = serializers.CharField(
+        source="block.block_name_en",
+        read_only=True,
+    )
 
     class Meta:
         model = Batch
@@ -254,5 +326,16 @@ class ComprehensiveBatchDetailSerializer(serializers.ModelSerializer):
                         "participants": []
                     }
                 blocks_map[b_id]["participants"].append(BatchTrainerSerializer(bt).data)
+
+        # Process Staff
+        for bs in obj.staff_participations.all():
+            if bs.staff and bs.staff.block:
+                b_id = bs.staff.block.block_id
+                if b_id not in blocks_map:
+                    blocks_map[b_id] = {
+                        "block": MasterBlockSerializer(bs.staff.block).data,
+                        "participants": []
+                    }
+                blocks_map[b_id]["participants"].append(BatchStaffSerializer(bs).data)
 
         return list(blocks_map.values())

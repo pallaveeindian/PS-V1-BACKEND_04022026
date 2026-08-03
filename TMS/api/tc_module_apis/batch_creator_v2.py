@@ -84,12 +84,19 @@ class CreateOneShotBatchAPIView(APIView):
         try:
             with transaction.atomic():
                 
-                # 1. Resolve Partner
+                # ==========================================
+                # 1. Resolve Partner (SURGICAL FIX APPLIED)
+                # ==========================================
                 try:
+                    # Try resolving as District TP first
                     dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
                     partner = dtp.partner
                 except DistrictTP.DoesNotExist:
-                    raise ValueError(f"DistrictTP not found for user ID: {district_tp_user_id}")
+                    try:
+                        # Fallback to direct Training Partner resolution for State-level TPs
+                        partner = TrainingPartner.objects.get(master_user_id=district_tp_user_id)
+                    except TrainingPartner.DoesNotExist:
+                        raise ValueError(f"Neither DistrictTP nor TrainingPartner found for user ID: {district_tp_user_id}")
 
                 # 2. DOUBLE-BOOKING PREVENTION (Strict Check)
                 already_selected = ParticipantModel.objects.filter(
@@ -294,12 +301,17 @@ class OneShotUpdateBatchAPIView(APIView):
 
         try:
             with transaction.atomic():
-                # 1. Resolve Partner
+                # ==========================================
+                # 1. Resolve Partner (SURGICAL FIX APPLIED)
+                # ==========================================
                 try:
                     dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
                     partner = dtp.partner
                 except DistrictTP.DoesNotExist:
-                    raise ValueError(f"DistrictTP not found for user ID: {district_tp_user_id}")
+                    try:
+                        partner = TrainingPartner.objects.get(master_user_id=district_tp_user_id)
+                    except TrainingPartner.DoesNotExist:
+                        raise ValueError(f"Neither DistrictTP nor TrainingPartner found for user ID: {district_tp_user_id}")
 
                 # 2. Identify Old vs New Participants
                 existing_mappings = MappingModel.objects.filter(batch=batch)

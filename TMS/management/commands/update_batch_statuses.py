@@ -8,6 +8,7 @@ from TMS.models import (
     Batch, 
     BatchBeneficiary, 
     BatchTrainer,
+    BatchStaff, 
     BatchEkycVerification, 
     ParticipantAttendance, 
     BeneficiaryAttendanceSummary,
@@ -127,6 +128,28 @@ class Command(BaseCommand):
             return
 
         total_days = training_plan.no_of_days
+
+        # --- SURGICAL ADDITION: Strict Rules Matrix for Minimum Attendance ---
+        MIN_ATTENDANCE_REQ = {
+            1: 1,
+            2: 2,
+            3: 3,
+            4: 3,
+            5: 4,
+            6: 5,
+            7: 6,
+            8: 7,
+            9: 8,
+            10: 8,
+            11: 9,
+            12: 10,
+            13: 11,
+            14: 12,
+            15: 12
+        }
+        
+        # Fallback to pure 80% math if day count > 15
+        required_days = MIN_ATTENDANCE_REQ.get(total_days, max(1, int(total_days * 0.8)))
         
         # --- TRAINEES ---
         batch_beneficiaries = BatchBeneficiary.objects.filter(batch=batch).select_related('beneficiary')
@@ -145,8 +168,10 @@ class Command(BaseCommand):
                 attendance__batch=batch, participant_role='trainee', participant_id=p_id, present=True
             ).count()
 
-            attendance_percentage = min((present_days / total_days) * 100, 100.0)
-            is_successful = (attendance_percentage >= 80.0) and not is_dropout
+            attendance_percentage = min((present_days / total_days) * 100, 100.0) if total_days > 0 else 0.0
+            
+            # --- SURGICAL FIX: Applied Rules Matrix Check ---
+            is_successful = (present_days >= required_days) and not is_dropout
 
             bb.attended = is_successful
             bb.save(update_fields=['attended'])
@@ -180,8 +205,10 @@ class Command(BaseCommand):
                 attendance__batch=batch, participant_role='trainee', participant_id=p_id, present=True
             ).count()
 
-            attendance_percentage = min((present_days / total_days) * 100, 100.0)
-            is_successful = (attendance_percentage >= 80.0) and not is_dropout
+            attendance_percentage = min((present_days / total_days) * 100, 100.0) if total_days > 0 else 0.0
+            
+            # --- SURGICAL FIX: Applied Rules Matrix Check ---
+            is_successful = (present_days >= required_days) and not is_dropout
 
             bt.attended = is_successful
             bt.save(update_fields=['attended'])
@@ -193,6 +220,43 @@ class Command(BaseCommand):
                 batch_trainer=bt,
                 defaults={
                     'batch': batch, 'training_request': bt.training_request, 'total_training_days': total_days,
+                    'days_present': present_days, 'attendance_percentage': attendance_percentage,
+                    'is_dropout': is_dropout, 'is_successful': is_successful
+                }
+            )
+
+        # --- STAFF ---
+        batch_staff = BatchStaff.objects.filter(batch=batch).select_related('staff')
+        for bs in batch_staff:
+            p_id = str(bs.id)
+            is_dropout = False
+            
+            ekyc = BatchEkycVerification.objects.filter(
+                batch=batch, participant_role='trainee', participant_id=p_id
+            ).first()
+
+            if ekyc and ekyc.remarks and 'DROP-OUT' in ekyc.remarks.upper():
+                is_dropout = True
+
+            present_days = ParticipantAttendance.objects.filter(
+                attendance__batch=batch, participant_role='trainee', participant_id=p_id, present=True
+            ).count()
+
+            attendance_percentage = min((present_days / total_days) * 100, 100.0) if total_days > 0 else 0.0
+            
+            # --- SURGICAL FIX: Applied Rules Matrix Check ---
+            is_successful = (present_days >= required_days) and not is_dropout
+
+            bs.attended = is_successful
+            bs.save(update_fields=['attended'])
+            
+            bs.staff.attended = is_successful
+            bs.staff.save(update_fields=['attended'])
+
+            BeneficiaryAttendanceSummary.objects.update_or_create(
+                batch_staff=bs,
+                defaults={
+                    'batch': batch, 'training_request': bs.training_request, 'total_training_days': total_days,
                     'days_present': present_days, 'attendance_percentage': attendance_percentage,
                     'is_dropout': is_dropout, 'is_successful': is_successful
                 }

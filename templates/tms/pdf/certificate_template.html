@@ -204,7 +204,6 @@
                 <th>मोबाइल</th>
                 <th>उपस्थिति</th>
                 <th style="text-align: right;">TA/HRA</th>
-                <th style="text-align: right;">DA</th>
                 <th style="text-align: right;">कुल (₹)</th>
             </tr>
             {% for p in participants %}
@@ -218,13 +217,38 @@
                 <td style="text-align: center;">{{ p.religion|default:"—" }}</td>
                 <td style="text-align: center;">{{ p.mobile|default:"—" }}</td>
                 <td style="text-align: center; font-weight: bold;">{{ p.attendance_pct }}%</td>
-                <td style="text-align: right;">{{ p.hra|default:"0.00" }}</td>
+                <td style="text-align: right;">{{ p.ta_da|default:"0.00" }}</td>
+                <td style="text-align: right; font-weight: bold; color: #8b0000;">{{ p.total_cost|default:"0.00" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% elif training_type == 'STAFF' %}
+        <table>
+            <tr>
+                <th>क्र.</th>
+                <th style="text-align: left;">नाम</th>
+                <th>कर्मचारी आईडी</th>
+                <th style="text-align: left;">पदनाम</th>
+                <th>मोबाइल</th>
+                <th>उपस्थिति (%)</th>
+                <th style="text-align: right;">TA/HRA (₹)</th>
+                <th style="text-align: right;">कुल (₹)</th>
+            </tr>
+            {% for p in participants %}
+            <tr>
+                <td style="text-align: center;">{{ forloop.counter }}</td>
+                <td>{{ p.full_name|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.employee_id|default:"—" }}</td>
+                <td>{{ p.designation|default:"—" }}</td>
+                <td style="text-align: center;">{{ p.mobile|default:"—" }}</td>
+                <td style="text-align: center; font-weight: bold;">{{ p.attendance_pct }}%</td>
                 <td style="text-align: right;">{{ p.ta_da|default:"0.00" }}</td>
                 <td style="text-align: right; font-weight: bold; color: #8b0000;">{{ p.total_cost|default:"0.00" }}</td>
             </tr>
             {% endfor %}
         </table>
     {% else %}
+        <!-- Default layout for TRAINER -->
         <table>
             <tr>
                 <th>क्र.</th>
@@ -232,7 +256,6 @@
                 <th>मोबाइल</th>
                 <th>उपस्थिति (%)</th>
                 <th style="text-align: right;">TA/HRA (₹)</th>
-                <th style="text-align: right;">DA (₹)</th>
                 <th style="text-align: right;">कुल (₹)</th>
             </tr>
             {% for p in participants %}
@@ -241,7 +264,6 @@
                 <td>{{ p.full_name|default:"—" }}</td>
                 <td style="text-align: center;">{{ p.mobile_no|default:"—" }}</td>
                 <td style="text-align: center; font-weight: bold;">{{ p.attendance_pct }}%</td>
-                <td style="text-align: right;">{{ p.hra|default:"0.00" }}</td>
                 <td style="text-align: right;">{{ p.ta_da|default:"0.00" }}</td>
                 <td style="text-align: right; font-weight: bold; color: #8b0000;">{{ p.total_cost|default:"0.00" }}</td>
             </tr>
