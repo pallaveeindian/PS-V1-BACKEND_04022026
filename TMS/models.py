@@ -369,6 +369,48 @@ class MasterTrainerCertificate(SoftDeleteMixin):
         db_table = 'tms_mastertrainercertificate'
         managed = True
 
+class MasterTrainerProfileStatus(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    trainer = models.OneToOneField(
+        MasterTrainer, 
+        on_delete=models.CASCADE, 
+        related_name='profile_status'
+    )
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Verification Pending'),
+        ('VERIFIED', 'Verified'),
+        ('REJECTED', 'Rejected'),
+    ]
+    status = models.CharField(
+        max_length=20, 
+        choices=STATUS_CHOICES, 
+        default='PENDING'
+    )
+    remarks = models.TextField(blank=True, null=True)
+    
+    verified_by = models.ForeignKey(
+        MasterUser, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='verified_mt_profiles',
+        db_constraint=False
+    )
+    verified_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tms_mastertrainerprofilestatus'
+        managed = True
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['trainer']),
+        ]
+
+    def __str__(self):
+        trainer_name = getattr(self.trainer, 'full_name', f"Trainer-{self.trainer_id}")
+        return f"{trainer_name} - {self.status}"
+        
 # ----------------------------
 # TrainingPartner & centres
 # ----------------------------
@@ -1913,4 +1955,4 @@ def track_batch_status_history(sender, instance, created, **kwargs):
                 status=instance.status,
                 remarks=remarks,
                 created_by=user
-            )
+            )            

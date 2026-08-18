@@ -44,7 +44,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, NotFound
 
-from django.db.models import F
+from django.db.models import F, Count, Sum, Value, IntegerField
+from django.db.models.functions import Coalesce
 import xlsxwriter
 
 # Certificate
@@ -1003,21 +1004,41 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
         return super().list(request, *args, **kwargs)
 
     # =====================================================
-    # SURGICAL ADDITION: EXCEL STREAMER (FIXED)
+    # EXCEL STREAMER
+    # Includes Achievement Count + Batches Completed + Progress
     # =====================================================
     def _export_excel(self, queryset):
         output = BytesIO()
         workbook = xlsxwriter.Workbook(output, {"constant_memory": True})
         worksheet = workbook.add_worksheet("Targets")
 
-        # Blue background and white text as requested
+        # =========================
+        # FORMATS
+        # =========================
         header_format = workbook.add_format({
             "bold": True,
-            "bg_color": "#1565C0",  # Deep Blue
-            "color": "#FFFFFF",     # White Text
+            "bg_color": "#1565C0",
+            "color": "#FFFFFF",
             "border": 1,
         })
 
+        number_format = workbook.add_format({
+            "border": 1,
+            "num_format": "0",
+        })
+
+        text_format = workbook.add_format({
+            "border": 1,
+        })
+
+        percentage_format = workbook.add_format({
+            "border": 1,
+            "num_format": "0%",
+        })
+
+        # =========================
+        # EXCEL COLUMNS
+        # =========================
         columns = [
             ("partner_name", "Training Partner"),
             ("target_type", "Target Type"),
@@ -1025,40 +1046,137 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             ("district_name", "District"),
             ("theme", "Theme"),
             ("financial_year", "Financial Year"),
+            ("target_count", "Target"),
+            ("achievement_count", "Achievement Count"),
+            ("batches_completed", "Batches Completed"),
+            ("progress", "Progress"),
         ]
 
-        # Header
+        # =========================
+        # HEADER
+        # =========================
         for col, (_, title) in enumerate(columns):
             worksheet.write(0, col, title, header_format)
 
-        # EXACT MODEL FIELD MAPPING FIXES
-        values_qs = queryset.values(
+        # =========================
+        # QUERY
+        # =========================
+        values_qs = queryset.annotate(
+            achievement_count=Count(
+                "achievements",
+                distinct=True,
+            ),
+            batches_completed=Coalesce(
+                Sum("achievements__batches_completed"),
+                Value(0),
+                output_field=IntegerField(),
+            ),
+        ).values(
             "target_type",
             "theme",
             "financial_year",
-            partner_name=F("partner__name"),                   # Matches TrainingPartner.name
-            plan_name=F("training_plan__training_name"),       # Matches TrainingPlan.training_name
-            district_name=F("district__district_name_en")      # Matches MasterDistrict.district_name_en
+            "target_count",
+            "achievement_count",
+            "batches_completed",
+
+            partner_name=F("partner__name"),
+            plan_name=F("training_plan__training_name"),
+            district_name=F("district__district_name_en"),
         )
 
+        # =========================
+        # WRITE DATA
+        # =========================
         row = 1
+
         for record in values_qs.iterator(chunk_size=5000):
+            target_count = record.get("target_count") or 0
+            achievement_count = record.get("achievement_count") or 0
+            batches_completed = record.get("batches_completed") or 0
+
+            # Calculate progress
+            progress = (
+                batches_completed / target_count
+                if target_count > 0
+                else 0
+            )
+
+            record_data = {
+                "partner_name": record.get("partner_name") or "",
+                "target_type": record.get("target_type") or "",
+                "plan_name": record.get("plan_name") or "",
+                "district_name": record.get("district_name") or "",
+                "theme": record.get("theme") or "",
+                "financial_year": record.get("financial_year") or "",
+                "target_count": target_count,
+                "achievement_count": achievement_count,
+                "batches_completed": batches_completed,
+                "progress": progress,
+            }
+
             for col, (key, _) in enumerate(columns):
-                worksheet.write(row, col, record.get(key) or "")
+                value = record_data.get(key)
+
+                if key in (
+                    "target_count",
+                    "achievement_count",
+                    "batches_completed",
+                ):
+                    worksheet.write_number(
+                        row,
+                        col,
+                        int(value or 0),
+                        number_format,
+                    )
+
+                elif key == "progress":
+                    worksheet.write_number(
+                        row,
+                        col,
+                        float(value or 0),
+                        percentage_format,
+                    )
+
+                else:
+                    worksheet.write(
+                        row,
+                        col,
+                        value,
+                        text_format,
+                    )
+
             row += 1
 
+        # =========================
+        # COLUMN WIDTHS
+        # =========================
+        worksheet.set_column("A:A", 25)
+        worksheet.set_column("B:B", 15)
+        worksheet.set_column("C:C", 30)
+        worksheet.set_column("D:D", 20)
+        worksheet.set_column("E:E", 20)
+        worksheet.set_column("F:F", 15)
+        worksheet.set_column("G:J", 18)
+
         workbook.close()
-        # Ensure we are reading from the start of the BytesIO buffer
+
+        # Ensure buffer is at beginning
         output.seek(0)
 
         filename = f"Training_Partner_Targets_{datetime.now().date()}.xlsx"
 
-        # SURGICAL FIX: Use HttpResponse and output.getvalue() to prevent binary corruption
         response = HttpResponse(
             output.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
         )
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename}"'
+        )
+
         return response
 
 class BulkAssignTargetsAPIView(APIView):
@@ -1722,7 +1840,7 @@ class BatchViewSet(BaseTMSModelViewSet):
 
 class BatchListPagination(PageNumberPagination):
     page_size = 50
-    page_size_query_param = None
+    page_size_query_param = "page_size"
     max_page_size = 1000
 
 class BatchesListView(APIView):
@@ -1769,6 +1887,7 @@ class BatchesListView(APIView):
                 "centre",
                 "centre__partner",
             )
+            .prefetch_related("master_trainers")
             .annotate(
                 pax_count=Count('beneficiary', distinct=True) + Count('trainer', distinct=True) + Count('staff', distinct=True)
             )
@@ -1829,6 +1948,7 @@ class BatchesListView(APIView):
         theme_id = params.get("theme_id") or params.get("theme")
         partner_id = params.get("partner_id")
         training_type = params.get("training_type")
+        financial_year = params.get("financial_year")
 
         if training_plan_id:
             qs = qs.filter(training_plan_id=training_plan_id)
@@ -1842,6 +1962,9 @@ class BatchesListView(APIView):
         if training_type:
             qs = qs.filter(participant_type=training_type)
 
+        if financial_year:
+            qs = qs.filter(financial_year=financial_year)
+
         # -------------------------
         # OWNERSHIP FILTER
         # -------------------------
@@ -1849,6 +1972,10 @@ class BatchesListView(APIView):
         created_by = params.get("created_by")
         if created_by:
             qs = qs.filter(created_by_id=created_by)
+
+        search = params.get("search")
+        if search:
+            qs = qs.filter(code__icontains=search)
 
         # -------------------------
         # ORDERING
@@ -2930,4 +3057,123 @@ class BatchRescheduleAPIView(APIView):
             status=status.HTTP_200_OK
         )
 
-# NEW CENTRE DELETION VIEW
+# NEW TR PARTICIPANTS DELETION VIEW
+class BulkRemoveTRParticipantsAPIView(APIView):
+    """
+    Bulk removes (soft deletes) participants from a Training Request.
+    Strictly blocks removal if any participant is actively engaged in a Batch.
+    If, after removal, all remaining active participants are already batched, 
+    the TR status is automatically marked as COMPLETED.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = BulkRemoveTRParticipantsSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        tr_id = serializer.validated_data['tr_id']
+        participant_ids = serializer.validated_data['participant_ids']
+
+        # 1. Fetch Training Request
+        try:
+            tr = tms_models.TrainingRequest.objects.get(id=tr_id, is_active=True)
+        except TrainingRequest.DoesNotExist:
+            return Response(
+                {"error": "Training Request not found or is inactive."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 2. Determine Models based on TR Type
+        if tr.training_type == 'BENEFICIARY':
+            ParticipantModel = tms_models.TRBeneficiary
+            BatchMappingModel = tms_models.BatchBeneficiary
+            batch_fk_field = 'beneficiary_id__in'
+        elif tr.training_type == 'TRAINER':
+            ParticipantModel = tms_models.TRTrainer
+            BatchMappingModel = tms_models.BatchTrainer
+            batch_fk_field = 'trainer_id__in'
+        elif tr.training_type == 'STAFF':
+            ParticipantModel = tms_models.TRStaff
+            BatchMappingModel = tms_models.BatchStaff
+            batch_fk_field = 'staff_id__in'
+        else:
+            return Response(
+                {"error": f"Unknown training type: {tr.training_type}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Check for Batch Engagement Constraint
+        # We check if ANY of the requested IDs are attached to an active batch mapping
+        engaged_in_batch = BatchMappingModel.objects.filter(
+            **{batch_fk_field: participant_ids},
+            is_active=True,
+            batch__is_active=True
+        ).exists()
+
+        if engaged_in_batch:
+            return Response(
+                {"error": "Removal blocked: One or more selected participants are already engaged in a Batch. They must be removed from the batch first."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. Fetch valid participants tied to this TR
+        participants_to_delete = ParticipantModel.objects.filter(
+            id__in=participant_ids,
+            training_id=tr_id,
+            is_active=True
+        )
+
+        if not participants_to_delete.exists():
+            return Response(
+                {"error": "No valid active participants found for the given IDs in this Training Request."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 5. Execute Soft Deletion
+        try:
+            with transaction.atomic():
+                # Attempt to retrieve Auth User for tracking
+                try:
+                    auth_user = MasterUser.objects.get(username=request.user.username)
+                except MasterUser.DoesNotExist:
+                    auth_user = None
+
+                deleted_count = 0
+                for participant in participants_to_delete:
+                    # Utilizing the SoftDeleteMixin's delete method
+                    participant.delete(by_user=auth_user)
+                    deleted_count += 1
+                
+                # 6. Evaluate if the TR should transition to COMPLETED
+                # It is completed IF there are still active participants left AND none of them are unbatched (CB_selected=False)
+                any_active_participants = ParticipantModel.objects.filter(
+                    training_id=tr_id, 
+                    is_active=True
+                ).exists()
+
+                unbatched_participants_exist = ParticipantModel.objects.filter(
+                    training_id=tr_id, 
+                    is_active=True, 
+                    CB_selected=False
+                ).exists()
+
+                tr_completed_flag = False
+                if any_active_participants and not unbatched_participants_exist:
+                    if tr.status != 'COMPLETED':
+                        tr.status = 'COMPLETED'
+                        tr.updated_by = auth_user
+                        tr.save()
+                        tr_completed_flag = True
+
+            message = f"Successfully removed {deleted_count} participant(s) from the Training Request."
+            if tr_completed_flag:
+                message += " All remaining participants are now batched. Training Request marked as COMPLETED."
+
+            return Response({
+                "status": "success",
+                "message": message
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

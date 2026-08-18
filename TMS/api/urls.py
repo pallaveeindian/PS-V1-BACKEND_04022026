@@ -19,6 +19,9 @@ from TMS.api.TPHomepageV2.views import *
 # New Staff TR Creation APIs
 from TMS.api.StaffList.views import *
 
+# MD Maam Dashboard endpoints
+from TMS.api.MD_maam_apis.views import *
+
 # NEW TC MODULE APIs
 from TMS.api.tc_module_apis.trainees_list import *
 from TMS.api.tc_module_apis.batch_creator_v2 import *
@@ -389,6 +392,8 @@ urlpatterns = [
     path('mt-create/', MasterTrainerCreateAPIView.as_view(), name='master-trainer-create'),
     path('mt/<int:pk>/update/', MasterTrainerUpdateAPIView.as_view(), name='master-trainer-update'),
     path('mt/<int:pk>/delete/', MasterTrainerDeleteAPIView.as_view(), name='master-trainer-delete'),
+    path('master-trainer-status/list/', MasterTrainerProfileStatusListAPIView.as_view(), name='mt_profile_status_list'),
+    path('master-trainer-status/verify/', MasterTrainerProfileVerifyAPIView.as_view(), name='mt_profile_status_verify'),    
 
     # Bulk Certificate Endpoints
     path('mt/<int:pk>/certificates/upload/', CertificateBulkUploadAPIView.as_view(), name='master-trainer-cert-upload'),
@@ -396,6 +401,9 @@ urlpatterns = [
 
     # Master Trainer Status Check
     path('mt/<int:trainer_id>/availability/', CheckTrainerAvailabilityView.as_view(), name='check_trainer_availability'),
+
+    # Master Trainer Replacement
+    path('batch/replace-master-trainer/', ReplaceBatchMasterTrainerAPIView.as_view(), name='batch_replace_master_trainer'),
 
     # TP Dashboard Metrics
     path('tp/dashboard-metrics/', TrainingPartnerDashboardView.as_view(), name='tms-partner-dashboard-metrics'),
@@ -407,7 +415,13 @@ urlpatterns = [
 
     # Batch Reschedule View
     path('batch/<int:batch_id>/reschedule/', tms_views.BatchRescheduleAPIView.as_view(), name='batch-reschedule'),
-    
-    # NEW CENTRE DELETION VIEW
-    
+    path('tr-participants/bulk-remove/', tms_views.BulkRemoveTRParticipantsAPIView.as_view(), name='bulk_remove_tr_participants'),    
+
+    # MD Maam apis
+    path('reports/master-progress/', MasterProgressReportView.as_view(), name='master_progress_report'),
+    path('reports/centre-summary/', TrainingCentreSummaryView.as_view(), name='centre_summary'),
+    path('reports/centre-submissions/<int:centre_id>/', CentreSubmissionListView.as_view(), name='centre_submissions'),    
+    path('reports/certificate-pendency/', DmmuCertificatePendencyView.as_view(), name='certificate_pendency_report'),
+    path('reports/beneficiary-eligibility/', BeneficiaryEligibilityAnalyticsView.as_view(), name='beneficiary_eligibility_report'),
+    path('reports/global-dashboard-stats/', HomeDashboardGlobalStatsView.as_view(), name='global_dashboard_stats'),    
 ]

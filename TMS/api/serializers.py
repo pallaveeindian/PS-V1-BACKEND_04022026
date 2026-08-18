@@ -866,12 +866,18 @@ class BatchTrainingPlanNestSerializer(SoftDeleteModelSerializer):
         model = tms_models.TrainingPlan
         fields = "__all__"
 
+class BatchListMasterTrainerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = tms_models.MasterTrainer
+        fields = ['id', 'full_name', 'mobile_no', 'designation']
+
 class BatchListSerializer(serializers.ModelSerializer):
     district = BatchDistrictSerializer(read_only=True)
     block = BatchBlockSerializer(read_only=True)
     centre = BatchCentreSerializer()
     pax_count = serializers.IntegerField(read_only=True)
     training_plan = BatchTrainingPlanNestSerializer(read_only=True)
+    master_trainers = BatchListMasterTrainerSerializer(many=True, read_only=True)
 
     class Meta:
         model = tms_models.Batch
@@ -885,14 +891,14 @@ class BatchListSerializer(serializers.ModelSerializer):
             'time_of_training',
             'centre',
             'level',
+            'financial_year',
             'district',
             'participant_type',
             'block',
             'pax_count',
-            'training_plan'
+            'training_plan',
+            'master_trainers'
         ]
-
-
 
 
 # ----------------------------
@@ -1353,6 +1359,7 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
         source='partner.name', read_only=True
     )
     participant_count = serializers.SerializerMethodField()
+    enrolled_count = serializers.SerializerMethodField()
 
     class Meta:
         model = tms_models.TrainingRequest
@@ -1373,6 +1380,7 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'block_name',
             'created_at',
             'participant_count',
+            'enrolled_count',
             'financial_year',
         ]
 
@@ -1388,6 +1396,18 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
         except:
             pass
         return 0
+
+    def get_enrolled_count(self, obj):
+        try:
+            if obj.training_type == 'BENEFICIARY':
+                return obj.beneficiary_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()
+            elif obj.training_type == 'TRAINER':
+                return obj.trainer_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()
+            elif obj.training_type == 'STAFF':
+                return obj.staff_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()                
+        except:
+            pass
+        return 0        
 
 
 # ============================================================
@@ -1547,3 +1567,25 @@ class BatchClosureSubmitResponseSerializer(serializers.Serializer):
     batch_cost = BatchCostOutputSerializer()
     closure_request = BatchClosureRequestOutputSerializer()
     batch_status = serializers.CharField()
+
+
+
+class BulkRemoveTRParticipantsSerializer(serializers.Serializer):
+    tr_id = serializers.IntegerField(
+        required=True,
+        help_text="The ID of the Training Request."
+    )
+    participant_ids = serializers.CharField(
+        required=True,
+        help_text="Comma-separated participant IDs (e.g., '12,15,19')."
+    )
+
+    def validate_participant_ids(self, value):
+        # Clean and convert the comma-separated string into a list of integers
+        try:
+            ids = [int(x.strip()) for x in value.split(',') if x.strip().isdigit()]
+            if not ids:
+                raise serializers.ValidationError("No valid IDs provided.")
+            return ids
+        except Exception:
+            raise serializers.ValidationError("Must be a comma-separated list of integers.")

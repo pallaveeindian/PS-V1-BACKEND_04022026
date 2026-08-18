@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from core.models import MasterUser, MasterDistrict
-from TMS.models import MasterTrainer, TrainingPlan, TrainingTheme, MasterTrainerCertificate
+from TMS.models import *
 
 # ---------------------------------------------------------
 # 1) List Serializer
@@ -68,3 +68,28 @@ class MasterTrainerWriteSerializer(serializers.ModelSerializer):
         model = MasterTrainer
         # master_user will be handled manually in the view
         exclude = ['master_user']
+
+# ---------------------------------------------------------
+# Approve / Reject MT Profile Serializers
+# ---------------------------------------------------------
+
+class NestedMasterTrainerSerializer(serializers.ModelSerializer):
+    """
+    Nested serializer for Master Trainer with depth=1 to expand 
+    foreign keys like theme, empanel_district, and empanel_block.
+    """
+    class Meta:
+        model = MasterTrainer
+        fields = '__all__'
+        depth = 1
+
+class MasterTrainerProfileStatusSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Profile Status Tracker, embedding the full Master Trainer object.
+    """
+    trainer = NestedMasterTrainerSerializer(read_only=True)
+
+    class Meta:
+        model = MasterTrainerProfileStatus
+        fields = '__all__'
+        depth = 1     

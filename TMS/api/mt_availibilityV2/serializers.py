@@ -12,3 +12,13 @@ class AvailabilityBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Batch
         fields = '__all__'
+
+class ReplaceBatchMasterTrainerSerializer(serializers.Serializer):
+    batch_id = serializers.IntegerField(
+        required=True, 
+        help_text="ID of the Batch where the trainer is being replaced."
+    )
+    master_trainer_id = serializers.IntegerField(
+        required=True, 
+        help_text="ID of the NEW Master Trainer to be assigned."
+    )        

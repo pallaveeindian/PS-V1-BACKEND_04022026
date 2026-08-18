@@ -4,17 +4,14 @@ from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import generics, status
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 
-from core.models import MasterUser
-from TMS.models import MasterTrainer, MasterTrainerCertificate
-from .serializers import (
-    MasterTrainerListSerializer, 
-    MasterTrainerDetailSerializer,
-    MasterTrainerWriteSerializer
-)
+from core.models import MasterUser, MasterRoles
+from TMS.models import *
+from .serializers import *
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
@@ -78,7 +75,7 @@ class MasterTrainerListAPIView(ListAPIView):
 # 2) Master Trainer Detail API
 # ---------------------------------------------------------
 class MasterTrainerDetailAPIView(RetrieveAPIView):
-    queryset = MasterTrainer.objects.filter(is_active=True)
+    queryset = MasterTrainer.objects.all()
     serializer_class = MasterTrainerDetailSerializer
     permission_classes = [IsAuthenticated]
 
@@ -96,27 +93,69 @@ class MasterTrainerCreateAPIView(APIView):
         if MasterUser.objects.filter(username=username).exists():
             return Response({"error": "Username already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            role = MasterRoles.objects.get(id=7)
+        except MasterRoles.DoesNotExist:
+            return Response({"error": "MasterRole for Master Trainer (id=7) not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # ---------------------------------------------------------
+        # Dynamic Verification Logic based on Designation
+        # ---------------------------------------------------------
+        designation = request.data.get('designation', '').upper()
+        
+        # ONLY SRPs are auto-verified. BRP and DRP require manual DMMU/SMMU verification.
+        is_auto_verified = (designation == 'SRP')
+        initial_mt_active = is_auto_verified
+        initial_status = 'VERIFIED' if is_auto_verified else 'PENDING'
+
         serializer = MasterTrainerWriteSerializer(data=request.data)
         if serializer.is_valid():
             try:
                 with transaction.atomic():
+                    # Fetch current authenticated user to log who created this
+                    try:
+                        auth_user = MasterUser.objects.get(username=request.user.username)
+                    except MasterUser.DoesNotExist:
+                        auth_user = None
+
                     # 1. Create Master User
+                    # If pending verification, user account is inactive (0) so they cannot login.
                     new_user = MasterUser.objects.create(
                         username=username,
                         password="mt@tms",  # Cleartext password assignment as requested
-                        is_active=1,
-                        role=7,
-                        TH_urid=str(uuid.uuid4())
+                        is_active=1 if is_auto_verified else 0,
+                        role=role,
+                        TH_urid=str(uuid.uuid4()),
+                        created_by=auth_user
                     )
+                    
                     # 2. Create Master Trainer
-                    trainer = serializer.save(master_user=new_user)
+                    # Override is_active to False for BRP/DRP during creation
+                    trainer = serializer.save(
+                        master_user=new_user,
+                        is_active=initial_mt_active,
+                        created_by=auth_user
+                    )
+                    
+                    # 3. Create the Profile Status Tracker
+                    MasterTrainerProfileStatus.objects.create(
+                        trainer=trainer,
+                        status=initial_status,
+                        remarks="Auto-verified as SRP." if is_auto_verified else "Verification pending from higher authority.",
+                        verified_by=auth_user if is_auto_verified else None,
+                        verified_on=timezone.now() if is_auto_verified else None,
+                        created_by=auth_user
+                    )
                     
                 return Response({
                     "message": "Master Trainer and User created successfully.",
                     "trainer_id": trainer.id,
                     "username": new_user.username,
-                    "password": "mt@tms"
+                    "password": "mt@tms",
+                    "profile_status": initial_status,
+                    "is_active": initial_mt_active
                 }, status=status.HTTP_201_CREATED)
+                
             except Exception as e:
                 return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
@@ -272,3 +311,113 @@ class CertificateDeleteAPIView(APIView):
             return Response({"message": "Certificate deleted successfully."}, status=status.HTTP_200_OK)
         except MasterTrainerCertificate.DoesNotExist:
             return Response({"error": "Certificate not found."}, status=status.HTTP_404_NOT_FOUND)
+
+# ---------------------------------------------------------
+# 8) Certificate Deletion API
+# ---------------------------------------------------------
+class MasterTrainerProfileStatusListAPIView(generics.ListAPIView):
+    """
+    1) Listing of Master Trainer Profile Status with attached nested row of Master Trainer.
+    Filters available: ?status=PENDING & ?district_id=123
+    """
+    serializer_class = MasterTrainerProfileStatusSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Optimized database query to prevent N+1 issues when fetching nested depth
+        qs = MasterTrainerProfileStatus.objects.select_related(
+            'trainer',
+            'trainer__theme',
+            'trainer__empanel_district',
+            'trainer__empanel_block',
+            'trainer__master_user',
+            'verified_by'
+        ).all().order_by('-created_at')
+
+        # Apply optional filters
+        status_param = self.request.query_params.get('status')
+        district_param = self.request.query_params.get('district_id')
+
+        if status_param:
+            qs = qs.filter(status=status_param.upper())
+        if district_param:
+            qs = qs.filter(trainer__empanel_district_id=district_param)
+
+        return qs
+
+
+class MasterTrainerProfileVerifyAPIView(APIView):
+    """
+    2) Approval/Rejection marking endpoint.
+    Accepts: { "master_trainer_id": 12, "status": "VERIFIED" / "REJECTED", "remarks": "..." }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        trainer_id = request.data.get('master_trainer_id')
+        new_status = request.data.get('status')
+        remarks = request.data.get('remarks', '')
+
+        if not trainer_id or not new_status:
+            return Response(
+                {"error": "Both 'master_trainer_id' and 'status' are required."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        new_status = str(new_status).upper()
+        if new_status not in ['VERIFIED', 'REJECTED']:
+            return Response(
+                {"error": "Status must be either VERIFIED or REJECTED."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                # Fetch Tracker and Trainer
+                profile_status = MasterTrainerProfileStatus.objects.get(trainer_id=trainer_id)
+                trainer = profile_status.trainer
+
+                # Fetch Auth User for auditing
+                try:
+                    auth_user = MasterUser.objects.get(username=request.user.username)
+                except MasterUser.DoesNotExist:
+                    auth_user = None
+
+                # Update the Tracker Record
+                profile_status.status = new_status
+                profile_status.remarks = remarks
+                profile_status.verified_by = auth_user
+                profile_status.verified_on = timezone.now()
+                profile_status.updated_by = auth_user
+                profile_status.save()
+
+                # If VERIFIED: Activate the Master Trainer and their User Login
+                if new_status == 'VERIFIED':
+                    trainer.is_active = True
+                    trainer.updated_by = auth_user
+                    trainer.save()
+
+                    # Reactivate the MasterUser login credentials
+                    if trainer.master_user:
+                        trainer.master_user.is_active = 1
+                        trainer.master_user.updated_by = auth_user
+                        trainer.master_user.save()
+                
+                # If REJECTED: Do nothing to trainer.is_active (it remains False/Deleted)
+
+                return Response({
+                    "message": f"Master Trainer profile has been marked as {new_status}.",
+                    "trainer_id": trainer.id,
+                    "status": profile_status.status
+                }, status=status.HTTP_200_OK)
+
+        except MasterTrainerProfileStatus.DoesNotExist:
+            return Response(
+                {"error": "Profile status record not found for this trainer."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )            

@@ -14,6 +14,8 @@ Rules implemented:
 import os
 import json
 import base64
+import time
+from django.core.cache import cache
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
@@ -303,3 +305,38 @@ class ResponseEncryptionMiddleware:
             response['Content-Length'] = str(len(response.content))
 
         return response
+
+# Server Mon Middleware
+class SystemTelemetryMiddleware:
+
+  def __init__(self, get_response):
+    self.get_response = get_response
+
+  def __call__(self, request):
+    start_time = time.time()
+
+    # Increment incoming request counter
+    try:
+        cache.incr("incoming_requests_count", 1)
+    except Exception:
+        cache.set("incoming_requests_count", 1, timeout=None)
+
+    response = self.get_response(request)
+    duration = (time.time() - start_time) * 1000  # in ms
+
+    # Track latency (moving average or latest)
+    cache.set("avg_api_latency_ms", round(duration, 2))
+
+    # Increment outgoing response counter
+    try:
+      cache.incr("outgoing_responses_count", 1)
+    except Exception:
+      cache.set("outgoing_responses_count", 1, timeout=None)
+
+    # Track security status codes
+    if response.status_code == 401:
+      cache.incr("unauthorized_requests_count", 1)
+    elif response.status_code in [403, 405, 429]:
+      cache.incr("blocked_requests_count", 1)
+
+    return response

@@ -8,6 +8,7 @@ from core.views_health import health
 
 # Public VIEWS ALL
 from TMS.api.homepage_apis.up_at_a_glance import UPAtAGlanceView
+from core.api.server_mon.views import *
 
 # MOU Template Download API
 from epSakhi.api.MOU.tmplt_dwnld import MOUTemplateDownloadAPIView
@@ -70,4 +71,6 @@ urlpatterns += [
     path('api/v1/public/mou-template-download/', MOUTemplateDownloadAPIView.as_view(), name='public-mou-template-download'),
     # Participant Certificate Download API
     path('api/v1/public/tms-certificate/download/', DownloadParticipantCertificateAPIView.as_view(), name='public-participant-certificate-download'),
+    # Server Monitor
+    path("api/v1/public/system/health/", ServerHealthAPIView.as_view(), name="system-health"),
 ]

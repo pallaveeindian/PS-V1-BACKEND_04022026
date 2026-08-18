@@ -78,6 +78,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'pragati_setu.middleware.ResponseEncryptionMiddleware',
     'pragati_setu.middleware.ApiIdApiKeyMiddleware', 
+    'pragati_setu.middleware.SystemTelemetryMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

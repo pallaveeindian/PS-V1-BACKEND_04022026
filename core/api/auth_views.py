@@ -20,6 +20,7 @@ from core.models import MasterUser
 from .serializers import MasterUserSerializer
 from django.contrib.auth.models import User
 from django.http import Http404
+from django.contrib.auth.signals import user_logged_in
 
 # Cookie name for storing refresh token (httpOnly)
 REFRESH_COOKIE_NAME = 'ps_refresh'
@@ -280,6 +281,8 @@ class LoginView(APIView):
         access_token = refresh.access_token
 
         serializer = MasterUserSerializer(mu)
+
+        user_logged_in.send(sender=auth_user.__class__, request=request, user=auth_user)
 
         response = Response(
             {
