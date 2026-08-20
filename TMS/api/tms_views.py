@@ -174,7 +174,7 @@ class BaseTMSModelViewSet(viewsets.ModelViewSet):
 class TargetsPagination(PageNumberPagination):
     page_size = 25
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 1000
 
 # -------------------------------------------------------------------
 # Masters & Themes
@@ -477,6 +477,8 @@ class TrainingPartnerCentreViewSet(BaseTMSModelViewSet):
     CRUD for TrainingPartnerCentre.
     """
     swagger_schema = PartnersSchema
+    pagination_class = TargetsPagination
+
     queryset = (
         tms_models.TrainingPartnerCentre.objects
         .select_related("partner", "district", "block", "panchayat", "village")
@@ -2532,7 +2534,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
 
             # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
             batch_bens_qs = tms_models.BatchBeneficiary.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+                batch__status__in=["COMPLETED", "CLOSED"]
             ).filter(
                 beneficiary__lokos_member_code__in=ids
             )
@@ -2899,6 +2901,30 @@ class BatchRescheduleAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # ============================================================
+        # SURGICAL ADDITION: RESTRICT RESCHEDULING TO ONGOING/SCHEDULED ONLY
+        # ============================================================
+        if batch.status not in ["ONGOING", "SCHEDULED"]:
+            return Response(
+                {
+                    "detail": f"Batch cannot be rescheduled because it is in '{batch.status}' status. Only ONGOING or SCHEDULED batches can be rescheduled."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # ============================================================
+
+        # ============================================================
+        # SURGICAL ADDITION: PREVENT RESCHEDULE IF EKYC OR ATTENDANCE EXISTS
+        # ============================================================
+        if batch.ekyc_verifications.filter(is_active=True).exists() or batch.attendances.filter(is_active=True).exists():
+            return Response(
+                {
+                    "detail": "Batch cannot be rescheduled because attendance or eKYC verification records have already been generated."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # ============================================================
+
         start_date_str = request.data.get("start_date")
         end_date_str = request.data.get("end_date")
 
@@ -3044,6 +3070,17 @@ class BatchRescheduleAPIView(APIView):
                 "updated_at",
             ]
         )
+
+        # ============================================================
+        # SURGICAL ADDITION: EXPLICITLY LOG RESCHEDULE IN HISTORY
+        # ============================================================
+        tms_models.BatchHistory.objects.create(
+            batch=batch,
+            status=batch.status,
+            remarks=f"Batch rescheduled by {master_user.username}. New dates: {batch.start_date.strftime('%Y-%m-%d')} to {batch.end_date.strftime('%Y-%m-%d')}.",
+            created_by=master_user
+        )
+        # ============================================================
 
         return Response(
             {

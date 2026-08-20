@@ -16,6 +16,7 @@ class TrainingPartnerDashboardView(APIView):
     Enforces financial year constraint and aggregates targets, closures, 
     centres, and district team tracking metrics.
     Supports 'batches' param ('closed' or 'created') to toggle achievement logic.
+    DRAFT batches are excluded from KPI metrics.
     """
     permission_classes = [IsAuthenticated]
 
@@ -39,10 +40,10 @@ class TrainingPartnerDashboardView(APIView):
 
         # Build dynamic Q filters based on the batches_toggle
         if batches_toggle == 'created':
-            # Include ALL active batches EXCEPT rejected ones
-            rel_batch_status_q = ~Q(batch__status='REJECTED')
-            batch_status_q = ~Q(status='REJECTED')
-            strict_closed_q = ~Q(status='REJECTED')
+            # Include ALL active batches EXCEPT rejected ones and DRAFT
+            rel_batch_status_q = ~Q(batch__status__in=['DRAFT'])
+            batch_status_q = ~Q(status__in=['DRAFT'])
+            strict_closed_q = ~Q(status__in=['DRAFT'])
         else:
             # Default behavior: strictly closed or completed
             rel_batch_status_q = Q(batch__status='CLOSED')
@@ -65,12 +66,12 @@ class TrainingPartnerDashboardView(APIView):
         # ------------------------------------------------------------
         # METRIC A: KPI CARD PROCESSING ENGINE
         # ------------------------------------------------------------
-        # SURGICAL FIX: Aggregate counts for all 8 batch statuses dynamically
+        # SURGICAL FIX: Exclude DRAFT from the total count and draft metric, keep rejected logic intact.
         batch_stats = tms_models.Batch.objects.filter(
             partner=partner, financial_year=financial_year, is_active=True
         ).aggregate(
-            total=Count('id'),
-            draft=Count('id', filter=Q(status='DRAFT')),
+            total=Count('id', filter=~Q(status='DRAFT')), # Exclude DRAFT from Total
+            draft=Count('id', filter=Q(status='DRAFT')),  # Draft is collected but will be explicitly ignored in output
             pending=Count('id', filter=Q(status='PENDING')),
             ongoing=Count('id', filter=Q(status='ONGOING')),
             scheduled=Count('id', filter=Q(status='SCHEDULED')),
@@ -81,10 +82,13 @@ class TrainingPartnerDashboardView(APIView):
         )
 
         total_allotted_beneficiaries = tms_models.TRBeneficiary.objects.filter(
-            training__partner=partner, training__financial_year=financial_year, is_active=True
+            training__partner=partner,
+            training__financial_year=financial_year,
+            training__is_active=True,
+            is_active=True,
         ).count()
         total_allotted_trainers = tms_models.TRTrainer.objects.filter(
-            training__partner=partner, training__financial_year=financial_year, is_active=True
+            training__partner=partner, training__financial_year=financial_year, training__is_active=True, is_active=True
         ).count()
         total_allotted_staff = tms_models.TRStaff.objects.filter(
             training__partner=partner, training__financial_year=financial_year, is_active=True
@@ -105,8 +109,8 @@ class TrainingPartnerDashboardView(APIView):
 
         kpi_data = {
             "total_batches_created": batch_stats['total'] or 0,
-            # ALL 8 Statuses Included Below
-            "draft_batches": batch_stats['draft'] or 0,
+            # SURGICAL REMOVAL: draft_batches is intentionally ignored
+            "draft_batches": 0, 
             "pending_batches": batch_stats['pending'] or 0,
             "ongoing_batches": batch_stats['ongoing'] or 0,
             "scheduled_batches": batch_stats['scheduled'] or 0,
@@ -192,7 +196,9 @@ class TrainingPartnerDashboardView(APIView):
         ).select_related('master_user')
         dtp_lookup = {profile.district_id: profile.master_user.username for profile in dtp_profiles}
 
+        # SURGICAL ADDITION: Exclude DRAFT from dtp_created_batches
         dtp_created_batches = tms_models.Batch.objects.filter(
+            ~Q(status='DRAFT'),
             partner=partner, financial_year=financial_year, is_active=True, district__isnull=False
         ).values('district_id').annotate(total_created=Count('id'))
         dtp_created_lookup = {item['district_id']: item['total_created'] or 0 for item in dtp_created_batches}

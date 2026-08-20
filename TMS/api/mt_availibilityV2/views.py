@@ -244,6 +244,23 @@ class ReplaceBatchMasterTrainerAPIView(APIView):
                     created_by=auth_user
                 )
 
+                # ============================================================
+                # SURGICAL ADDITION: EXPLICITLY LOG TRAINER REPLACEMENT IN HISTORY
+                # ============================================================
+                # Create a list of names for the old trainers being removed to include in the log
+                old_trainer_names = ", ".join([
+                    (bmt.master_trainer.full_name if bmt.master_trainer else "Unknown") 
+                    for bmt in existing_bmts
+                ])
+                
+                BatchHistory.objects.create(
+                    batch=batch,
+                    status=batch.status, # Status remains the same during MT replacement
+                    remarks=f"Master Trainer replaced by {auth_user.username}. Replaced: {old_trainer_names} with {new_mt.full_name}.",
+                    created_by=auth_user
+                )
+                # ============================================================
+
             return Response({
                 "status": "success",
                 "message": "Master Trainer has been successfully replaced in the batch.",

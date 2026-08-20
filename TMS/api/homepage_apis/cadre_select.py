@@ -1,4 +1,4 @@
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Sum, Q
 from django.db.models.functions import Coalesce
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -13,6 +13,7 @@ class PublicCadreSelectionSummaryView(APIView):
     Cached for 5 seconds to ensure SUPERFAST load times.
     Supports detailed row records, zero-filled district-wise aggregations,
     and target vs cadre percentage calculations.
+    Strictly filters out soft-deleted (is_active=False) participants and includes Staff.
     """
     
     @method_decorator(cache_page(5 * 1))
@@ -80,8 +81,9 @@ class PublicCadreSelectionSummaryView(APIView):
         # 5a. Branch: District Wise Cadre Summary (Includes all 0-count districts)
         if district_wise_cadre_summary:
             district_aggregations = queryset.values('district_id').annotate(
-                total_beneficiaries=Count('beneficiary_registrations', distinct=True),
-                total_trainers=Count('trainer_registrations', distinct=True)
+                total_beneficiaries=Count('beneficiary_registrations', filter=Q(beneficiary_registrations__is_active=True), distinct=True),
+                total_trainers=Count('trainer_registrations', filter=Q(trainer_registrations__is_active=True), distinct=True),
+                total_staff=Count('staff_registrations', filter=Q(staff_registrations__is_active=True), distinct=True)
             )
 
             counts_lookup = {
@@ -103,12 +105,13 @@ class PublicCadreSelectionSummaryView(APIView):
                     "financial_year": financial_year or "All", 
                     "total_beneficiaries": counts_lookup[d_id]['total_beneficiaries'] if has_data else 0,
                     "total_trainers": counts_lookup[d_id]['total_trainers'] if has_data else 0,
+                    "total_staff": counts_lookup[d_id]['total_staff'] if has_data else 0,
                 })
 
             response_payload["district_wise_cadre_summary"] = sorted(
                 summary_data, 
                 key=lambda x: (
-                    -(x['total_beneficiaries'] + x['total_trainers']), 
+                    -(x['total_beneficiaries'] + x['total_trainers'] + x['total_staff']), 
                     x['district_name_en'] or ""
                 )
             )
@@ -117,7 +120,8 @@ class PublicCadreSelectionSummaryView(APIView):
         if dist_trgt_prcnt:
             target_qs = TrainingPartnerTargets.objects.filter(
                 financial_year=financial_year, 
-                district__isnull=False
+                district__isnull=False,
+                is_active=True
             )
             # Propagate stackable filters to the target calculation
             if district_id: 
@@ -134,10 +138,11 @@ class PublicCadreSelectionSummaryView(APIView):
             }
 
             cadre_dict = {
-                item['district_id']: item['b_count'] + item['t_count']
+                item['district_id']: item['b_count'] + item['t_count'] + item['s_count']
                 for item in queryset.values('district_id').annotate(
-                    b_count=Count('beneficiary_registrations', distinct=True),
-                    t_count=Count('trainer_registrations', distinct=True)
+                    b_count=Count('beneficiary_registrations', filter=Q(beneficiary_registrations__is_active=True), distinct=True),
+                    t_count=Count('trainer_registrations', filter=Q(trainer_registrations__is_active=True), distinct=True),
+                    s_count=Count('staff_registrations', filter=Q(staff_registrations__is_active=True), distinct=True)
                 )
                 if item['district_id'] is not None
             }
@@ -175,6 +180,7 @@ class PublicCadreSelectionSummaryView(APIView):
             target_qs = TrainingPartnerTargets.objects.filter(
                 financial_year=financial_year,
                 district__isnull=False,
+                is_active=True
             )
             if district_id: 
                 target_qs = target_qs.filter(district_id=district_id)
@@ -206,8 +212,9 @@ class PublicCadreSelectionSummaryView(APIView):
             ).values(
                 'district_id', 'district__district_name_en', 'training_plan__theme__theme_name'
             ).annotate(
-                b_count=Count('beneficiary_registrations', distinct=True),
-                t_count=Count('trainer_registrations', distinct=True)
+                b_count=Count('beneficiary_registrations', filter=Q(beneficiary_registrations__is_active=True), distinct=True),
+                t_count=Count('trainer_registrations', filter=Q(trainer_registrations__is_active=True), distinct=True),
+                s_count=Count('staff_registrations', filter=Q(staff_registrations__is_active=True), distinct=True)
             )
 
             cadre_map = {}
@@ -215,7 +222,7 @@ class PublicCadreSelectionSummaryView(APIView):
                 key = (item['district_id'], item['training_plan__theme__theme_name'])
                 cadre_map[key] = {
                     "district_name_en": item['district__district_name_en'],
-                    "cadre": item['b_count'] + item['t_count']
+                    "cadre": item['b_count'] + item['t_count'] + item['s_count']
                 }
 
             # Combine unique (district_id, theme_name) tuple keys from both targets and actuals
@@ -249,7 +256,8 @@ class PublicCadreSelectionSummaryView(APIView):
         # 5d. Branch: Theme Wise Summary (Aggregated across all districts)
         if theme_wise_summary:
             target_qs = TrainingPartnerTargets.objects.filter(
-                financial_year=financial_year
+                financial_year=financial_year,
+                is_active=True
             )
             # Propagate stackable filters
             if district_id:
@@ -275,12 +283,13 @@ class PublicCadreSelectionSummaryView(APIView):
             cadre_data = queryset.filter(
                 training_plan__theme__isnull=False
             ).values('training_plan__theme__theme_name').annotate(
-                b_count=Count('beneficiary_registrations', distinct=True),
-                t_count=Count('trainer_registrations', distinct=True)
+                b_count=Count('beneficiary_registrations', filter=Q(beneficiary_registrations__is_active=True), distinct=True),
+                t_count=Count('trainer_registrations', filter=Q(trainer_registrations__is_active=True), distinct=True),
+                s_count=Count('staff_registrations', filter=Q(staff_registrations__is_active=True), distinct=True)
             )
 
             theme_cadre_map = {
-                item['training_plan__theme__theme_name']: item['b_count'] + item['t_count']
+                item['training_plan__theme__theme_name']: item['b_count'] + item['t_count'] + item['s_count']
                 for item in cadre_data
             }
 
@@ -318,8 +327,9 @@ class PublicCadreSelectionSummaryView(APIView):
             training_name=F('training_plan__training_name'),
             created_date=F('created_at')
         ).annotate(
-            beneficiary_count=Count('beneficiary_registrations', distinct=True),
-            trainer_count=Count('trainer_registrations', distinct=True)
+            beneficiary_count=Count('beneficiary_registrations', filter=Q(beneficiary_registrations__is_active=True), distinct=True),
+            trainer_count=Count('trainer_registrations', filter=Q(trainer_registrations__is_active=True), distinct=True),
+            staff_count=Count('staff_registrations', filter=Q(staff_registrations__is_active=True), distinct=True)
         ).order_by('-created_at')
 
         response_payload["count"] = len(detailed_data)
