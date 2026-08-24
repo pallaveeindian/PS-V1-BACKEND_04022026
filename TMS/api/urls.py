@@ -22,6 +22,9 @@ from TMS.api.StaffList.views import *
 # MD Maam Dashboard endpoints
 from TMS.api.MD_maam_apis.views import *
 
+# Learning Material Module APIs
+from TMS.api.learning_mat_apis.views import *
+
 # NEW TC MODULE APIs
 from TMS.api.tc_module_apis.trainees_list import *
 from TMS.api.tc_module_apis.batch_creator_v2 import *
@@ -424,4 +427,8 @@ urlpatterns = [
     path('reports/certificate-pendency/', DmmuCertificatePendencyView.as_view(), name='certificate_pendency_report'),
     path('reports/beneficiary-eligibility/', BeneficiaryEligibilityAnalyticsView.as_view(), name='beneficiary_eligibility_report'),
     path('reports/global-dashboard-stats/', HomeDashboardGlobalStatsView.as_view(), name='global_dashboard_stats'),    
+
+    # Learning Material APIs
+    path('learning-materials/', LearningMaterialListCreateAPIView.as_view(), name='learning_material_list_create'),
+    path('learning-materials/<int:pk>/', LearningMaterialDetailAPIView.as_view(), name='learning_material_detail'),    
 ]

@@ -1956,3 +1956,43 @@ def track_batch_status_history(sender, instance, created, **kwargs):
                 remarks=remarks,
                 created_by=user
             )            
+
+# ----------------------------
+# Learning Material Module
+# ----------------------------            
+
+class LearningMaterial(SoftDeleteMixin):
+    id = models.BigAutoField(primary_key=True)
+    title = models.CharField("Material Title", max_length=255)
+    description = models.TextField("Description", blank=True, null=True)
+    
+    file = models.FileField(
+        upload_to='learning_materials/', 
+        help_text='Upload document, PDF, video, or image.'
+    )
+    
+    theme = models.ForeignKey(
+        TrainingTheme, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='learning_materials'
+    )
+    training_plan = models.ForeignKey(
+        TrainingPlan, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='learning_materials'
+    )
+
+    class Meta:
+        db_table = 'tms_learningmaterial'
+        managed = True
+        indexes = [
+            models.Index(fields=['theme']),
+            models.Index(fields=['training_plan']),
+        ]
+
+    def __str__(self):
+        return self.title or f"LearningMaterial-{self.id}"

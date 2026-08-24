@@ -133,18 +133,37 @@ class CheckTrainerAvailabilityView(APIView):
 
 class ReplaceBatchMasterTrainerAPIView(APIView):
     """
-    Replaces the Master Trainer(s) of a Batch with a new, available Master Trainer.
+    Manages Master Trainer(s) of a Batch (Add, Remove, Replace).
     Strictly enforces constraints on Batch status, prior Ekyc/Attendance, and MT availability.
+    Logs all changes to the BatchHistory model.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        serializer = ReplaceBatchMasterTrainerSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Extract inputs directly to allow flexible actions without strict serializer dependence
+        batch_id = request.data.get('batch_id')
+        action = request.data.get('action', 'replace').lower() # Defaults to 'replace' for backward compatibility
+        new_mt_id = request.data.get('master_trainer_id')
+        old_mt_id = request.data.get('old_master_trainer_id')
 
-        batch_id = serializer.validated_data['batch_id']
-        new_mt_id = serializer.validated_data['master_trainer_id']
+        # Fallback to serializer extraction if data is nested
+        if not batch_id:
+            try:
+                serializer = ReplaceBatchMasterTrainerSerializer(data=request.data)
+                if serializer.is_valid():
+                    batch_id = serializer.validated_data.get('batch_id')
+                    new_mt_id = new_mt_id or serializer.validated_data.get('master_trainer_id')
+            except Exception:
+                pass
+
+        if not batch_id:
+            return Response({"error": "batch_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if action in ['add', 'replace'] and not new_mt_id:
+            return Response({"error": "master_trainer_id is required for adding or replacing."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if action == 'remove' and not old_mt_id:
+            return Response({"error": "old_master_trainer_id is required for specific removal."}, status=status.HTTP_400_BAD_REQUEST)
 
         # ---------------------------------------------------------
         # 1. Fetch Entities & Validate Existence
@@ -154,17 +173,12 @@ class ReplaceBatchMasterTrainerAPIView(APIView):
         except Batch.DoesNotExist:
             return Response({"error": "Batch not found or is inactive."}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            new_mt = MasterTrainer.objects.get(id=new_mt_id, is_active=True)
-        except MasterTrainer.DoesNotExist:
-            return Response({"error": "New Master Trainer not found or is inactive."}, status=status.HTTP_404_NOT_FOUND)
-
         # ---------------------------------------------------------
         # 2. Batch Status Constraints
         # ---------------------------------------------------------
         if batch.status not in ['ONGOING', 'SCHEDULED']:
             return Response({
-                "error": f"Replacement failed. Batch status must be ONGOING or SCHEDULED. Current status is '{batch.status}'."
+                "error": f"Action failed. Batch status must be ONGOING or SCHEDULED. Current status is '{batch.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # ---------------------------------------------------------
@@ -172,48 +186,56 @@ class ReplaceBatchMasterTrainerAPIView(APIView):
         # ---------------------------------------------------------
         if BatchEkycVerification.objects.filter(batch=batch, is_active=True).exists():
             return Response({
-                "error": "Replacement blocked: eKYC verification records already exist for this batch."
+                "error": "Action blocked: eKYC verification records already exist for this batch."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         if BatchAttendance.objects.filter(batch=batch, is_active=True).exists():
             return Response({
-                "error": "Replacement blocked: Attendance records have already been generated for this batch."
+                "error": "Action blocked: Attendance records have already been generated for this batch."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ---------------------------------------------------------
-        # 4. New Master Trainer Availability Constraint
-        # ---------------------------------------------------------
-        # Check A: Tied to a TR in BATCHING phase
-        is_in_batching_tr = TRTrainer.objects.filter(
-            trainer=new_mt,
-            training__status='BATCHING',
-            is_active=True,
-            training__is_active=True
-        ).exists()
+        # Fetch new MT if adding or replacing
+        new_mt = None
+        if action in ['add', 'replace']:
+            try:
+                new_mt = MasterTrainer.objects.get(id=new_mt_id, is_active=True)
+            except MasterTrainer.DoesNotExist:
+                return Response({"error": "New Master Trainer not found or is inactive."}, status=status.HTTP_404_NOT_FOUND)
 
-        if is_in_batching_tr:
-            return Response({
-                "error": "The selected Master Trainer is currently locked to a Training Request in the 'BATCHING' phase."
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check B: Overlapping active batch
-        if batch.start_date and batch.end_date:
-            overlapping_batches = BatchMasterTrainer.objects.filter(
-                master_trainer=new_mt,
+            # ---------------------------------------------------------
+            # 4. New Master Trainer Availability Constraint (UNTOUCHED)
+            # ---------------------------------------------------------
+            # Check A: Tied to a TR in BATCHING phase
+            is_in_batching_tr = TRTrainer.objects.filter(
+                trainer=new_mt,
+                training__status='BATCHING',
                 is_active=True,
-                batch__is_active=True,
-                batch__status__in=['DRAFT', 'PENDING', 'ONGOING', 'SCHEDULED', 'REJECTED'],
-                batch__start_date__lte=batch.end_date,
-                batch__end_date__gte=batch.start_date
-            ).exclude(batch=batch)
+                training__is_active=True
+            ).exists()
 
-            if overlapping_batches.exists():
+            if is_in_batching_tr:
                 return Response({
-                    "error": "The selected Master Trainer is busy in another overlapping batch during these dates."
+                    "error": "The selected Master Trainer is currently locked to a Training Request in the 'BATCHING' phase."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            # Check B: Overlapping active batch
+            if batch.start_date and batch.end_date:
+                overlapping_batches = BatchMasterTrainer.objects.filter(
+                    master_trainer=new_mt,
+                    is_active=True,
+                    batch__is_active=True,
+                    batch__status__in=['DRAFT', 'PENDING', 'ONGOING', 'SCHEDULED', 'REJECTED'],
+                    batch__start_date__lte=batch.end_date,
+                    batch__end_date__gte=batch.start_date
+                ).exclude(batch=batch)
+
+                if overlapping_batches.exists():
+                    return Response({
+                        "error": "The selected Master Trainer is busy in another overlapping batch during these dates."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
         # ---------------------------------------------------------
-        # 5. Execution (Atomic Swap)
+        # 5. Execution (Atomic Add/Remove/Swap)
         # ---------------------------------------------------------
         try:
             with transaction.atomic():
@@ -223,48 +245,89 @@ class ReplaceBatchMasterTrainerAPIView(APIView):
                 except MasterUser.DoesNotExist:
                     auth_user = None
 
-                # Soft delete any existing Master Trainers from this batch
-                existing_bmts = BatchMasterTrainer.objects.filter(batch=batch, is_active=True)
-                for bmt in existing_bmts:
-                    bmt.is_active = False
-                    bmt.deleted_at = timezone.now()
-                    bmt.deleted_by = auth_user
-                    bmt.remarks = (
-                        f"{bmt.remarks or ''} [Replaced by {auth_user}]"
-                    ).strip()
-                    bmt.save()
+                from django.utils import timezone
+                remarks_log = ""
+                new_bmt_id = None
 
-                # Insert the new Master Trainer
-                new_bmt = BatchMasterTrainer.objects.create(
-                    batch=batch,
-                    master_trainer=new_mt,
-                    status='AVAILABLE',
-                    participated=False,
-                    remarks="Assigned via Replacement API.",
-                    created_by=auth_user
-                )
-
-                # ============================================================
-                # SURGICAL ADDITION: EXPLICITLY LOG TRAINER REPLACEMENT IN HISTORY
-                # ============================================================
-                # Create a list of names for the old trainers being removed to include in the log
-                old_trainer_names = ", ".join([
-                    (bmt.master_trainer.full_name if bmt.master_trainer else "Unknown") 
-                    for bmt in existing_bmts
-                ])
+                # ---- ACTION: REMOVE ----
+                if action == 'remove':
+                    old_bmts = BatchMasterTrainer.objects.filter(batch=batch, master_trainer_id=old_mt_id, is_active=True)
+                    removed_names = ", ".join([(bmt.master_trainer.full_name if bmt.master_trainer else "Unknown") for bmt in old_bmts])
+                    
+                    for bmt in old_bmts:
+                        bmt.is_active = False
+                        bmt.deleted_at = timezone.now()
+                        bmt.deleted_by = auth_user
+                        bmt.remarks = f"{bmt.remarks or ''} [Removed by {auth_user.username if auth_user else 'System'}]".strip()
+                        bmt.save()
+                        
+                    remarks_log = f"Master Trainer removed via API. Removed: [{removed_names}]."
                 
-                BatchHistory.objects.create(
-                    batch=batch,
-                    status=batch.status, # Status remains the same during MT replacement
-                    remarks=f"Master Trainer replaced by {auth_user.username}. Replaced: {old_trainer_names} with {new_mt.full_name}.",
-                    created_by=auth_user
-                )
+                # ---- ACTION: ADD ----
+                elif action == 'add':
+                    new_bmt = BatchMasterTrainer.objects.create(
+                        batch=batch,
+                        master_trainer=new_mt,
+                        status='AVAILABLE',
+                        participated=False,
+                        remarks="Assigned via API (Add).",
+                        created_by=auth_user
+                    )
+                    new_bmt_id = new_bmt.id
+                    remarks_log = f"Master Trainer added via API. Added: [{new_mt.full_name}]."
+
+                # ---- ACTION: REPLACE ----
+                elif action == 'replace':
+                    if old_mt_id:
+                        # Target a specific MT to replace
+                        existing_bmts = BatchMasterTrainer.objects.filter(batch=batch, master_trainer_id=old_mt_id, is_active=True)
+                    else:
+                        # Backward compatibility: replace ALL currently active MTs in the batch
+                        existing_bmts = BatchMasterTrainer.objects.filter(batch=batch, is_active=True)
+                        
+                    old_trainer_names = ", ".join([
+                        (bmt.master_trainer.full_name if bmt.master_trainer else "Unknown") 
+                        for bmt in existing_bmts
+                    ])
+                    
+                    for bmt in existing_bmts:
+                        bmt.is_active = False
+                        bmt.deleted_at = timezone.now()
+                        bmt.deleted_by = auth_user
+                        bmt.remarks = f"{bmt.remarks or ''} [Replaced by {auth_user.username if auth_user else 'System'}]".strip()
+                        bmt.save()
+
+                    new_bmt = BatchMasterTrainer.objects.create(
+                        batch=batch,
+                        master_trainer=new_mt,
+                        status='AVAILABLE',
+                        participated=False,
+                        remarks="Assigned via API (Replace).",
+                        created_by=auth_user
+                    )
+                    new_bmt_id = new_bmt.id
+                    
+                    if old_trainer_names:
+                        remarks_log = f"Master Trainer replaced via API. Removed: [{old_trainer_names}]. Assigned: [{new_mt.full_name}]."
+                    else:
+                        remarks_log = f"Master Trainer assigned via API. Assigned: [{new_mt.full_name}]."
+
+                # ============================================================
+                # SURGICAL EXPLICIT BATCH HISTORY LOGGING
+                # ============================================================
+                if remarks_log:
+                    BatchHistory.objects.create(
+                        batch=batch,
+                        status=batch.status,
+                        remarks=remarks_log,
+                        created_by=auth_user
+                    )
                 # ============================================================
 
             return Response({
                 "status": "success",
-                "message": "Master Trainer has been successfully replaced in the batch.",
-                "new_batch_master_trainer_id": new_bmt.id
+                "message": f"Master Trainer action '{action}' completed successfully.",
+                "new_batch_master_trainer_id": new_bmt_id
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
