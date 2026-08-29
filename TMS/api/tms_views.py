@@ -1889,7 +1889,14 @@ class BatchesListView(APIView):
                 "centre",
                 "centre__partner",
             )
-            .prefetch_related("master_trainers")
+            .prefetch_related(
+                Prefetch(
+                    "master_trainers",
+                    queryset=tms_models.MasterTrainer.objects.filter(
+                        batchmastertrainer__is_active=True
+                    ).distinct()
+                )
+            )
             .annotate(
                 pax_count=Count('beneficiary', distinct=True) + Count('trainer', distinct=True) + Count('staff', distinct=True)
             )

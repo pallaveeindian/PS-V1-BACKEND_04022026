@@ -15,6 +15,8 @@ from TMS.api.tp_assign_v2.views import *
 
 # Dashboard APIs
 from TMS.api.TPHomepageV2.views import *
+from TMS.api.AdminHomepage_v2.views import *
+from TMS.api.PortalSummaryV2.views import *
 
 # New Staff TR Creation APIs
 from TMS.api.StaffList.views import *
@@ -431,4 +433,16 @@ urlpatterns = [
     # Learning Material APIs
     path('learning-materials/', LearningMaterialListCreateAPIView.as_view(), name='learning_material_list_create'),
     path('learning-materials/<int:pk>/', LearningMaterialDetailAPIView.as_view(), name='learning_material_detail'),    
+
+    # NEW Admin Dashboard API
+    path(
+        'admin/dashboard-metrics/', 
+        AdminDashboardMetricsAPIView.as_view(), 
+        name='admin_dashboard_metrics'
+    ),
+    path(
+        'reports/portal-summary/', 
+        PortalSummaryReportAPIView.as_view(), 
+        name='portal_summary_report'
+    ),    
 ]
