@@ -35,7 +35,7 @@ from rest_framework.pagination import PageNumberPagination
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg.inspectors import SwaggerAutoSchema
 from drf_yasg import openapi
-
+import pytz
 from core.models import MasterUser, MasterDistrictCategoryMapping, MasterDistrict
 from TMS import models as tms_models
 from TMS.api.serializers import *
@@ -44,7 +44,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied, NotFound
 
-from django.db.models import F, Count, Sum, Value, IntegerField
+from django.db.models import OuterRef, Subquery, F, Count, Sum, Value, IntegerField
 from django.db.models.functions import Coalesce
 import xlsxwriter
 
@@ -914,7 +914,7 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
     Targets assigned by SMMU to Training Partners (Module/District/Theme).
     """
     swagger_schema = TargetsSchema
-    filterset_fields = ["partner", "target_type", "training_plan", "district", "theme", "financial_year", "created_by"]
+    filterset_fields = ["partner", "target_type", "training_plan", "training_plan__type_of_training", "district", "theme", "financial_year", "created_by"]
     search_fields = ["theme", "financial_year"]
     
     # --- SURGICAL ADDITION: 25 items per page pagination ---
@@ -922,8 +922,15 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
     # -------------------------------------------------------
 
     def get_queryset(self):
-        # Base Queryset with select_related for standard foreign keys
-        qs = tms_models.TrainingPartnerTargets.objects.select_related(
+        # ==========================================================
+        # SURGICAL FIX: FILTER EVERYTHING WITH is_active = True
+        # Note: MasterDistrict does not have is_active, so it is excluded from the filter
+        # ==========================================================
+        qs = tms_models.TrainingPartnerTargets.objects.filter(
+            is_active=True,
+            partner__is_active=True,
+            training_plan__is_active=True
+        ).select_related(
             "partner", "training_plan", "district"
         )
 
@@ -972,7 +979,7 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             new_count = int(request.data.get("achieved_count", 0))
 
             # 2. Get the auto-created achievement record (from your save override)
-            achievement = target.achievements.first()
+            achievement = target.achievements.filter(is_active=True).first()
 
             if achievement:
                 # Update existing
@@ -1049,8 +1056,8 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             ("theme", "Theme"),
             ("financial_year", "Financial Year"),
             ("target_count", "Target"),
-            ("achievement_count", "Achievement Count"),
-            ("batches_completed", "Batches Completed"),
+            ("achievement_count", "Successful Participants"),
+            ("batches_completed", "Closed Batches"),
             ("progress", "Progress"),
         ]
 
@@ -1061,18 +1068,49 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             worksheet.write(0, col, title, header_format)
 
         # =========================
-        # QUERY
+        # QUERY (SURGICAL REPLACEMENT: LIVE SUBQUERIES)
         # =========================
+        
+        # Subquery to accurately count successful participants in CLOSED batches
+        achievement_subquery = tms_models.BeneficiaryAttendanceSummary.objects.filter(
+            is_active=True,
+            is_successful=True,
+            batch__is_active=True,
+            batch__status='CLOSED',
+            batch__partner=OuterRef('partner'),
+            batch__district=OuterRef('district'),
+            batch__training_plan=OuterRef('training_plan'),
+            batch__financial_year=OuterRef('financial_year')
+        ).values('batch__financial_year').annotate(
+            count=Count('id')
+        ).values('count')
+
+        # Subquery to accurately count CLOSED batches
+        batches_subquery = tms_models.Batch.objects.filter(
+            is_active=True,
+            status='CLOSED',
+            partner=OuterRef('partner'),
+            district=OuterRef('district'),
+            training_plan=OuterRef('training_plan'),
+            financial_year=OuterRef('financial_year')
+        ).values('financial_year').annotate(
+            count=Count('id')
+        ).values('count')
+
         values_qs = queryset.annotate(
-            achievement_count=Count(
-                "achievements",
-                distinct=True,
-            ),
-            batches_completed=Coalesce(
-                Sum("achievements__batches_completed"),
+            achievement_count=Coalesce(
+                Subquery(achievement_subquery, output_field=IntegerField()),
                 Value(0),
                 output_field=IntegerField(),
             ),
+            batches_completed=Coalesce(
+                Subquery(batches_subquery, output_field=IntegerField()),
+                Value(0),
+                output_field=IntegerField(),
+            ),
+            partner_name=F("partner__name"),
+            plan_name=F("training_plan__training_name"),
+            district_name=F("district__district_name_en"),
         ).values(
             "target_type",
             "theme",
@@ -1081,9 +1119,9 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             "achievement_count",
             "batches_completed",
 
-            partner_name=F("partner__name"),
-            plan_name=F("training_plan__training_name"),
-            district_name=F("district__district_name_en"),
+            "partner_name",
+            "plan_name",
+            "district_name",
         )
 
         # =========================
@@ -1096,9 +1134,9 @@ class TrainingPartnerTargetsViewSet(BaseTMSModelViewSet):
             achievement_count = record.get("achievement_count") or 0
             batches_completed = record.get("batches_completed") or 0
 
-            # Calculate progress
+            # Calculate progress (Against Batches Completed as per original logic)
             progress = (
-                batches_completed / target_count
+                achievement_count / target_count
                 if target_count > 0
                 else 0
             )
@@ -1876,7 +1914,7 @@ class BatchesListView(APIView):
     """
 
     def get(self, request):
-        params = request.GET
+        params = request.query_params
 
         qs = (
             tms_models.Batch.objects
@@ -1923,7 +1961,7 @@ class BatchesListView(APIView):
             qs = qs.filter(district=district_id)
 
         if block_id:
-            # SURGICAL CHANGE: Check both the direct block AND the block_coverages mapping
+            # Check both the direct block AND the block_coverages mapping
             qs = qs.filter(
                 Q(block=block_id) | Q(block_coverages__block=block_id)
             ).distinct()
@@ -1958,6 +1996,7 @@ class BatchesListView(APIView):
         partner_id = params.get("partner_id")
         training_type = params.get("training_type")
         financial_year = params.get("financial_year")
+        type_of_training = params.get("type_of_training")
 
         if training_plan_id:
             qs = qs.filter(training_plan_id=training_plan_id)
@@ -1970,6 +2009,11 @@ class BatchesListView(APIView):
 
         if training_type:
             qs = qs.filter(participant_type=training_type)
+
+        if type_of_training:
+            qs = qs.filter(
+                training_plan__type_of_training=type_of_training
+            )
 
         if financial_year:
             qs = qs.filter(financial_year=financial_year)
@@ -2006,11 +2050,84 @@ class BatchesListView(APIView):
         # -------------------------
 
         paginator = BatchListPagination()
+        
+        # SURGICAL ADDITION: Handle MAX page_size
+        if params.get("page_size") == "MAX":
+            paginator.page_size = 9999999
+            paginator.max_page_size = 9999999
+
         page = paginator.paginate_queryset(qs, request)
 
-        serializer = BatchListSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        # ============================================================
+        # SURGICAL ADDITION: Pendency Status Calculation
+        # ============================================================
+        batch_ids = [b.id for b in page]
+        
+        # 1. Fetch Histories efficiently (Order by oldest first)
+        histories = tms_models.BatchHistory.objects.filter(
+            batch_id__in=batch_ids, 
+            is_active=True
+        ).order_by('created_at')
+        
+        history_map = {}
+        for h in histories:
+            history_map.setdefault(h.batch_id, []).append(h)
+            
+        # 2. Fetch Reports efficiently
+        reports = tms_models.BatchReport.objects.filter(
+            batch_id__in=batch_ids, 
+            is_active=True
+        )
+        report_map = {r.batch_id: r.status for r in reports}
 
+        # 3. Serialize Data
+        serializer = BatchListSerializer(page, many=True)
+        serialized_data = serializer.data
+
+        # 4. Inject Pendency Messages
+        for idx, item in enumerate(serialized_data):
+            b_id = item['id']
+            b_status = item['status']
+            b_hist = history_map.get(b_id, [])
+            b_report_status = report_map.get(b_id)
+            b_obj = page[idx]
+            
+            pendency_msg = None
+            
+            def format_date(dt):
+                return dt.strftime("%d-%m-%Y") if dt else "N/A"
+
+            if b_status == 'PENDING':
+                dt_str = format_date(b_obj.created_at)
+                pendency_msg = f"Batch pending for approval at District/State level from {dt_str}"
+                
+            elif b_status in ['ONGOING', 'SCHEDULED']:
+                trans_date = next((h.created_at for h in b_hist if h.status in ['SCHEDULED', 'ONGOING']), b_obj.created_at)
+                dt_str = format_date(trans_date)
+                pendency_msg = f"Batch Approved by District/State level on {dt_str}"
+                
+            elif b_status == 'COMPLETED':
+                trans_date = next((h.created_at for h in reversed(b_hist) if h.status == 'COMPLETED'), b_obj.created_at)
+                dt_str = format_date(trans_date)
+                pendency_msg = f"Batch Costs and Media not uploaded at TP level from {dt_str}"
+                
+            elif b_status == 'REVIEW':
+                trans_date = next((h.created_at for h in reversed(b_hist) if h.status == 'REVIEW'), b_obj.created_at)
+                dt_str = format_date(trans_date)
+                pendency_msg = f"Pendency at District/State level from {dt_str} for Approval of Batch Costs and Media"
+                
+            elif b_status == 'CLOSED':
+                if b_report_status != 'DMM_SIGNED':
+                    trans_date = next((h.created_at for h in reversed(b_hist) if h.status == 'CLOSED'), b_obj.created_at)
+                    dt_str = format_date(trans_date)
+                    pendency_msg = f"Pendency at District/State level from {dt_str} for Batch Certificate"
+            
+            item['pendency_status'] = pendency_msg
+        # ============================================================
+
+        return paginator.get_paginated_response(serialized_data)
+
+        
 class BatchScheduleViewSet(BaseTMSModelViewSet):
     """
     Batch Schedule – per batch per day schedule details.
@@ -2417,7 +2534,7 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
                 'block',
                 'district__mandal',
             )
-            .filter(deleted_at__isnull=True)
+            .filter(is_active=True)
             .order_by('-id')
         )
 
@@ -2430,6 +2547,11 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
 
         if params.get('training_plan_id'):
             qs = qs.filter(training_plan_id=params['training_plan_id'])
+
+        if params.get('type_of_training'):
+            qs = qs.filter(
+                training_plan__type_of_training=params['type_of_training']
+            )
 
         if params.get('partner_id'):
             qs = qs.filter(partner_id=params['partner_id'])
@@ -2530,7 +2652,8 @@ class BulkTrainingEngagementCheckAPI(APIView):
             tr_bens_qs = tms_models.TRBeneficiary.objects.exclude(
                 training__status__in=["COMPLETED", "REJECTED"]
             ).filter(
-                lokos_member_code__in=ids
+                lokos_member_code__in=ids,
+                training__is_active=True
             )
             
             # Apply strict Financial Year filter if provided
@@ -2539,11 +2662,12 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 
             engaged_tr_bens = tr_bens_qs.values_list("lokos_member_code", flat=True)
 
-            # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
             batch_bens_qs = tms_models.BatchBeneficiary.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED"]
+                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
             ).filter(
-                beneficiary__lokos_member_code__in=ids
+                beneficiary__lokos_member_code__in=ids,
+                batch__is_active=True
             )
             
             # Apply strict Financial Year filter if provided
@@ -2562,7 +2686,8 @@ class BulkTrainingEngagementCheckAPI(APIView):
             tr_trainers_qs = tms_models.TRTrainer.objects.exclude(
                 training__status__in=["COMPLETED", "REJECTED"]
             ).filter(
-                trainer_id__in=ids
+                trainer_id__in=ids,
+                training__is_active=True
             )
             
             if financial_year:
@@ -2570,11 +2695,12 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 
             engaged_tr_trainers = tr_trainers_qs.values_list("trainer_id", flat=True)
 
-            # Rule 4: Check BatchMasterTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            # Rule 4: Check BatchMasterTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
             batch_master_trainers_qs = tms_models.BatchMasterTrainer.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
             ).filter(
-                master_trainer_id__in=ids
+                master_trainer_id__in=ids,
+                batch__is_active=True
             )
             
             if financial_year:
@@ -2582,11 +2708,12 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 
             engaged_batch_master_trainers = batch_master_trainers_qs.values_list("master_trainer_id", flat=True)
 
-            # Rule 5: Check BatchTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            # Rule 5: Check BatchTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
             batch_trainers_qs = tms_models.BatchTrainer.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
             ).filter(
-                trainer__trainer_id__in=ids
+                trainer__trainer_id__in=ids,
+                batch__is_active=True
             )
             
             if financial_year:
@@ -2606,7 +2733,8 @@ class BulkTrainingEngagementCheckAPI(APIView):
             tr_staff_qs = tms_models.TRStaff.objects.exclude(
                 training__status__in=["COMPLETED", "REJECTED"]
             ).filter(
-                staff_id__in=ids
+                staff_id__in=ids,
+                training__is_active=True
             )
             
             if financial_year:
@@ -2614,11 +2742,12 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 
             engaged_tr_staff = tr_staff_qs.values_list("staff_id", flat=True)
 
-            # Rule 7: Check BatchStaff (Engaged if Batch is NOT COMPLETED/CLOSED/REJECTED)
+            # Rule 7: Check BatchStaff (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
             batch_staff_qs = tms_models.BatchStaff.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REJECTED"]
+                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
             ).filter(
-                staff__staff_id__in=ids
+                staff__staff_id__in=ids,
+                batch__is_active=True
             )
             
             if financial_year:
@@ -3221,3 +3350,27 @@ class BulkRemoveTRParticipantsAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ServerTimeAPIView(APIView):
+    """
+    Returns the secure, tamper-proof server time formatted exactly 
+    like timeapi.io to serve frontend anti-tampering logic without CORS issues.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = timezone.now().astimezone(ist)
+        
+        data = {
+            "date_time": now_ist.isoformat(),
+            "date": now_ist.strftime('%Y-%m-%d'),
+            "time": now_ist.strftime('%H:%M:%S.%f'),
+            "day_of_week": now_ist.strftime('%A'),
+            "dst_active": False,
+            "timezone": "Asia/Kolkata",
+            "utc_offset_seconds": 19800
+        }
+        
+        serializer = ServerTimeSerializer(data)
+        return Response(serializer.data)            

@@ -97,7 +97,8 @@ class FetchTraineesForTrainingPartnerView(APIView):
         tr_filters = {
             "financial_year": financial_year,
             "training_plan_id": training_plan_id,
-            "is_active": True,            
+            "is_active": True,
+            "is_old": False,
         }
         
         # SURGICAL FIX: Route Training Request filters dynamically based on participant type

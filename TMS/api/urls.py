@@ -445,4 +445,6 @@ urlpatterns = [
         PortalSummaryReportAPIView.as_view(), 
         name='portal_summary_report'
     ),    
+
+    path('server-time/', tms_views.ServerTimeAPIView.as_view(), name='server-time'),    
 ]

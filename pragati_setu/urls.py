@@ -41,6 +41,7 @@ urlpatterns = [
     path("api/v1/ldms/", include("LDMS.api.urls")),
     path("api/v1/prerna/", include("canteen.api.urls")),
     path("api/v1/support/", include(("support.urls", "support"), namespace="support")),
+    path("api/v1/uppld/", include(("UPPLD.urls", "uppld"), namespace="uppld")),
 ]
 
 urlpatterns += [

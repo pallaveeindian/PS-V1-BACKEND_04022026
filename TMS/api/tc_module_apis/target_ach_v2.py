@@ -26,20 +26,21 @@ class DTPTargetCountAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 2. Authenticate and resolve MasterUser
+        # 2. Authenticate and resolve MasterUser (Enforcing is_active=True)
         try:
-            master_user = MasterUser.objects.get(username=request.user.username)
+            master_user = MasterUser.objects.get(username=request.user.username, is_active=True)
         except MasterUser.DoesNotExist:
             return Response(
-                {"error": "Authenticated MasterUser not found."}, 
+                {"error": "Authenticated active MasterUser not found."}, 
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # 3. Identify the DistrictTP mapped to this user
+        # 3. Identify the DistrictTP mapped to this user (Enforcing is_active=True on relationships)
         dtp = DistrictTP.objects.filter(
             master_user=master_user, 
             is_active_dtp=True, 
-            is_active=True
+            is_active=True,
+            partner__is_active=True
         ).select_related('partner', 'district').first()
 
         if not dtp:
@@ -48,7 +49,7 @@ class DTPTargetCountAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # 4. Aggregate Target Count
+        # 4. Aggregate Target Count (Enforcing is_active=True)
         target_aggregation = TrainingPartnerTargets.objects.filter(
             partner=dtp.partner,
             district=dtp.district,
@@ -62,20 +63,17 @@ class DTPTargetCountAPIView(APIView):
         total_target_count = target_aggregation.get("total_targets") or 0
 
 
-        # 5. Aggregate Achievement Count
-        achievement_aggregation = TrainingPartnerAchievement.objects.filter(
-            partner=dtp.partner,
-            district=dtp.district,
-            training_plan_id=training_plan_id,
-            financial_year=financial_year,
-            is_active=True
-        ).aggregate(
-            total_achievement=Sum("batches_completed")
-        )
-
-        total_achievement_count = (
-            achievement_aggregation.get("total_achievement") or 0
-        )
+        # 5. Aggregate Achievement Count (Count of successful participants in CLOSED batches)
+        total_achievement_count = BeneficiaryAttendanceSummary.objects.filter(
+            is_active=True,
+            is_successful=True,
+            batch__is_active=True,
+            batch__status='CLOSED',
+            batch__partner=dtp.partner,
+            batch__district=dtp.district,
+            batch__training_plan_id=training_plan_id,
+            batch__financial_year=financial_year
+        ).count()
 
 
         # 6. Return Response

@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'LDMS',
     'canteen',
     'support',
+    'UPPLD',
     
     # audit
     'api_audit',

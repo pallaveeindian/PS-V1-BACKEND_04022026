@@ -858,6 +858,9 @@ class TrainingRequest(SoftDeleteMixin):
     financial_year = models.CharField("Financial year", max_length=9, null=True, blank=True)
     remarks = models.TextField(blank=True, null=True)
 
+    # For Backlog offline batches
+    is_old = models.BooleanField(default=False, db_column='is_old')
+
     class Meta:
         db_table = 'tms_trainingrequest'
         managed = True
@@ -1130,6 +1133,9 @@ class Batch(SoftDeleteMixin):
     status = models.CharField(
         max_length=30, choices=STATUS, default='DRAFT'
     )
+
+    # For Backlog offline batches
+    is_old = models.BooleanField(default=False, db_column='is_old')
 
     rejection_reason = models.CharField(max_length=500, blank=True, null=True)
     start_date = models.DateField(blank=True, null=True)

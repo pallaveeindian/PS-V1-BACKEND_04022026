@@ -42,7 +42,7 @@ API_KEY_HEADER = "HTTP_X_API_KEY"
 # -------------------------------------------------
 
 # Roles allowed everywhere
-COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10, 12}
+COMMON_ROLE_IDS = {1, 2, 3, 8, 9, 10, 12, 14, 15}
 
 # epSakhi-only roles
 EPSAKHI_ROLE_IDS = {6}
@@ -209,6 +209,13 @@ class ApiIdApiKeyMiddleware(MiddlewareMixin):
             if path.startswith("/api/v1/prerna/") and role_id not in COMMON_ROLE_IDS:
                 return JsonResponse(
                     {"detail": "Unauthorized for Prerna Canteen"},
+                    status=401,
+                )
+
+            # UPPLD APIs
+            if path.startswith("/api/v1/uppld/") and role_id not in COMMON_ROLE_IDS:
+                return JsonResponse(
+                    {"detail": "Unauthorized for UPPLD"},
                     status=401,
                 )
 

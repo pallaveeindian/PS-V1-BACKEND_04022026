@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from TMS.models import *
-from core.models import MasterBlock, MasterDistrict
+from core.models import MasterBlock, MasterDistrict, MasterPanchayat, MasterVillage
 
 # ---------------------------------------------------------
 # 1. Base / Configuration Serializers
@@ -30,6 +30,16 @@ class MasterDistrictSerializer(serializers.ModelSerializer):
 class MasterBlockSerializer(serializers.ModelSerializer):
     class Meta:
         model = MasterBlock
+        fields = '__all__'
+
+class MasterPanchayatSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MasterPanchayat
+        fields = '__all__'
+
+class MasterVillageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MasterVillage
         fields = '__all__'
 
 # --- Centre Nested Serializers ---
@@ -97,6 +107,14 @@ class TRBeneficiarySerializer(serializers.ModelSerializer):
     )
     block_name_en = serializers.CharField(
         source="block.block_name_en",
+        read_only=True
+    )
+    panchayat_name_en = serializers.CharField(
+        source="panchayat.panchayat_name_en",
+        read_only=True
+    )
+    village_name_en = serializers.CharField(
+        source="village.village_name_english",
         read_only=True
     )
 

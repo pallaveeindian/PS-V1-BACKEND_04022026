@@ -122,7 +122,27 @@ class CreateOneShotBatchAPIView(APIView):
                 participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
                 if participants_db.count() != len(all_participant_ids):
                     raise ValueError("One or more participant IDs provided do not exist in the database.")
-                
+
+                # --- SURGICAL ADDITION: Prevent Duplicate Candidates in a Single Batch ---
+                if participant_type == "BENEFICIARY":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(lokos_member_code__in=[None, ""])
+                                       .values_list('lokos_member_code', flat=True))
+                elif participant_type == "TRAINER":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(trainer__master_user_id__isnull=True)
+                                       .values_list('trainer__master_user_id', flat=True))
+                elif participant_type == "STAFF":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(staff__employee_id__in=[None, ""])
+                                       .values_list('staff__employee_id', flat=True))
+                else:
+                    identifiers = []
+
+                if len(identifiers) != len(set(identifiers)):
+                    raise ValueError(f"Duplicate Candidate Detected: A {participant_type.capitalize()} is repeated in this batch based on their unique identifier.")
+                # --- END SURGICAL ADDITION ---
+
                 p_db_map = {p.id: p for p in participants_db}
                 
                 # SURGICAL FIX: Ensure block_id is strictly None for STAFF
@@ -344,6 +364,27 @@ class OneShotUpdateBatchAPIView(APIView):
                 participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
                 if participants_db.count() != len(all_participant_ids):
                     raise ValueError("One or more participant IDs provided do not exist in the database.")
+
+                # --- SURGICAL ADDITION: Prevent Duplicate Candidates in a Single Batch ---
+                if participant_type == "BENEFICIARY":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(lokos_member_code__in=[None, ""])
+                                       .values_list('lokos_member_code', flat=True))
+                elif participant_type == "TRAINER":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(trainer__master_user_id__isnull=True)
+                                       .values_list('trainer__master_user_id', flat=True))
+                elif participant_type == "STAFF":
+                    identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
+                                       .exclude(staff__employee_id__in=[None, ""])
+                                       .values_list('staff__employee_id', flat=True))
+                else:
+                    identifiers = []
+
+                if len(identifiers) != len(set(identifiers)):
+                    raise ValueError(f"Duplicate Candidate Detected: A {participant_type.capitalize()} is repeated in this batch based on their unique identifier.")
+                # --- END SURGICAL ADDITION ---
+
                 p_db_map = {p.id: p for p in participants_db}
 
                 touched_tr_ids = set()
@@ -452,6 +493,8 @@ class OneShotDeleteBatchAPIView(APIView):
     Reverts all associated participants' CB_selected flags to False.
     Reverts all associated Training Requests to BATCHING.
     Clears BatchBlockCoverage automatically.
+    Soft deletes associated Master Trainers.
+    Prevents deletion if any eKYC records exist.
     """
     permission_classes = [IsAuthenticated]
 
@@ -463,11 +506,19 @@ class OneShotDeleteBatchAPIView(APIView):
 
         batch = get_object_or_404(Batch, id=batch_id)
 
+        # SURGICAL ADDITION: Block deletion if eKYC verification records exist
+        if BatchEkycVerification.objects.filter(batch=batch, is_active=True).exists():
+            return Response(
+                {"error": "Batch cannot be deleted because it contains eKYC verification records."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             with transaction.atomic():
                 b_bens = BatchBeneficiary.objects.filter(batch=batch)
                 b_trainers = BatchTrainer.objects.filter(batch=batch)
-                b_staff = BatchStaff.objects.filter(batch=batch) # SURGICAL ADDITION
+                b_staff = BatchStaff.objects.filter(batch=batch) 
+                b_mtrainers = BatchMasterTrainer.objects.filter(batch=batch)
                 
                 touched_tr_ids = set()
 
@@ -493,7 +544,7 @@ class OneShotDeleteBatchAPIView(APIView):
                     # Hard delete mappings
                     b_trainers.delete()
 
-                # SURGICAL ADDITION: Handle Staff
+                # Handle Staff
                 if b_staff.exists():
                     p_ids = list(b_staff.values_list('staff_id', flat=True))
                     tr_ids = list(b_staff.values_list('training_request_id', flat=True))
@@ -503,6 +554,11 @@ class OneShotDeleteBatchAPIView(APIView):
                     TRStaff.objects.filter(id__in=p_ids).update(CB_selected=False)
                     # Hard delete mappings
                     b_staff.delete()
+
+                # SURGICAL ADDITION: Handle Master Trainers (Soft Deletion)
+                if b_mtrainers.exists():
+                    for bmt in b_mtrainers:
+                        bmt.delete(by_user=user)
 
                 # Revert Training Request Statuses
                 valid_tr_ids = [tid for tid in touched_tr_ids if tid is not None]

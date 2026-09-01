@@ -240,8 +240,26 @@ class MasterDistrictTargetSerializer(SoftDeleteModelSerializer):
         model = core_models.MasterDistrict
         fields = ['district_id', 'district_name_en', 'district_short_name_en']
 
+class MasterBlockTargetSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = core_models.MasterBlock
+        fields = ['block_id', 'block_name_en', 'block_name_local', 'is_aspirational']
+
+class MasterPanchayatTargetSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = core_models.MasterPanchayat
+        fields = ['panchayat_id', 'panchayat_name_en', 'panchayat_name_local']
+
+class MasterVillageTargetSerializer(SoftDeleteModelSerializer):
+    class Meta(SoftDeleteModelSerializer.Meta):
+        model = core_models.MasterVillage
+        fields = ['village_id', 'village_name_english', 'village_name_local']            
+
 class TrainingPartnerCentreSerializer(SoftDeleteModelSerializer):
     district_full = MasterDistrictTargetSerializer(source='district', read_only=True)
+    block_full = MasterBlockTargetSerializer(source='block', read_only=True)
+    panchayat_full = MasterPanchayatTargetSerializer(source='panchayat', read_only=True)
+    village_full = MasterVillageTargetSerializer(source='village', read_only=True)
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingPartnerCentre
@@ -481,6 +499,10 @@ class TrainingPartnerAchievementDetailedSerializer(serializers.ModelSerializer):
 
 class TrainingPartnerTargetsDetailedSerializer(SoftDeleteModelSerializer):
     achievements = serializers.SerializerMethodField()
+    
+    # --- SURGICAL ADDITION: Expose live calculated metrics directly to frontend ---
+    achievement_count = serializers.SerializerMethodField()
+    batches_completed = serializers.SerializerMethodField()
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TrainingPartnerTargets
@@ -488,9 +510,37 @@ class TrainingPartnerTargetsDetailedSerializer(SoftDeleteModelSerializer):
         depth = 1  
 
     def get_achievements(self, obj):
-        achs = obj.achievements.all()
+        # SURGICAL FIX: Filter out deleted achievements
+        achs = obj.achievements.filter(is_active=True)
         return TrainingPartnerAchievementDetailedSerializer(achs, many=True).data
 
+    # ==========================================================
+    # SURGICAL ADDITIONS: Live Calculation Methods
+    # ==========================================================
+    def get_achievement_count(self, obj):
+        """Returns live count of successful participants in CLOSED batches"""
+        return tms_models.BeneficiaryAttendanceSummary.objects.filter(
+            is_active=True,
+            is_successful=True,
+            batch__is_active=True,
+            batch__status='CLOSED',
+            batch__partner=obj.partner,
+            batch__district=obj.district,
+            batch__training_plan=obj.training_plan,
+            batch__financial_year=obj.financial_year
+        ).count()
+
+    def get_batches_completed(self, obj):
+        """Returns live count of CLOSED batches"""
+        return tms_models.Batch.objects.filter(
+            is_active=True,
+            status='CLOSED',
+            partner=obj.partner,
+            district=obj.district,
+            training_plan=obj.training_plan,
+            financial_year=obj.financial_year
+        ).count()
+        
 # ----------------------------
 # TRPUserScope
 # ----------------------------
@@ -540,6 +590,8 @@ class TrainingRequestSerializer(SoftDeleteModelSerializer):
 class TRBeneficiarySerializer(SoftDeleteModelSerializer):
     district_name_en = serializers.SerializerMethodField()
     block_name_en = serializers.SerializerMethodField()
+    panchayat_name_en = serializers.SerializerMethodField()
+    village_name_english = serializers.SerializerMethodField()
 
     class Meta(SoftDeleteModelSerializer.Meta):
         model = tms_models.TRBeneficiary
@@ -555,7 +607,19 @@ class TRBeneficiarySerializer(SoftDeleteModelSerializer):
         try:
             return obj.block.block_name_en if obj.block else None
         except:
-            return None        
+            return None   
+
+    def get_panchayat_name_en(self, obj):
+        try:
+            return obj.panchayat.panchayat_name_en if obj.panchayat else None
+        except:
+            return None
+
+    def get_village_name_english(self, obj):
+        try:
+            return obj.village.village_name_english if obj.village else None
+        except:
+            return None                 
 
 
 class TRBeneficiaryDetailSerializer(SoftDeleteModelSerializer):
@@ -1382,6 +1446,7 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
             'participant_count',
             'enrolled_count',
             'financial_year',
+            'is_old',
         ]
 
     # Serializer for TrainingRequest list endpoint with filters and participant count
@@ -1589,3 +1654,12 @@ class BulkRemoveTRParticipantsSerializer(serializers.Serializer):
             return ids
         except Exception:
             raise serializers.ValidationError("Must be a comma-separated list of integers.")
+
+class ServerTimeSerializer(serializers.Serializer):
+    date_time = serializers.CharField()
+    date = serializers.CharField()
+    time = serializers.CharField()
+    day_of_week = serializers.CharField()
+    dst_active = serializers.BooleanField()
+    timezone = serializers.CharField()
+    utc_offset_seconds = serializers.IntegerField()            
