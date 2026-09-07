@@ -206,13 +206,21 @@ class CreateOneShotBatchAPIView(APIView):
 
                 # 5. Create BatchBlockCoverage for COMBINED batches
                 if batch_type == "COMBINED":
-                    for blk_id, count in combined_block_counts.items():
+                    # SURGICAL FIX: Re-scan all participants to ensure NO blocks are missed and counts are perfectly accurate
+                    true_block_counts = {}
+                    for p_obj in participants_db:
+                        # Use participant's block, falling back to their Training Request's block
+                        blk_id = p_obj.block_id or getattr(p_obj.training, 'block_id', None)
+                        if blk_id:
+                            true_block_counts[blk_id] = true_block_counts.get(blk_id, 0) + 1
+                    
+                    for blk_id, count in true_block_counts.items():
                         BatchBlockCoverage.objects.create(
                             batch=batch,
                             block_id=blk_id,
                             participant_count=count
                         )
-
+                        
                 # 6. Flag Participants as Selected
                 ParticipantModel.objects.filter(id__in=all_participant_ids).update(CB_selected=True)
 

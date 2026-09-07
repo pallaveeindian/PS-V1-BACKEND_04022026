@@ -151,13 +151,16 @@ class FetchTraineesForTrainingPartnerView(APIView):
         # 4. Fetch the targeted participant type data and apply advanced filters
         if participant_type == "beneficiary":
             if batch_id:
-                linked_ids = list(BatchBeneficiary.objects.filter(batch_id=batch_id).values_list('beneficiary_id', flat=True))
+                # SURGICAL FIX: Strict is_active=True on mappings and targets
+                linked_ids = list(BatchBeneficiary.objects.filter(batch_id=batch_id, is_active=True).values_list('beneficiary_id', flat=True))
                 trainees = TRBeneficiary.objects.filter(
                     Q(training__in=training_requests) & 
-                    (Q(CB_selected=False) | Q(CB_selected=True, id__in=linked_ids))
+                    (Q(CB_selected=False) | Q(CB_selected=True, id__in=linked_ids)),
+                    is_active=True
                 )
             else:
-                trainees = TRBeneficiary.objects.filter(training__in=training_requests, CB_selected=False)
+                # SURGICAL FIX: Strict is_active=True
+                trainees = TRBeneficiary.objects.filter(training__in=training_requests, CB_selected=False, is_active=True)
 
             # Apply Optional Filters for Beneficiaries
             if block_id:
@@ -206,8 +209,12 @@ class FetchTraineesForTrainingPartnerView(APIView):
         else: # TRAINER
             linked_ids = []
             if batch_id:
-                # Use the clean ManyToMany reverse relation to avoid naming collisions
-                linked_ids = list(TRTrainer.objects.filter(trainers_for_batch__id=batch_id).values_list('id', flat=True))
+                # Use the clean ManyToMany reverse relation and strict is_active checks
+                linked_ids = list(TRTrainer.objects.filter(
+                    trainers_for_batch__id=batch_id, 
+                    trainers_for_batch__is_active=True,
+                    is_active=True
+                ).values_list('id', flat=True))
 
             # 1. Group all optional filters into a single Q object
             optional_filters = Q()
@@ -245,13 +252,15 @@ class FetchTraineesForTrainingPartnerView(APIView):
                     (
                         (Q(CB_selected=False) & optional_filters) | 
                         Q(CB_selected=True, id__in=linked_ids)
-                    )
+                    ),
+                    is_active=True # SURGICAL FIX: Strict is_active=True
                 )
             else:
                 trainees = TRTrainer.objects.filter(
                     Q(training__in=training_requests) & 
                     Q(CB_selected=False) & 
-                    optional_filters
+                    optional_filters,
+                    is_active=True # SURGICAL FIX: Strict is_active=True
                 )
 
             serializer = TRTrainerSerializer(trainees, many=True)
