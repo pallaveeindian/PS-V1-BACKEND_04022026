@@ -1453,11 +1453,11 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
     def get_participant_count(self, obj):
         try:
             if obj.training_type == 'BENEFICIARY':
-                return obj.beneficiary_registrations.filter(deleted_at__isnull=True).count()
+                return obj.beneficiary_registrations.filter(is_active=True).count()
             elif obj.training_type == 'TRAINER':
-                return obj.trainer_registrations.filter(deleted_at__isnull=True).count()
+                return obj.trainer_registrations.filter(is_active=True).count()
             elif obj.training_type == 'STAFF':
-                return obj.staff_registrations.filter(deleted_at__isnull=True).count()                
+                return obj.staff_registrations.filter(is_active=True).count()                
         except:
             pass
         return 0
@@ -1465,11 +1465,11 @@ class TrainingRequestListSerializer(serializers.ModelSerializer):
     def get_enrolled_count(self, obj):
         try:
             if obj.training_type == 'BENEFICIARY':
-                return obj.beneficiary_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()
+                return obj.beneficiary_registrations.filter(is_active=True, CB_selected=True).count()
             elif obj.training_type == 'TRAINER':
-                return obj.trainer_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()
+                return obj.trainer_registrations.filter(is_active=True, CB_selected=True).count()
             elif obj.training_type == 'STAFF':
-                return obj.staff_registrations.filter(deleted_at__isnull=True, CB_selected=True).count()                
+                return obj.staff_registrations.filter(is_active=True, CB_selected=True).count()                
         except:
             pass
         return 0        

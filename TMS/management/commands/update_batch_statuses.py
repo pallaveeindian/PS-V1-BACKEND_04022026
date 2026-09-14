@@ -4,6 +4,7 @@ import time
 import logging
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.db import close_old_connections
 from TMS.models import (
     Batch, 
     BatchBeneficiary, 
@@ -28,15 +29,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('Starting continuous batch status monitor for Pragati Setu...'))
-        
+
         while True:
             try:
+                close_old_connections() # <--- SURGICAL FIX: Refreshes dead MySQL connections
                 self.process_batches()
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Error during processing: {e}"))
                 logger.error(f"Batch status loop error: {e}")
-            
-            # Sleep for 5 seconds to prevent CPU pegging. 
+
+            # Sleep for 5 seconds to prevent CPU pegging.
             time.sleep(5)
 
     def process_batches(self):
@@ -54,6 +56,39 @@ class Command(BaseCommand):
             batch.status = 'ONGOING'
             batch.save(update_fields=['status'])
             self.stdout.write(self.style.SUCCESS(f"Marked Batch {batch.code or batch.id} as ONGOING."))
+
+        # ------------------------------------------------------
+        # 1.5 AUTO-COMPLETE BATCHES
+        # ------------------------------------------------------
+        # Find ONGOING batches where the end_date is today (or in the past)
+        batches_to_complete = Batch.objects.filter(
+            status='ONGOING',
+            end_date__lte=today
+        )
+
+        for batch in batches_to_complete:
+            # Check if BatchAttendance exists for the batch's end_date
+            final_attendance = BatchAttendance.objects.filter(batch=batch, date=batch.end_date).first()
+            
+            if final_attendance:
+                # Count how many attendance records were actually submitted for that day
+                submitted_count = ParticipantAttendance.objects.filter(attendance=final_attendance).count()
+                
+                # Calculate the exact total number of expected participants in this batch
+                expected_count = (
+                    BatchBeneficiary.objects.filter(batch=batch, is_active=True).count() +
+                    BatchTrainer.objects.filter(batch=batch, is_active=True).count() +
+                    BatchStaff.objects.filter(batch=batch, is_active=True).count() +
+                    BatchMasterTrainer.objects.filter(batch=batch, is_active=True).count()
+                )
+                
+                # SURGICAL RULE: Only complete if attendance is fully recorded for everyone on the last day
+                if submitted_count > 0 and submitted_count >= expected_count:
+                    # Delay exactly as requested
+                    time.sleep(5) 
+                    batch.status = 'COMPLETED'
+                    batch.save(update_fields=['status'])
+                    self.stdout.write(self.style.SUCCESS(f"Auto-Completed Batch {batch.code or batch.id}."))
 
         # ------------------------------------------------------
         # 2. PROCESS COMPLETED BATCHES (ATTENDANCE & TRAINERS ONLY)

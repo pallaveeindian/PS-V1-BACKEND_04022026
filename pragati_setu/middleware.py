@@ -342,8 +342,14 @@ class SystemTelemetryMiddleware:
 
     # Track security status codes
     if response.status_code == 401:
-      cache.incr("unauthorized_requests_count", 1)
+        try:
+            cache.incr("unauthorized_requests_count", 1)
+        except Exception:
+            cache.set("unauthorized_requests_count", 1, timeout=None)
     elif response.status_code in [403, 405, 429]:
-      cache.incr("blocked_requests_count", 1)
+        try:
+            cache.incr("blocked_requests_count", 1)
+        except Exception:
+            cache.set("blocked_requests_count", 1, timeout=None)
 
     return response

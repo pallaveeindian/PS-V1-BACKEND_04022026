@@ -39,6 +39,9 @@ from TMS.api.tc_module_apis.tr_participants import *
 from TMS.api.mt_apis_v2.views import *
 from TMS.api.mt_availibilityV2.views import *
 
+# Backlog Batch Creator
+from TMS.api.BacklogBatchCreator.views import *
+
 router = DefaultRouter()
 
 # Masters
@@ -445,6 +448,9 @@ urlpatterns = [
         PortalSummaryReportAPIView.as_view(), 
         name='portal_summary_report'
     ),    
+
+    # Backlog Batch Creator
+    path('backlog-batch-oneshot/', BacklogBatchOneShotAPIView.as_view(), name='batch-backlog-oneshot'),
 
     path('server-time/', tms_views.ServerTimeAPIView.as_view(), name='server-time'),    
 ]

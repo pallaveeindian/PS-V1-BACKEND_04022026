@@ -2213,6 +2213,7 @@ class ParticipantAttendanceViewSet(BaseTMSModelViewSet):
     serializer_class = ParticipantAttendanceSerializer
     filterset_fields = ["attendance", "participant_role", "present"]
     search_fields = ["participant_id", "participant_name"]
+    pagination_class = None
 
 
 # -------------------------------------------------------------------
@@ -2542,6 +2543,12 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
         # ✅ PURE FILTERS (NO ROLE / NO GEO ENFORCEMENT)
         # --------------------------------------------------
 
+        if params.get('id'):
+            try:
+                qs = qs.filter(id=int(params['id']))
+            except (ValueError, TypeError):
+                qs = qs.none()
+
         if params.get('theme_id'):
             qs = qs.filter(training_plan__theme_id=params['theme_id'])
 
@@ -2564,6 +2571,15 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
 
         if params.get('status'):
             qs = qs.filter(status=params['status'])
+
+        if params.get('is_old') is not None:
+            is_old_value = params.get('is_old').strip().lower()
+
+            if is_old_value in ['true', '1', 'yes']:
+                qs = qs.filter(is_old=True)
+
+            elif is_old_value in ['false', '0', 'no']:
+                qs = qs.filter(is_old=False)
 
         if params.get('mandal_id'):
             qs = qs.filter(district__mandal_id=params['mandal_id'])

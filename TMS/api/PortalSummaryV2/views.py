@@ -12,13 +12,14 @@ from TMS.models import (
     BatchBeneficiary, BatchTrainer, BatchStaff,
     TrainingPartnerTargets
 )
-from .serializers import PortalSummaryReportQuerySerializer  # Import the serializer you created above
+from .serializers import PortalSummaryReportQuerySerializer  
 
 class PortalSummaryReportAPIView(APIView):
     """
     State-wide and District-wide Summary Report API.
     Strictly requires 'financial_year'.
     Excludes all DRAFT batches and mandates is_active=True across all models.
+    Supports optional 'theme' and 'training_plan' filtering.
     """
     permission_classes = [IsAuthenticated]
 
@@ -30,13 +31,37 @@ class PortalSummaryReportAPIView(APIView):
         
         fy = serializer.validated_data['financial_year']
 
+        # =========================================================
+        # SURGICAL ADDITION: Dynamic Theme & Plan Filter Dictionary
+        # =========================================================
+        theme_id = request.query_params.get('theme')
+        plan_id = request.query_params.get('training_plan')
+        
+        batch_kwargs = {}
+        pax_batch_kwargs = {}
+        onb_kwargs = {}
+        tgt_kwargs = {}
+        
+        if plan_id:
+            batch_kwargs['training_plan_id'] = plan_id
+            pax_batch_kwargs['batch__training_plan_id'] = plan_id
+            onb_kwargs['training__training_plan_id'] = plan_id
+            tgt_kwargs['training_plan_id'] = plan_id
+            
+        if theme_id:
+            batch_kwargs['training_plan__theme_id'] = theme_id
+            pax_batch_kwargs['batch__training_plan__theme_id'] = theme_id
+            onb_kwargs['training__training_plan__theme_id'] = theme_id
+            tgt_kwargs['training_plan__theme_id'] = theme_id
+        # =========================================================
+
         # ---------------------------------------------------------
         # AGGREGATION ENGINE (Highly Optimized to prevent N+1 queries)
         # ---------------------------------------------------------
 
         # A. BATCH COUNTS (Grouped by District)
         # Excludes DRAFT and ensures is_active=True
-        batch_qs = Batch.objects.filter(is_active=True, financial_year=fy).exclude(status='DRAFT')
+        batch_qs = Batch.objects.filter(is_active=True, financial_year=fy, **batch_kwargs).exclude(status='DRAFT')
         
         b_stats_raw = batch_qs.values('district_id').annotate(
             total=Count('id'),
@@ -55,7 +80,8 @@ class PortalSummaryReportAPIView(APIView):
             return model.objects.filter(
                 is_active=True, 
                 batch__is_active=True, 
-                batch__financial_year=fy
+                batch__financial_year=fy,
+                **pax_batch_kwargs
             ).exclude(batch__status='DRAFT').values('batch__district_id').annotate(
                 total=Count('id'),
                 scheduled=Count('id', filter=Q(batch__status='SCHEDULED')),
@@ -81,7 +107,8 @@ class PortalSummaryReportAPIView(APIView):
             return model.objects.filter(
                 is_active=True, 
                 training__is_active=True, 
-                training__financial_year=fy
+                training__financial_year=fy,
+                **onb_kwargs
             ).values('district_id').annotate(total=Count('id'))
 
         onboarded_map = {}
@@ -92,7 +119,7 @@ class PortalSummaryReportAPIView(APIView):
 
         # D. TARGETS (Grouped by District)
         tgt_qs = TrainingPartnerTargets.objects.filter(
-            is_active=True, financial_year=fy
+            is_active=True, financial_year=fy, **tgt_kwargs
         ).values('district_id').annotate(total_target=Sum('target_count'))
         target_map = {item['district_id']: item['total_target'] for item in tgt_qs}
 
