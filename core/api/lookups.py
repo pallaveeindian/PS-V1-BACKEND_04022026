@@ -35,8 +35,26 @@ CACHE_TTL = getattr(settings, 'CACHE_TTL', 300)
 
 class FlexiblePagination(pagination.PageNumberPagination):
     page_size = 10
+
     page_size_query_param = 'page_size'
     max_page_size = 5000
+
+    def get_page_size(self, request):
+        # Support both ?page_size= and ?limit=
+        page_size = request.query_params.get('page_size')
+        limit = request.query_params.get('limit')
+
+        value = page_size or limit
+
+        if value:
+            try:
+                value = int(value)
+                if value > 0:
+                    return min(value, self.max_page_size)
+            except (TypeError, ValueError):
+                pass
+
+        return self.page_size
 
 
 # --------------------------

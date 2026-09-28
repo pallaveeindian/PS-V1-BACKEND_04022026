@@ -887,9 +887,14 @@ class TRBeneficiary(SoftDeleteMixin):
         related_name='beneficiary_registrations'
     )
     lokos_shg_code = models.CharField(max_length=100, null=True, blank=True)
-    lokos_member_code = models.CharField(max_length=100, db_column='lokos_member_code')
+    lokos_shg_name = models.CharField(max_length=255, null=True, blank=True)
 
+    lokos_member_code = models.CharField(max_length=100, db_column='lokos_member_code')
     member_name = models.CharField(max_length=255)
+
+    relation = models.CharField(max_length=255, null=True, blank=True)
+    relation_name = models.CharField(max_length=255, null=True, blank=True)
+    
     age = models.PositiveIntegerField(null=True, blank=True)
     gender = models.CharField(max_length=50, null=True, blank=True)
     designation = models.CharField(max_length=255, null=True, blank=True)
@@ -1169,8 +1174,11 @@ class Batch(SoftDeleteMixin):
 
             # 5. Determine Logic Path based on Block and Batch Type
             if not self.block:
-                # If No Block is given (State/District Level without specific block)
+                # If No Block is given (District Level without specific block)
                 prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
+            if not self.district:
+                # If No District is given (STATE Level without specific district)
+                prefix = f"{fy_code}-UP-STATE-{tp}-{plan_id}"
             elif self.batch_type == 'COMBINED':
                 # If Combined Batch (Has block but is combined)
                 prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"

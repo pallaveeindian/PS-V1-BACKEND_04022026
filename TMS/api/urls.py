@@ -41,6 +41,11 @@ from TMS.api.mt_availibilityV2.views import *
 
 # Backlog Batch Creator
 from TMS.api.BacklogBatchCreator.views import *
+# Oneshot Batch Attendance api
+from TMS.api.oneShotBatchAttendance.views import *
+
+# Benefeciary Attendance Calculator
+from TMS.api.BenefAttSumm.views import *
 
 router = DefaultRouter()
 
@@ -452,5 +457,10 @@ urlpatterns = [
     # Backlog Batch Creator
     path('backlog-batch-oneshot/', BacklogBatchOneShotAPIView.as_view(), name='batch-backlog-oneshot'),
 
+    # One Shot Batch Attendance Upload
+    path('tms-attendance/oneshot/', OneShotBatchAttendanceAPIView.as_view(), name='batch-attendance-oneshot'),
+
     path('server-time/', tms_views.ServerTimeAPIView.as_view(), name='server-time'),    
+
+    path('recalculate-all-attendance/', RecalculateAllCompletedBatchAttendanceAPIView.as_view(), name='batch-recalculate-all-attendance'),
 ]

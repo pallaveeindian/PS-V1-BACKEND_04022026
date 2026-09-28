@@ -129,50 +129,85 @@ class TrainingRequestParticipantsAPIView(APIView):
             participants = (
                 TRTrainer.objects.filter(training=tr, is_active=True)
                 .select_related(
+                    "trainer",
+                    "trainer__theme",
                     "district",
                     "block",
                 )
             )
-            
-            # Pre-fetch batches for selected participants to avoid N+1 DB queries
-            selected_ids = participants.filter(CB_selected=True).values_list('id', flat=True)
-            
+
+            # Pre-fetch batches for selected participants
+            selected_ids = participants.filter(
+                CB_selected=True
+            ).values_list('id', flat=True)
+
             batch_mappings = BatchTrainer.objects.filter(
                 trainer_id__in=selected_ids,
                 batch__is_active=True
             ).select_related(
-                'batch', 
-                'batch__training_plan', 
+                'trainer',
+                'batch',
+                'batch__training_plan',
                 'batch__training_plan__theme',
-                'batch__district', 
-                'batch__block', 
-                'batch__partner', 
+                'batch__district',
+                'batch__block',
+                'batch__partner',
                 'batch__centre'
             )
-            
-            # Create an O(1) lookup dictionary: trainer_id -> batch object
-            batch_map = {mapping.trainer_id: mapping.batch for mapping in batch_mappings}
+
+            # O(1) lookup: TRTrainer ID -> Batch
+            batch_map = {
+                mapping.trainer_id: mapping.batch
+                for mapping in batch_mappings
+            }
 
             for p in participants:
                 data = {
                     "id": p.id,
                     "full_name": p.full_name,
+
                     "master_trainer_id": p.trainer_id,
+
+                    # Comes from MasterTrainer
+                    "designation": (
+                        p.trainer.designation
+                        if p.trainer
+                        else None
+                    ),
+
+                    # Comes from MasterTrainer -> TrainingTheme
+                    "theme_name": (
+                        p.trainer.theme.theme_name
+                        if p.trainer and p.trainer.theme
+                        else None
+                    ),
+
                     "mobile_no": p.mobile_no,
                     "aadhaar_no": p.aadhaar_no,
+
                     "district_id": p.district_id,
                     "district_name_en": (
-                        p.district.district_name_en if p.district else None
+                        p.district.district_name_en
+                        if p.district else None
                     ),
+
                     "block_id": p.block_id,
                     "block_name_en": (
-                        p.block.block_name_en if p.block else None
+                        p.block.block_name_en
+                        if p.block else None
                     ),
+
                     "CB_selected": p.CB_selected,
                     "attended": p.attended,
                     "is_replaced": p.is_replaced,
-                    "batch_details": serialize_batch(batch_map.get(p.id)) if p.CB_selected else None
+
+                    "batch_details": (
+                        serialize_batch(batch_map.get(p.id))
+                        if p.CB_selected
+                        else None
+                    )
                 }
+
                 results.append(data)
 
         # ==========================================
