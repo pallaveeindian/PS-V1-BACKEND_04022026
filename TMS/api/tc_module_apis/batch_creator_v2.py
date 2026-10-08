@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -11,8 +11,8 @@ from TMS.models import *
 class CreateOneShotBatchAPIView(APIView):
     """
     Creates a Batch and maps participants in a single atomic transaction.
-    Prevents double-booking via strict CB_selected checks.
-    Updates parent Training Requests to PENDING if fully exhausted.
+    STRICTLY checks past successful completion history and active date overlaps 
+    BEFORE initiating the transaction.
     """
     permission_classes = [IsAuthenticated]
 
@@ -23,13 +23,11 @@ class CreateOneShotBatchAPIView(APIView):
         batch_type = data.get("batch_type", "").upper()
         district_tp_user_id = data.get("district_tp_user_id")
         
-        # SURGICAL FIX: Allow STAFF
         if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
         if batch_type not in ["SEPARATE", "COMBINED"]:
             return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
             
-        # SURGICAL FIX: Enforce STAFF constraints
         if participant_type == "STAFF" and batch_type != "SEPARATE":
             return Response({"error": "STAFF batches must be SEPARATE batches."}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -40,17 +38,15 @@ class CreateOneShotBatchAPIView(APIView):
 
         # Flatten participant IDs and construct mapping structure
         all_participant_ids = []
-        parsed_mappings = [] # list of dicts: {'p_id': int, 'block_id': int}
+        parsed_mappings = [] 
         
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            # SURGICAL FIX: Exclude STAFF and TRAINER from block_id requirement
             if not p_ids or (not block_id and participant_type not in ["TRAINER", "STAFF"]):
                 return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is required unless participant_type is TRAINER or STAFF."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
             
-            # Force block_id to None if STAFF
             final_block_id = None if participant_type == "STAFF" else block_id
             
             for pid in all_participant_ids:
@@ -72,7 +68,6 @@ class CreateOneShotBatchAPIView(APIView):
         if not all_participant_ids:
             return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # SURGICAL FIX: Select Model Class including STAFF
         if participant_type == "BENEFICIARY":
             ParticipantModel = TRBeneficiary
         elif participant_type == "TRAINER":
@@ -80,50 +75,191 @@ class CreateOneShotBatchAPIView(APIView):
         else:
             ParticipantModel = TRStaff
 
+        # =====================================================================
+        # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK
+        # =====================================================================
+        new_start = data.get("start_date")
+        new_end = data.get("end_date")
+        fin_year = data.get("financial_year")
+        plan_id = data.get("training_plan_id")
+        active_statuses = ['DRAFT', 'PENDING', 'REJECTED', 'ONGOING']
+        engaged_rows = []
+
+        if participant_type == "BENEFICIARY":
+            participants = TRBeneficiary.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                is_engaged = False
+                engage_reason = ""
+                
+                # Check 1: Already successful in this plan + year
+                if fin_year and plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exists()
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date overlap in active batches
+                if not is_engaged and new_start and new_end:
+                    overlap = BatchBeneficiary.objects.filter(
+                        is_active=True,
+                        beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        beneficiary__lokos_member_code=p.lokos_member_code,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exists()
+                    if overlap:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.member_name,
+                        "lokos_shg_code": p.lokos_shg_code,
+                        "lokos_member_code": p.lokos_member_code,
+                        "reason": engage_reason
+                    })
+
+        elif participant_type == "TRAINER":
+            participants = TRTrainer.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                if not p.trainer or not p.trainer.mobile_no:
+                    continue
+                mobile = p.trainer.mobile_no
+                is_engaged = False
+                engage_reason = ""
+
+                # Check 1: Already successful
+                if fin_year and plan_id:
+                    done_tr = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exists()
+                    done_mt = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_master_trainer__master_trainer__mobile_no=mobile,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exists()
+                    
+                    if done_tr or done_mt:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date Overlap
+                if not is_engaged and new_start and new_end:
+                    overlap_tr = BatchTrainer.objects.filter(
+                        is_active=True,
+                        trainer__trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exists()
+                    overlap_mt = BatchMasterTrainer.objects.filter(
+                        is_active=True,
+                        master_trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exists()
+
+                    if overlap_tr or overlap_mt:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.full_name,
+                        "mobile_no": mobile,
+                        "reason": engage_reason
+                    })
+
+        elif participant_type == "STAFF":
+            participants = TRStaff.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                if not p.staff or not p.staff.employee_id:
+                    continue
+                emp_id = p.staff.employee_id
+                is_engaged = False
+                engage_reason = ""
+
+                # Check 1: Already successful
+                if fin_year and plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exists()
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date Overlap
+                if not is_engaged and new_start and new_end:
+                    overlap = BatchStaff.objects.filter(
+                        is_active=True,
+                        staff__staff__employee_id=emp_id,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exists()
+                    if overlap:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.full_name,
+                        "employee_id": emp_id,
+                        "reason": engage_reason
+                    })
+
+        # Halt immediately if ANY participant fails validation
+        if engaged_rows:
+            return Response({
+                "error": "One or more participants are already engaged or have successfully completed this training.",
+                "engaged_participants": engaged_rows
+            }, status=status.HTTP_409_CONFLICT)
+        # =====================================================================
+
         # BEGIN ATOMIC TRANSACTION
         try:
             with transaction.atomic():
                 
-                # ==========================================
-                # 1. Resolve Partner (SURGICAL FIX APPLIED)
-                # ==========================================
+                # 1. Resolve Partner
                 try:
-                    # Try resolving as District TP first
                     dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
                     partner = dtp.partner
                 except DistrictTP.DoesNotExist:
                     try:
-                        # Fallback to direct Training Partner resolution for State-level TPs
                         partner = TrainingPartner.objects.get(master_user_id=district_tp_user_id)
                     except TrainingPartner.DoesNotExist:
                         raise ValueError(f"Neither DistrictTP nor TrainingPartner found for user ID: {district_tp_user_id}")
-
-                # 2. DOUBLE-BOOKING PREVENTION (Strict Check)
-                already_selected = ParticipantModel.objects.filter(
-                    id__in=all_participant_ids, 
-                    CB_selected=True
-                ).select_related('training', 'block', 'district')
-                
-                if already_selected.exists():
-                    error_details = []
-                    for p in already_selected:
-                        name = getattr(p, 'member_name', getattr(p, 'full_name', 'Unknown'))
-                        tr_id = p.training_id
-                        b_name = p.block.block_name_en if p.block else "Unknown Block"
-                        d_name = p.district.district_name_en if p.district else "Unknown District"
-                        error_details.append(f"Participant: {name} (ID: {p.id}) is already selected in Training Request #{tr_id} ({b_name}, {d_name})")
-                    
-                    return Response({
-                        "error": "Double-booking detected. Some participants are already assigned to batches.",
-                        "details": error_details
-                    }, status=status.HTTP_409_CONFLICT)
 
                 # Fetch all valid participants from DB to ensure they exist
                 participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
                 if participants_db.count() != len(all_participant_ids):
                     raise ValueError("One or more participant IDs provided do not exist in the database.")
 
-                # --- SURGICAL ADDITION: Prevent Duplicate Candidates in a Single Batch ---
+                # Prevent Duplicate Candidates in a Single Batch
                 if participant_type == "BENEFICIARY":
                     identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
                                        .exclude(lokos_member_code__in=[None, ""])
@@ -141,11 +277,9 @@ class CreateOneShotBatchAPIView(APIView):
 
                 if len(identifiers) != len(set(identifiers)):
                     raise ValueError(f"Duplicate Candidate Detected: A {participant_type.capitalize()} is repeated in this batch based on their unique identifier.")
-                # --- END SURGICAL ADDITION ---
 
                 p_db_map = {p.id: p for p in participants_db}
                 
-                # SURGICAL FIX: Ensure block_id is strictly None for STAFF
                 batch_block_id = data.get("block_id") if batch_type == "SEPARATE" else None
                 if participant_type == "STAFF":
                     batch_block_id = None
@@ -168,48 +302,31 @@ class CreateOneShotBatchAPIView(APIView):
                 )
 
                 touched_tr_ids = set()
-                combined_block_counts = {} # Format: {block_id: count}
+                combined_block_counts = {}
 
                 # 4. Create Batch Participants & Traceability Mappings
                 for mapping in parsed_mappings:
                     p_id = mapping['p_id']
                     p_obj = p_db_map[p_id]
                     
-                    # Resolve TR ID directly and safely from the validated database participant object!
                     tr_id = p_obj.training_id
                     touched_tr_ids.add(tr_id)
                     
-                    # Track block counts for COMBINED
                     if batch_type == "COMBINED":
                         b_id = mapping['block_id']
                         combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
 
-                    # SURGICAL FIX: Branch mapping creation for STAFF
                     if participant_type == "BENEFICIARY":
-                        BatchBeneficiary.objects.create(
-                            batch=batch, 
-                            beneficiary=p_obj, 
-                            training_request_id=tr_id
-                        )
+                        BatchBeneficiary.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
                     elif participant_type == "TRAINER":
-                        BatchTrainer.objects.create(
-                            batch=batch, 
-                            trainer=p_obj, 
-                            training_request_id=tr_id
-                        )
+                        BatchTrainer.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id)
                     elif participant_type == "STAFF":
-                        BatchStaff.objects.create(
-                            batch=batch,
-                            staff=p_obj,
-                            training_request_id=tr_id
-                        )
+                        BatchStaff.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id)
 
                 # 5. Create BatchBlockCoverage for COMBINED batches
                 if batch_type == "COMBINED":
-                    # SURGICAL FIX: Re-scan all participants to ensure NO blocks are missed and counts are perfectly accurate
                     true_block_counts = {}
                     for p_obj in participants_db:
-                        # Use participant's block, falling back to their Training Request's block
                         blk_id = p_obj.block_id or getattr(p_obj.training, 'block_id', None)
                         if blk_id:
                             true_block_counts[blk_id] = true_block_counts.get(blk_id, 0) + 1
@@ -226,16 +343,12 @@ class CreateOneShotBatchAPIView(APIView):
 
                 # 7. Evaluate and Update Training Request Statuses
                 for tr_id in touched_tr_ids:
-                    # Count total participants associated with this Training Request
                     total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
-                    # Count how many of them have been selected
                     selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
                     
-                    # If all participants in the request are now selected, mark as PENDING (or COMPLETED logically)
                     if total_p > 0 and total_p == selected_p:
                         TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
 
-            # Transaction successful
             return Response({
                 "message": f"Successfully created {batch_type} Batch.",
                 "batch_id": batch.id,
@@ -248,11 +361,12 @@ class CreateOneShotBatchAPIView(APIView):
         except Exception as e:
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class OneShotUpdateBatchAPIView(APIView):
     """
     Updates a Batch and its participant mappings atomically.
-    Handles adding/removing participants, updating CB_selected, 
-    re-evaluating Training Request statuses, and changing batch_type.
+    STRICTLY checks past successful completion history and active date overlaps 
+    BEFORE initiating the transaction, excluding the current batch being updated.
     """
     permission_classes = [IsAuthenticated]
 
@@ -263,12 +377,10 @@ class OneShotUpdateBatchAPIView(APIView):
         batch_type = data.get("batch_type", "").upper()
         district_tp_user_id = data.get("district_tp_user_id")
         
-        # SURGICAL FIX: Allow STAFF
         if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
         if batch_type not in ["SEPARATE", "COMBINED"]:
             return Response({"error": "Invalid batch_type."}, status=status.HTTP_400_BAD_REQUEST)
-        # SURGICAL FIX: Enforce STAFF constraints
         if participant_type == "STAFF" and batch_type != "SEPARATE":
             return Response({"error": "STAFF batches must be SEPARATE batches."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -279,14 +391,12 @@ class OneShotUpdateBatchAPIView(APIView):
 
         batch = get_object_or_404(Batch, id=batch_id)
 
-        # Flatten participant IDs and construct mapping structure
         all_participant_ids = []
         parsed_mappings = []
         
         if batch_type == "SEPARATE":
             p_ids = data.get("participant_ids", [])
             block_id = data.get("block_id")
-            # SURGICAL FIX: Exclude STAFF and TRAINER from block requirement
             if not p_ids or (not block_id and participant_type not in ["TRAINER", "STAFF"]):
                 return Response({"error": "SEPARATE batch requires 'participant_ids'. 'block_id' is required unless participant_type is TRAINER or STAFF."}, status=status.HTTP_400_BAD_REQUEST)
             all_participant_ids = [int(pid) for pid in p_ids]
@@ -313,7 +423,6 @@ class OneShotUpdateBatchAPIView(APIView):
         if not all_participant_ids:
             return Response({"error": "No participants provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # SURGICAL FIX: Dynamic routing based on 3 participant types
         if participant_type == "BENEFICIARY":
             ParticipantModel = TRBeneficiary
             MappingModel = BatchBeneficiary
@@ -327,11 +436,178 @@ class OneShotUpdateBatchAPIView(APIView):
             MappingModel = BatchStaff
             mapping_filter_kwarg = "staff_id"
 
+        # =====================================================================
+        # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK (EXCLUDING CURRENT BATCH)
+        # =====================================================================
+        new_start = data.get("start_date")
+        new_end = data.get("end_date")
+        fin_year = data.get("financial_year")
+        plan_id = data.get("training_plan_id")
+        active_statuses = ['DRAFT', 'PENDING', 'REJECTED', 'ONGOING']
+        engaged_rows = []
+
+        if participant_type == "BENEFICIARY":
+            participants = TRBeneficiary.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                is_engaged = False
+                engage_reason = ""
+                
+                # Check 1: Already successful in this plan + year (Exclude current batch)
+                if fin_year and plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date overlap in active batches (Exclude current batch)
+                if not is_engaged and new_start and new_end:
+                    overlap = BatchBeneficiary.objects.filter(
+                        is_active=True,
+                        beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        beneficiary__lokos_member_code=p.lokos_member_code,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    if overlap:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.member_name,
+                        "lokos_shg_code": p.lokos_shg_code,
+                        "lokos_member_code": p.lokos_member_code,
+                        "reason": engage_reason
+                    })
+
+        elif participant_type == "TRAINER":
+            participants = TRTrainer.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                if not p.trainer or not p.trainer.mobile_no:
+                    continue
+                mobile = p.trainer.mobile_no
+                is_engaged = False
+                engage_reason = ""
+
+                # Check 1: Already successful
+                if fin_year and plan_id:
+                    done_tr = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    done_mt = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_master_trainer__master_trainer__mobile_no=mobile,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    if done_tr or done_mt:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date Overlap
+                if not is_engaged and new_start and new_end:
+                    overlap_tr = BatchTrainer.objects.filter(
+                        is_active=True,
+                        trainer__trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exclude(batch_id=batch_id).exists()
+
+                    overlap_mt = BatchMasterTrainer.objects.filter(
+                        is_active=True,
+                        master_trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exclude(batch_id=batch_id).exists()
+
+                    if overlap_tr or overlap_mt:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.full_name,
+                        "mobile_no": mobile,
+                        "reason": engage_reason
+                    })
+
+        elif participant_type == "STAFF":
+            participants = TRStaff.objects.filter(id__in=all_participant_ids, is_active=True)
+            for p in participants:
+                if not p.staff or not p.staff.employee_id:
+                    continue
+                emp_id = p.staff.employee_id
+                is_engaged = False
+                engage_reason = ""
+
+                # Check 1: Already successful
+                if fin_year and plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__training_plan_id=plan_id,
+                        training_request__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # Check 2: Date Overlap
+                if not is_engaged and new_start and new_end:
+                    overlap = BatchStaff.objects.filter(
+                        is_active=True,
+                        staff__staff__employee_id=emp_id,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__start_date__lte=new_end,
+                        batch__end_date__gte=new_start
+                    ).exclude(batch_id=batch_id).exists()
+                    
+                    if overlap:
+                        is_engaged = True
+                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+
+                if is_engaged:
+                    engaged_rows.append({
+                        "id": p.id,
+                        "name": p.full_name,
+                        "employee_id": emp_id,
+                        "reason": engage_reason
+                    })
+
+        if engaged_rows:
+            return Response({
+                "error": "One or more participants are already engaged or have successfully completed this training.",
+                "engaged_participants": engaged_rows
+            }, status=status.HTTP_409_CONFLICT)
+        # =====================================================================
+
         try:
             with transaction.atomic():
-                # ==========================================
-                # 1. Resolve Partner (SURGICAL FIX APPLIED)
-                # ==========================================
                 try:
                     dtp = DistrictTP.objects.select_related('partner').get(master_user_id=district_tp_user_id)
                     partner = dtp.partner
@@ -349,31 +625,12 @@ class OneShotUpdateBatchAPIView(APIView):
                 removed_ids = old_p_ids - new_p_ids_set
                 added_ids = new_p_ids_set - old_p_ids
 
-                # 3. DOUBLE-BOOKING PREVENTION (Only check newly added participants)
-                if added_ids:
-                    already_selected = ParticipantModel.objects.filter(
-                        id__in=added_ids, 
-                        CB_selected=True
-                    ).select_related('training', 'block', 'district')
-                    
-                    if already_selected.exists():
-                        error_details = []
-                        for p in already_selected:
-                            name = getattr(p, 'member_name', getattr(p, 'full_name', 'Unknown'))
-                            tr_id = p.training_id
-                            b_name = p.block.block_name_en if p.block else "Unknown Block"
-                            error_details.append(f"Participant: {name} (ID: {p.id}) is already assigned to Training Request #{tr_id} ({b_name})")
-                        return Response({
-                            "error": "Double-booking detected on newly added participants.",
-                            "details": error_details
-                        }, status=status.HTTP_409_CONFLICT)
-
                 # Fetch all valid participants to ensure existence
                 participants_db = ParticipantModel.objects.filter(id__in=all_participant_ids)
                 if participants_db.count() != len(all_participant_ids):
                     raise ValueError("One or more participant IDs provided do not exist in the database.")
 
-                # --- SURGICAL ADDITION: Prevent Duplicate Candidates in a Single Batch ---
+                # Prevent Duplicate Candidates in a Single Batch
                 if participant_type == "BENEFICIARY":
                     identifiers = list(ParticipantModel.objects.filter(id__in=all_participant_ids)
                                        .exclude(lokos_member_code__in=[None, ""])
@@ -391,24 +648,19 @@ class OneShotUpdateBatchAPIView(APIView):
 
                 if len(identifiers) != len(set(identifiers)):
                     raise ValueError(f"Duplicate Candidate Detected: A {participant_type.capitalize()} is repeated in this batch based on their unique identifier.")
-                # --- END SURGICAL ADDITION ---
 
                 p_db_map = {p.id: p for p in participants_db}
-
                 touched_tr_ids = set()
 
                 # 4. Handle REMOVED Participants
                 if removed_ids:
-                    # Capture their TR IDs before deleting mappings
                     removed_mappings = existing_mappings.filter(**{f"{mapping_filter_kwarg}__in": removed_ids})
                     tr_ids_to_revert = set(removed_mappings.values_list("training_request_id", flat=True))
                     touched_tr_ids.update(tr_ids_to_revert)
                     
-                    # Delete mappings and revert CB_selected
                     removed_mappings.delete()
                     ParticipantModel.objects.filter(id__in=removed_ids).update(CB_selected=False)
 
-                # SURGICAL FIX: Nullify block if STAFF
                 batch_block_id = data.get("block_id") if batch_type == "SEPARATE" else None
                 if participant_type == "STAFF":
                     batch_block_id = None
@@ -430,21 +682,17 @@ class OneShotUpdateBatchAPIView(APIView):
                 batch.save()
 
                 # 6. Rebuild Mappings & Coverages
-                # Clear old coverages first
                 BatchBlockCoverage.objects.filter(batch=batch).delete()
-                
                 combined_block_counts = {}
 
                 for mapping in parsed_mappings:
                     p_id = mapping['p_id']
                     
-                    # If this is a newly added participant, create the row
                     if p_id in added_ids:
                         p_obj = p_db_map[p_id]
                         tr_id = mapping['tr_id'] or p_obj.training_id
                         touched_tr_ids.add(tr_id)
                         
-                        # SURGICAL FIX: Create appropriate mapping for STAFF
                         if participant_type == "BENEFICIARY":
                             MappingModel.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
                         elif participant_type == "TRAINER":
@@ -452,12 +700,10 @@ class OneShotUpdateBatchAPIView(APIView):
                         elif participant_type == "STAFF":
                             MappingModel.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id)
                     else:
-                        # Existing participant, just trace their TR for re-evaluation if needed
                         p_obj = p_db_map[p_id]
                         tr_id = mapping['tr_id'] or p_obj.training_id
                         touched_tr_ids.add(tr_id)
 
-                    # Track block coverage regardless of whether they were newly added or existing
                     if batch_type == "COMBINED":
                         b_id = mapping['block_id']
                         combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
@@ -478,7 +724,6 @@ class OneShotUpdateBatchAPIView(APIView):
                     total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
                     selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
                     
-                    # If all are selected -> COMPLETED. If not -> revert to BATCHING.
                     if total_p > 0 and total_p == selected_p:
                         TrainingRequest.objects.filter(id=tr_id).update(status="COMPLETED")
                     else:
@@ -494,6 +739,7 @@ class OneShotUpdateBatchAPIView(APIView):
             return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class OneShotDeleteBatchAPIView(APIView):
     """

@@ -2624,31 +2624,33 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
 # Check if participants are engaged in ongoing trainings (bulk API for TP onboarding)
 class BulkTrainingEngagementCheckAPI(APIView):
     """
-    Bulk check if participants are engaged in ongoing trainings.
+    Bulk check if participants have ALREADY successfully completed a specific training plan 
+    in the given financial year.
 
     Input:
     {
         "participant_type": "BENEFICIARY" | "TRAINER" | "STAFF",
-        "financial_year": "2023-24",  # Optional but recommended
+        "financial_year": "2023-24",
+        "training_plan_id": 15, # NEW: Required to check if they took THIS specific training
         "ids": ["id1", "id2", ...]
     }
 
     Output:
     {
         "eligible_ids": [...],
-        "engaged_ids": [...]
+        "engaged_ids": [...] # IDs of participants who already completed this training
     }
     """
 
     def post(self, request):
         participant_type = request.data.get("participant_type")
         financial_year = request.data.get("financial_year")
+        training_plan_id = request.data.get("training_plan_id")
         ids = request.data.get("ids", [])
 
-        # SURGICAL FIX: Allow STAFF
         if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
             return Response(
-                {"error": "Invalid participant_type"},
+                {"error": "Invalid participant_type. Must be BENEFICIARY, TRAINER, or STAFF."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -2658,120 +2660,79 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if not training_plan_id:
+            return Response(
+                {"error": "training_plan_id is required to verify past completion history."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         engaged_ids = set()
 
         # -------------------------------
         # BENEFICIARY CASE
         # -------------------------------
         if participant_type == "BENEFICIARY":
-            # Rule 1: Check TRBeneficiary (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
-            tr_bens_qs = tms_models.TRBeneficiary.objects.exclude(
-                training__status__in=["COMPLETED", "REJECTED"]
-            ).filter(
-                lokos_member_code__in=ids,
-                training__is_active=True
+            # Search for Successful Attendance Summaries for these members, for this specific plan & year
+            completed_summaries = tms_models.BeneficiaryAttendanceSummary.objects.filter(
+                is_active=True,
+                is_successful=True,
+                batch_beneficiary__isnull=False,
+                batch_beneficiary__beneficiary__lokos_member_code__in=ids,
+                training_request__training_plan_id=training_plan_id
             )
             
-            # Apply strict Financial Year filter if provided
             if financial_year:
-                tr_bens_qs = tr_bens_qs.filter(training__financial_year=financial_year, is_active=True)
+                completed_summaries = completed_summaries.filter(training_request__financial_year=financial_year)
                 
-            engaged_tr_bens = tr_bens_qs.values_list("lokos_member_code", flat=True)
-
-            # Rule 2: Check BatchBeneficiary (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
-            batch_bens_qs = tms_models.BatchBeneficiary.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
-            ).filter(
-                beneficiary__lokos_member_code__in=ids,
-                batch__is_active=True
-            )
-            
-            # Apply strict Financial Year filter if provided
-            if financial_year:
-                batch_bens_qs = batch_bens_qs.filter(batch__financial_year=financial_year, is_active=True)
-                
-            engaged_batch_bens = batch_bens_qs.values_list("beneficiary__lokos_member_code", flat=True)
-
-            engaged_ids = set(map(str, engaged_tr_bens)).union(set(map(str, engaged_batch_bens)))
+            engaged_ids = set(map(str, completed_summaries.values_list("batch_beneficiary__beneficiary__lokos_member_code", flat=True)))
 
         # -------------------------------
         # TRAINER CASE
         # -------------------------------
         elif participant_type == "TRAINER":
-            # Rule 3: Check TRTrainer (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
-            tr_trainers_qs = tms_models.TRTrainer.objects.exclude(
-                training__status__in=["COMPLETED", "REJECTED"]
-            ).filter(
-                trainer_id__in=ids,
-                training__is_active=True
+            # Trainers can be tracked via batch_trainer or batch_master_trainer depending on creation flow
+            completed_as_trainer = tms_models.BeneficiaryAttendanceSummary.objects.filter(
+                is_active=True,
+                is_successful=True,
+                batch_trainer__isnull=False,
+                batch_trainer__trainer__trainer_id__in=ids,
+                training_request__training_plan_id=training_plan_id
+            )
+            
+            completed_as_master = tms_models.BeneficiaryAttendanceSummary.objects.filter(
+                is_active=True,
+                is_successful=True,
+                batch_master_trainer__isnull=False,
+                batch_master_trainer__master_trainer_id__in=ids,
+                training_request__training_plan_id=training_plan_id
             )
             
             if financial_year:
-                tr_trainers_qs = tr_trainers_qs.filter(training__financial_year=financial_year, is_active=True)
-                
-            engaged_tr_trainers = tr_trainers_qs.values_list("trainer_id", flat=True)
+                completed_as_trainer = completed_as_trainer.filter(training_request__financial_year=financial_year)
+                completed_as_master = completed_as_master.filter(training_request__financial_year=financial_year)
 
-            # Rule 4: Check BatchMasterTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
-            batch_master_trainers_qs = tms_models.BatchMasterTrainer.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
-            ).filter(
-                master_trainer_id__in=ids,
-                batch__is_active=True
-            )
+            trainer_ids = set(map(str, completed_as_trainer.values_list("batch_trainer__trainer__trainer_id", flat=True)))
+            master_ids = set(map(str, completed_as_master.values_list("batch_master_trainer__master_trainer_id", flat=True)))
             
-            if financial_year:
-                batch_master_trainers_qs = batch_master_trainers_qs.filter(batch__financial_year=financial_year, is_active=True)
-                
-            engaged_batch_master_trainers = batch_master_trainers_qs.values_list("master_trainer_id", flat=True)
-
-            # Rule 5: Check BatchTrainer (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
-            batch_trainers_qs = tms_models.BatchTrainer.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
-            ).filter(
-                trainer__trainer_id__in=ids,
-                batch__is_active=True
-            )
-            
-            if financial_year:
-                batch_trainers_qs = batch_trainers_qs.filter(batch__financial_year=financial_year)
-                
-            engaged_batch_trainers = batch_trainers_qs.values_list("trainer__trainer_id", flat=True)
-
-            engaged_ids = set(map(str, engaged_tr_trainers)) \
-                .union(set(map(str, engaged_batch_master_trainers))) \
-                .union(set(map(str, engaged_batch_trainers)))
+            engaged_ids = trainer_ids.union(master_ids)
 
         # -------------------------------
-        # STAFF CASE (SURGICAL ADDITION)
+        # STAFF CASE 
         # -------------------------------
         elif participant_type == "STAFF":
-            # Rule 6: Check TRStaff (Engaged if TrainingRequest is NOT COMPLETED/REJECTED)
-            tr_staff_qs = tms_models.TRStaff.objects.exclude(
-                training__status__in=["COMPLETED", "REJECTED"]
-            ).filter(
-                staff_id__in=ids,
-                training__is_active=True
+            completed_summaries = tms_models.BeneficiaryAttendanceSummary.objects.filter(
+                is_active=True,
+                is_successful=True,
+                batch_staff__isnull=False,
+                batch_staff__staff__staff_id__in=ids,  # Or batch_staff__staff_id__in depending on your exact FK setup
+                training_request__training_plan_id=training_plan_id
             )
             
             if financial_year:
-                tr_staff_qs = tr_staff_qs.filter(training__financial_year=financial_year, is_active=True)
+                completed_summaries = completed_summaries.filter(training_request__financial_year=financial_year)
                 
-            engaged_tr_staff = tr_staff_qs.values_list("staff_id", flat=True)
-
-            # Rule 7: Check BatchStaff (Engaged if Batch is NOT COMPLETED/CLOSED/REVIEW)
-            batch_staff_qs = tms_models.BatchStaff.objects.exclude(
-                batch__status__in=["COMPLETED", "CLOSED", "REVIEW"]
-            ).filter(
-                staff__staff_id__in=ids,
-                batch__is_active=True
-            )
-            
-            if financial_year:
-                batch_staff_qs = batch_staff_qs.filter(batch__financial_year=financial_year, is_active=True)
-                
-            engaged_batch_staff = batch_staff_qs.values_list("staff__staff_id", flat=True)
-
-            engaged_ids = set(map(str, engaged_tr_staff)).union(set(map(str, engaged_batch_staff)))
+            # Note: Assuming TRStaff maps to StaffProfile. If the frontend sends the StaffProfile DB ID, map it correctly.
+            engaged_ids = set(map(str, completed_summaries.values_list("batch_staff__staff_id", flat=True)))
 
         # -------------------------------
         # FINAL RESPONSE

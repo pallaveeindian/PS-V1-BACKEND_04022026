@@ -29,28 +29,7 @@ class CheckTrainerAvailabilityView(APIView):
         req_end_date = request.query_params.get('end_date')
 
         # ---------------------------------------------------------
-        # CONDITION 1: Check TRTrainer (Training Request Phase)
-        # ---------------------------------------------------------
-        # busy_tr = TRTrainer.objects.filter(
-        #     trainer=trainer,
-        #     training__status='BATCHING',
-        #     is_active=True
-        # ).select_related('training', 'training__district', 'training__block').first()
-
-        # if busy_tr:
-        #     tr = busy_tr.training
-        #     return Response({
-        #         "is_available": False,
-        #         "busy_type": "TRAINING_REQUEST",
-        #         "busy_reason": "Trainer is currently tied to a Training Request in the BATCHING phase.",
-        #         "training_request_id": tr.id,
-        #         "district_name_en": tr.district.district_name_en if tr.district else None,
-        #         "block_name_en": tr.block.block_name_en if tr.block else None,
-        #         "busy_context": AvailabilityTrainingRequestSerializer(tr).data
-        #     }, status=status.HTTP_200_OK)
-
-        # ---------------------------------------------------------
-        # CONDITION 2: Check Active Batches (Trainee or Lead Trainer)
+        # CONDITION 1: Check Active Batches (Trainee or Lead Trainer)
         # ---------------------------------------------------------
         # If batch is COMPLETED, REVIEW, CLOSED -> Trainer is FREE.
         # Otherwise (ONGOING, SCHEDULED) -> Check dates for overlap.

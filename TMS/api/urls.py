@@ -47,6 +47,9 @@ from TMS.api.oneShotBatchAttendance.views import *
 # Benefeciary Attendance Calculator
 from TMS.api.BenefAttSumm.views import *
 
+# BULK TR Creator
+from TMS.api.bulkTRcreate.views import CreateBulkTrainingRequestOneShotAPIView
+
 router = DefaultRouter()
 
 # Masters
@@ -463,4 +466,11 @@ urlpatterns = [
     path('server-time/', tms_views.ServerTimeAPIView.as_view(), name='server-time'),    
 
     path('recalculate-all-attendance/', RecalculateAllCompletedBatchAttendanceAPIView.as_view(), name='batch-recalculate-all-attendance'),
+
+    # Bulk Training Request Creation API
+    path(
+            'training-requests/create-oneshot/',
+            CreateBulkTrainingRequestOneShotAPIView.as_view(),
+            name='training-requests-create-oneshot'
+        ),    
 ]
