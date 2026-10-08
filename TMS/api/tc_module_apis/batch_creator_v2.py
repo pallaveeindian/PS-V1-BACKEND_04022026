@@ -75,14 +75,15 @@ class CreateOneShotBatchAPIView(APIView):
         else:
             ParticipantModel = TRStaff
 
-        # =====================================================================
+		# =====================================================================
         # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK
         # =====================================================================
         new_start = data.get("start_date")
         new_end = data.get("end_date")
         fin_year = data.get("financial_year")
         plan_id = data.get("training_plan_id")
-        active_statuses = ['DRAFT', 'PENDING', 'REJECTED', 'ONGOING']
+        
+        active_statuses = ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING', 'REJECTED']
         engaged_rows = []
 
         if participant_type == "BENEFICIARY":
@@ -90,6 +91,7 @@ class CreateOneShotBatchAPIView(APIView):
             for p in participants:
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
                 
                 # Check 1: Already successful in this plan + year
                 if fin_year and plan_id:
@@ -107,7 +109,8 @@ class CreateOneShotBatchAPIView(APIView):
 
                 # Check 2: Date overlap in active batches
                 if not is_engaged and new_start and new_end:
-                    overlap = BatchBeneficiary.objects.filter(
+                    # SURGICAL FIX 2: Removed .exclude() (not needed in create) & fixed .values() keys
+                    overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
                         beneficiary__lokos_shg_code=p.lokos_shg_code,
                         beneficiary__lokos_member_code=p.lokos_member_code,
@@ -115,19 +118,24 @@ class CreateOneShotBatchAPIView(APIView):
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exists()
-                    if overlap:
+                    ).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = f"Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.member_name,
                         "lokos_shg_code": p.lokos_shg_code,
                         "lokos_member_code": p.lokos_member_code,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         elif participant_type == "TRAINER":
             participants = TRTrainer.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -137,6 +145,7 @@ class CreateOneShotBatchAPIView(APIView):
                 mobile = p.trainer.mobile_no
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
 
                 # Check 1: Already successful
                 if fin_year and plan_id:
@@ -159,34 +168,40 @@ class CreateOneShotBatchAPIView(APIView):
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
-                    overlap_tr = BatchTrainer.objects.filter(
+                    overlap_data = BatchTrainer.objects.filter(
                         is_active=True,
                         trainer__trainer__mobile_no=mobile,
                         batch__is_active=True,
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exists()
-                    overlap_mt = BatchMasterTrainer.objects.filter(
-                        is_active=True,
-                        master_trainer__mobile_no=mobile,
-                        batch__is_active=True,
-                        batch__status__in=active_statuses,
-                        batch__start_date__lte=new_end,
-                        batch__end_date__gte=new_start
-                    ).exists()
+                    ).values("batch_id", "batch__code").first()
 
-                    if overlap_tr or overlap_mt:
+                    if not overlap_data:
+                        overlap_data = BatchMasterTrainer.objects.filter(
+                            is_active=True,
+                            master_trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__status__in=active_statuses,
+                            batch__start_date__lte=new_end,
+                            batch__end_date__gte=new_start
+                        ).values("batch_id", "batch__code").first()
+
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.full_name,
                         "mobile_no": mobile,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         elif participant_type == "STAFF":
             participants = TRStaff.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -196,6 +211,7 @@ class CreateOneShotBatchAPIView(APIView):
                 emp_id = p.staff.employee_id
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
 
                 # Check 1: Already successful
                 if fin_year and plan_id:
@@ -212,25 +228,30 @@ class CreateOneShotBatchAPIView(APIView):
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
-                    overlap = BatchStaff.objects.filter(
+                    overlap_data = BatchStaff.objects.filter(
                         is_active=True,
                         staff__staff__employee_id=emp_id,
                         batch__is_active=True,
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exists()
-                    if overlap:
+                    ).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.full_name,
                         "employee_id": emp_id,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         # Halt immediately if ANY participant fails validation
         if engaged_rows:
@@ -436,14 +457,15 @@ class OneShotUpdateBatchAPIView(APIView):
             MappingModel = BatchStaff
             mapping_filter_kwarg = "staff_id"
 
-        # =====================================================================
+		# =====================================================================
         # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK (EXCLUDING CURRENT BATCH)
         # =====================================================================
         new_start = data.get("start_date")
         new_end = data.get("end_date")
         fin_year = data.get("financial_year")
         plan_id = data.get("training_plan_id")
-        active_statuses = ['DRAFT', 'PENDING', 'REJECTED', 'ONGOING']
+        
+        active_statuses = ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING', 'REJECTED']
         engaged_rows = []
 
         if participant_type == "BENEFICIARY":
@@ -451,6 +473,7 @@ class OneShotUpdateBatchAPIView(APIView):
             for p in participants:
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
                 
                 # Check 1: Already successful in this plan + year (Exclude current batch)
                 if fin_year and plan_id:
@@ -469,7 +492,8 @@ class OneShotUpdateBatchAPIView(APIView):
 
                 # Check 2: Date overlap in active batches (Exclude current batch)
                 if not is_engaged and new_start and new_end:
-                    overlap = BatchBeneficiary.objects.filter(
+                    # SURGICAL FIX 3: Properly mapped .exclude(batch_id=batch_id) & .values() keys
+                    overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
                         beneficiary__lokos_shg_code=p.lokos_shg_code,
                         beneficiary__lokos_member_code=p.lokos_member_code,
@@ -477,20 +501,24 @@ class OneShotUpdateBatchAPIView(APIView):
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exclude(batch_id=batch_id).exists()
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
                     
-                    if overlap:
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.member_name,
                         "lokos_shg_code": p.lokos_shg_code,
                         "lokos_member_code": p.lokos_member_code,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         elif participant_type == "TRAINER":
             participants = TRTrainer.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -500,6 +528,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 mobile = p.trainer.mobile_no
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
 
                 # Check 1: Already successful
                 if fin_year and plan_id:
@@ -523,35 +552,40 @@ class OneShotUpdateBatchAPIView(APIView):
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
-                    overlap_tr = BatchTrainer.objects.filter(
+                    overlap_data = BatchTrainer.objects.filter(
                         is_active=True,
                         trainer__trainer__mobile_no=mobile,
                         batch__is_active=True,
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exclude(batch_id=batch_id).exists()
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
 
-                    overlap_mt = BatchMasterTrainer.objects.filter(
-                        is_active=True,
-                        master_trainer__mobile_no=mobile,
-                        batch__is_active=True,
-                        batch__status__in=active_statuses,
-                        batch__start_date__lte=new_end,
-                        batch__end_date__gte=new_start
-                    ).exclude(batch_id=batch_id).exists()
+                    if not overlap_data:
+                        overlap_data = BatchMasterTrainer.objects.filter(
+                            is_active=True,
+                            master_trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__status__in=active_statuses,
+                            batch__start_date__lte=new_end,
+                            batch__end_date__gte=new_start
+                        ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
 
-                    if overlap_tr or overlap_mt:
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.full_name,
                         "mobile_no": mobile,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         elif participant_type == "STAFF":
             participants = TRStaff.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -561,6 +595,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 emp_id = p.staff.employee_id
                 is_engaged = False
                 engage_reason = ""
+                overlap_data = None
 
                 # Check 1: Already successful
                 if fin_year and plan_id:
@@ -578,26 +613,30 @@ class OneShotUpdateBatchAPIView(APIView):
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
-                    overlap = BatchStaff.objects.filter(
+                    overlap_data = BatchStaff.objects.filter(
                         is_active=True,
                         staff__staff__employee_id=emp_id,
                         batch__is_active=True,
                         batch__status__in=active_statuses,
                         batch__start_date__lte=new_end,
                         batch__end_date__gte=new_start
-                    ).exclude(batch_id=batch_id).exists()
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
                     
-                    if overlap:
+                    if overlap_data:
                         is_engaged = True
-                        engage_reason = "Overlapping dates with an active batch (DRAFT, PENDING, ONGOING, or REJECTED)."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
-                    engaged_rows.append({
+                    row = {
                         "id": p.id,
                         "name": p.full_name,
                         "employee_id": emp_id,
                         "reason": engage_reason
-                    })
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
 
         if engaged_rows:
             return Response({

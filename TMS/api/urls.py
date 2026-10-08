@@ -469,7 +469,7 @@ urlpatterns = [
 
     # Bulk Training Request Creation API
     path(
-            'training-requests/create-oneshot/',
+            'tr-bulk/create-oneshot/',
             CreateBulkTrainingRequestOneShotAPIView.as_view(),
             name='training-requests-create-oneshot'
         ),    

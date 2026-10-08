@@ -13,7 +13,7 @@ load_dotenv("/etc/pragati_setu.env")
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY not set in environment")
-DEBUG = False
+DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 # CORS_ALLOWED_ORIGINS = ['*']

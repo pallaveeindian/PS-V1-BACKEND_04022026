@@ -1173,18 +1173,18 @@ class Batch(SoftDeleteMixin):
                 plan_id = self.training_plan.id or 0
 
             # 5. Determine Logic Path based on Block and Batch Type
-            if not self.block:
-                # If No Block is given (District Level without specific block)
-                prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
             if not self.district:
                 # If No District is given (STATE Level without specific district)
                 prefix = f"{fy_code}-UP-STATE-{tp}-{plan_id}"
+            elif not self.block:
+                # If No Block is given (District/State Level without specific block)
+                prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
             elif self.batch_type == 'COMBINED':
                 # If Combined Batch (Has block but is combined)
                 prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"
             else:
                 # If Separate Batch (Has block and is separate)
-                block_name = self.block.block_name_local or "XXX"
+                block_name = getattr(self.block, 'block_name_local', "XXX") or "XXX"
                 prefix = f"{fy_code}-{district}-{block_name}-{tp}-{plan_id}"
 
             # 6. Sequence Generation with Race-Condition Protection
