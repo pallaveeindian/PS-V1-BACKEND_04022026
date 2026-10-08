@@ -323,10 +323,15 @@ class MasterTrainer(SoftDeleteMixin):
         ('BRP', 'BRP'),
         ('DRP', 'DRP'),
         ('SRP', 'SRP'),
+        ('NRP', 'NRP'),
+        ('TSA', 'TSA'),
+        ('BMMU', 'BMMU'),
+        ('DMMU', 'DMMU'),
+        ('SMMU', 'SMMU'),
     ]
     designation = models.CharField(
         "Designation",
-        max_length=3,
+        max_length=10,
         choices=DESIGNATION_CHOICES,
         blank=True,
         null=True,

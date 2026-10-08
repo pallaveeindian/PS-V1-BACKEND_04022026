@@ -107,9 +107,24 @@ class CreateOneShotBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
 
-                # Check 2: Date overlap in active batches
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchBeneficiary.objects.filter(
+                        is_active=True,
+                        beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        beneficiary__lokos_member_code=p.lokos_member_code,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
+
+                # Check 2: Date overlap in active batches (for any OTHER training plan)
                 if not is_engaged and new_start and new_end:
-                    # SURGICAL FIX 2: Removed .exclude() (not needed in create) & fixed .values() keys
                     overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
                         beneficiary__lokos_shg_code=p.lokos_shg_code,
@@ -122,7 +137,7 @@ class CreateOneShotBatchAPIView(APIView):
                     
                     if overlap_data:
                         is_engaged = True
-                        engage_reason = f"Overlapping dates with an active batch."
+                        engage_reason = "Overlapping dates with an active batch."
 
                 if is_engaged:
                     row = {
@@ -161,10 +176,34 @@ class CreateOneShotBatchAPIView(APIView):
                         training_request__training_plan_id=plan_id,
                         training_request__financial_year=fin_year
                     ).exists()
-                    
                     if done_tr or done_mt:
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchTrainer.objects.filter(
+                        is_active=True,
+                        trainer__trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).values("batch_id", "batch__code").first()
+
+                    if not overlap_data:
+                        overlap_data = BatchMasterTrainer.objects.filter(
+                            is_active=True,
+                            master_trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__status__in=active_statuses,
+                            batch__training_plan_id=plan_id,
+                            batch__financial_year=fin_year
+                        ).values("batch_id", "batch__code").first()
+
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
@@ -225,6 +264,21 @@ class CreateOneShotBatchAPIView(APIView):
                     if already_done:
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchStaff.objects.filter(
+                        is_active=True,
+                        staff__staff__employee_id=emp_id,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
@@ -490,9 +544,24 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
 
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchBeneficiary.objects.filter(
+                        is_active=True,
+                        beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        beneficiary__lokos_member_code=p.lokos_member_code,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
+
                 # Check 2: Date overlap in active batches (Exclude current batch)
                 if not is_engaged and new_start and new_end:
-                    # SURGICAL FIX 3: Properly mapped .exclude(batch_id=batch_id) & .values() keys
                     overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
                         beneficiary__lokos_shg_code=p.lokos_shg_code,
@@ -549,6 +618,31 @@ class OneShotUpdateBatchAPIView(APIView):
                     if done_tr or done_mt:
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchTrainer.objects.filter(
+                        is_active=True,
+                        trainer__trainer__mobile_no=mobile,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
+
+                    if not overlap_data:
+                        overlap_data = BatchMasterTrainer.objects.filter(
+                            is_active=True,
+                            master_trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__status__in=active_statuses,
+                            batch__training_plan_id=plan_id,
+                            batch__financial_year=fin_year
+                        ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
+
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
@@ -610,6 +704,21 @@ class OneShotUpdateBatchAPIView(APIView):
                     if already_done:
                         is_engaged = True
                         engage_reason = "Already successfully completed this training plan in this financial year."
+
+                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                if not is_engaged and fin_year and plan_id:
+                    overlap_data = BatchStaff.objects.filter(
+                        is_active=True,
+                        staff__staff__employee_id=emp_id,
+                        batch__is_active=True,
+                        batch__status__in=active_statuses,
+                        batch__training_plan_id=plan_id,
+                        batch__financial_year=fin_year
+                    ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
+                    
+                    if overlap_data:
+                        is_engaged = True
+                        engage_reason = "Already enrolled in an active batch for this specific training plan and financial year."
 
                 # Check 2: Date Overlap
                 if not is_engaged and new_start and new_end:
