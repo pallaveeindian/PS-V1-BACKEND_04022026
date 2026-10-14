@@ -1974,6 +1974,7 @@ class BatchesListView(APIView):
         batch_type = params.get("batch_type")
         status = params.get("status")
         level = params.get("level")
+        exclude_status = params.get("exclude_status")
 
         if centre_id:
             qs = qs.filter(centre_id=centre_id)
@@ -1986,6 +1987,9 @@ class BatchesListView(APIView):
 
         if level:
             qs = qs.filter(level=level)
+
+        if exclude_status:
+            qs = qs.exclude(status=exclude_status)
 
         # -------------------------
         # TRAINING PLAN FILTERS 

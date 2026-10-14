@@ -10,7 +10,8 @@ from TMS.models import (
     Batch, 
     TRBeneficiary, TRTrainer, TRStaff,
     BatchBeneficiary, BatchTrainer, BatchStaff,
-    TrainingPartnerTargets
+    TrainingPartnerTargets,
+    BeneficiaryAttendanceSummary 
 )
 from .serializers import PortalSummaryReportQuerySerializer  
 
@@ -123,6 +124,18 @@ class PortalSummaryReportAPIView(APIView):
         ).values('district_id').annotate(total_target=Sum('target_count'))
         target_map = {item['district_id']: item['total_target'] for item in tgt_qs}
 
+        # E. PARTICIPANTS TRAINED (SURGICAL ADDITION: Grouped by District)
+        trained_qs = BeneficiaryAttendanceSummary.objects.filter(
+            is_active=True,
+            is_successful=True,
+            batch__is_active=True,
+            batch__financial_year=fy,
+            batch__status__in=['COMPLETED', 'REVIEW', 'CLOSED'],
+            **pax_batch_kwargs
+        ).values('batch__district_id').annotate(total_trained=Count('id'))
+        
+        trained_map = {item['batch__district_id']: item['total_trained'] for item in trained_qs}
+
         # ---------------------------------------------------------
         # COMPUTE STATE-WIDE TOTALS
         # ---------------------------------------------------------
@@ -130,9 +143,10 @@ class PortalSummaryReportAPIView(APIView):
         state_p_stats = {k: sum(d.get(k, 0) for d in p_stats_map.values()) for k in ['total', 'scheduled', 'pending', 'ongoing', 'completed', 'review', 'closed', 'rejected']}
         state_onboarded = sum(onboarded_map.values())
         state_target = sum(target_map.values())
+        state_trained = sum(trained_map.values())
 
         # Formatting Helper for JSON Structure
-        def format_summary_row(b_st, p_st, onb, tgt):
+        def format_summary_row(b_st, p_st, onb, tgt, trained_count):
             b_comp = b_st.get('completed', 0)
             b_rev = b_st.get('review', 0)
             b_clo = b_st.get('closed', 0)
@@ -140,6 +154,9 @@ class PortalSummaryReportAPIView(APIView):
             p_comp = p_st.get('completed', 0)
             p_rev = p_st.get('review', 0)
             p_clo = p_st.get('closed', 0)
+
+            total_pax_in_completed_batches = p_comp + p_rev + p_clo
+            dropout_count = max(0, total_pax_in_completed_batches - trained_count)
 
             enrolled = p_st.get('total', 0)
             remaining = max(0, onb - enrolled)
@@ -156,6 +173,8 @@ class PortalSummaryReportAPIView(APIView):
                     "7_completed_batch_closed": b_clo,
                     "8_batches_rejected_by_dmm": b_st.get('rejected', 0),
                     "9_total_batches_completed": b_comp + b_rev + b_clo,
+                    "9a_participants_trained": trained_count,     
+                    "9b_participants_dropout": dropout_count,      
                     "10_total_target": tgt or 0,
                     "11_participants_onboarded": onb,
                     "12_participants_enrolled_in_batches": enrolled,
@@ -171,7 +190,9 @@ class PortalSummaryReportAPIView(APIView):
                     "6_completed_batches_for_verification": p_rev,
                     "7_completed_batch_closed": p_clo,
                     "8_batches_rejected_by_dmm": p_st.get('rejected', 0),
-                    "9_total_batches_completed": p_comp + p_rev + p_clo,
+                    "9_total_batches_completed": total_pax_in_completed_batches,
+                    "9a_participants_trained": trained_count,     
+                    "9b_participants_dropout": dropout_count,      
                     "10_total_target": None,
                     "11_participants_onboarded": None,
                     "12_participants_enrolled_in_batches": None,
@@ -192,11 +213,12 @@ class PortalSummaryReportAPIView(APIView):
             p_st = p_stats_map.get(did, {k: 0 for k in state_p_stats.keys()})
             onb = onboarded_map.get(did, 0)
             tgt = target_map.get(did, 0)
+            trn = trained_map.get(did, 0)
 
             district_summaries.append({
                 "district_id": did,
                 "district_name": dist['district_name_en'],
-                "summary": format_summary_row(b_st, p_st, onb, tgt)
+                "summary": format_summary_row(b_st, p_st, onb, tgt, trn)
             })
 
         # ---------------------------------------------------------
@@ -206,7 +228,7 @@ class PortalSummaryReportAPIView(APIView):
             "status": "success",
             "report_date": timezone.now().strftime("%d-%m-%y"),
             "financial_year": fy,
-            "state_wide_summary": format_summary_row(state_b_stats, state_p_stats, state_onboarded, state_target),
+            "state_wide_summary": format_summary_row(state_b_stats, state_p_stats, state_onboarded, state_target, state_trained),
             "district_summaries": district_summaries
         }
 

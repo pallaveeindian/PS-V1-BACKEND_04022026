@@ -926,6 +926,10 @@ class TRBeneficiary(SoftDeleteMixin):
         MasterVillage, on_delete=models.DO_NOTHING, blank=True, null=True
     )
 
+    pri_occupation = models.CharField(max_length=255, null=True, blank=True)
+    sec_occupation = models.CharField(max_length=255, null=True, blank=True)
+    tert_occupation = models.CharField(max_length=255, null=True, blank=True)
+
     remarks = models.TextField(blank=True, null=True)
     attended = models.BooleanField(default=False)
     is_replaced = models.BooleanField(default=False)
