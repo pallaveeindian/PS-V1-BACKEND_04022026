@@ -191,6 +191,53 @@ class TrainingPlan(SoftDeleteMixin):
         return self.training_name or str(self.id)
 
 # ----------------------------
+# Training Plan Recurring Sequences (Modular Steps)
+# ----------------------------
+
+class TrainingPlanSequence(SoftDeleteMixin):
+    """
+    Tracks sequential multi-module relationships between TrainingPlans 
+    (e.g., Samuh Sakhi M1 -> M2 -> M3 -> M4).
+    """
+    id = models.BigAutoField(primary_key=True)
+    
+    # The parent or primary chain identifier (groups sequences together, e.g., 'Samuh Sakhi Training')
+    sequence_group_name = models.CharField(max_length=255, db_index=True)
+    
+    # The current training plan step
+    training_plan = models.ForeignKey(
+        TrainingPlan, on_delete=models.CASCADE, related_name='sequence_steps'
+    )
+    
+    # Sequential ordering step number (1, 2, 3, 4...)
+    step_order = models.PositiveIntegerField(default=1)
+    
+    # Pointer to the next logical training plan in the sequence
+    next_training_plan = models.ForeignKey(
+        TrainingPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='previous_steps'
+    )
+
+    class Meta:
+        db_table = 'tms_trainingplansequence'
+        managed = True
+        ordering = ['sequence_group_name', 'step_order']
+        constraints = [
+            UniqueConstraint(
+                fields=['sequence_group_name', 'training_plan'],
+                condition=Q(is_active=True),
+                name='unique_active_plan_in_sequence'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['sequence_group_name', 'step_order']),
+            models.Index(fields=['training_plan']),
+        ]
+
+    def __str__(self):
+        plan_name = getattr(self.training_plan, 'training_name', f"Plan-{self.training_plan_id}")
+        return f"{self.sequence_group_name} [Step {self.step_order}]: {plan_name}"
+
+# ----------------------------
 # Staff Profiles
 # ----------------------------
 

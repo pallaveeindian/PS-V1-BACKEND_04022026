@@ -39,6 +39,9 @@ from TMS.api.tc_module_apis.tr_participants import *
 from TMS.api.mt_apis_v2.views import *
 from TMS.api.mt_availibilityV2.views import *
 
+# Batch Reversal
+from TMS.api.batch_reversal.views import BatchReversalAPIView
+
 # Backlog Batch Creator
 from TMS.api.BacklogBatchCreator.views import *
 # Oneshot Batch Attendance api
@@ -49,6 +52,9 @@ from TMS.api.BenefAttSumm.views import *
 
 # BULK TR Creator
 from TMS.api.bulkTRcreate.views import CreateBulkTrainingRequestOneShotAPIView
+
+# Sequence Participants api
+from TMS.api.TPlanSequence.views import TrainingPlanSequenceReportAPIView
 
 router = DefaultRouter()
 
@@ -472,5 +478,15 @@ urlpatterns = [
             'tr-bulk/create-oneshot/',
             CreateBulkTrainingRequestOneShotAPIView.as_view(),
             name='training-requests-create-oneshot'
+        ),    
+
+    # Training Plan Sequence Report API
+    path('reports/sequence-analytics/', TrainingPlanSequenceReportAPIView.as_view(), name='sequence-analytics-report'),
+
+    #Batch reversal
+    path(
+            'batch-reversal/',
+            BatchReversalAPIView.as_view(),
+            name='batch-reversal'
         ),    
 ]
