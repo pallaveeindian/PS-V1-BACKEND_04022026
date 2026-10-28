@@ -47,16 +47,24 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                         training_plan=base_training_plan, is_active=True
                     ).first()
 
+                    current_seq = TrainingPlanSequence.objects.filter(
+                        training_plan=base_training_plan,
+                        is_active=True,
+                    ).first()
+
+                    plans_to_create = [base_training_plan]
+
                     if current_seq:
-                        subsequent_seqs = TrainingPlanSequence.objects.filter(
+                        sequence_steps = TrainingPlanSequence.objects.filter(
                             sequence_group_name=current_seq.sequence_group_name,
-                            step_order__gt=current_seq.step_order,
-                            is_active=True
-                        ).order_by('step_order')
-                        
-                        for seq_item in subsequent_seqs:
-                            if seq_item.training_plan and seq_item.training_plan not in plans_to_create:
-                                plans_to_create.append(seq_item.training_plan)
+                            step_order__gte=current_seq.step_order,  # includes step 2 and later
+                            is_active=True,
+                            training_plan__isnull=False,
+                        ).order_by("step_order")
+
+                        plans_to_create = list(
+                            dict.fromkeys(step.training_plan for step in sequence_steps)
+                        )
 
                     # 2. Iterate and create a TrainingRequest and duplicate participants for each plan in the chain
                     for plan_obj in plans_to_create:

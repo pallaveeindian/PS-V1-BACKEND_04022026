@@ -174,7 +174,7 @@ class BaseTMSModelViewSet(viewsets.ModelViewSet):
 class TargetsPagination(PageNumberPagination):
     page_size = 25
     page_size_query_param = 'page_size'
-    max_page_size = 1000
+    max_page_size = 5000
 
 # -------------------------------------------------------------------
 # Masters & Themes
@@ -344,6 +344,7 @@ class TrainingPartnerBankViewSet(BaseTMSModelViewSet):
 
 class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
     serializer_class = TrainingPartnerCPSerializer
+    pagination_class = TargetsPagination
     queryset = tms_models.TrainingPartnerCP.objects.select_related(
         "partner", "master_user"
     )
@@ -392,8 +393,13 @@ class TrainingPartnerCPViewSet(BaseTMSModelViewSet):
                 param_q |= Q(created_by_id=created_by_param)
                 
             queryset = queryset.filter(param_q)
+            
+        # 4. SURGICAL ADDITION: Search by Name (Supports ?search=xyz or ?name=xyz)
+        search_query = self.request.query_params.get("search") or self.request.query_params.get("name")
+        if search_query:
+            queryset = queryset.filter(name__icontains=search_query)
 
-        # 4. Distinct must be called at the very end to clean up the INNER JOIN duplicates
+        # 5. Distinct must be called at the very end to clean up the INNER JOIN duplicates
         return queryset.distinct()
 
     def perform_create(self, serializer):

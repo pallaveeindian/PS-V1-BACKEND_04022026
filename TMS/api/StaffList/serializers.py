@@ -67,7 +67,15 @@ class StaffListSerializer(serializers.ModelSerializer):
             'theme', 'theme_name',
             'district', 'district_name',
             'block', 'block_name',
-            'is_active'
+            'aadhar',
+            'pan',
+            'bank_account_no',
+            'esic',
+            'epf',
+            'uan',
+            'program',
+            'marital_status',
+            'is_active'            
         ]
 
 class StaffDetailSerializer(serializers.ModelSerializer):
@@ -89,3 +97,33 @@ class StaffDetailSerializer(serializers.ModelSerializer):
         # above will override the foreign keys to show full dictionaries.
         fields = '__all__'
         
+# ==========================================
+# CREATE & UPDATE SERIALIZER (NEW)
+# ==========================================
+class StaffCreateUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Adding and Updating Staff.
+    It accepts ALL fields including aadhar, pan, etc., without nesting them as read-only.
+    """
+    class Meta:
+        model = StaffProfile
+        fields = '__all__'
+       
+    def validate_employee_id(self, value):
+        """
+        Custom validation to ensure 'employee_id' is unique without modifying the database model.
+        It prevents duplicate employee creation and allows safe updates.
+        """
+        # Fetch the query for the given employee_id
+        query = StaffProfile.objects.filter(employee_id=value)
+       
+        # If this is an UPDATE request (self.instance exists), exclude the current staff member
+        # from the query so they can update their own profile without getting a duplicate error.
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+           
+        # If any record is found with this ID, raise an error
+        if query.exists():
+            raise serializers.ValidationError("An employee with this Employee ID already exists. Please provide a unique ID.")
+       
+        return value        

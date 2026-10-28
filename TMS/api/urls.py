@@ -20,6 +20,10 @@ from TMS.api.PortalSummaryV2.views import *
 
 # New Staff TR Creation APIs
 from TMS.api.StaffList.views import *
+# Staff CUD
+from TMS.api.StaffList.create import StaffCreateAPIView
+from TMS.api.StaffList.update import StaffUpdateAPIView
+from TMS.api.StaffList.delete import StaffDeleteAPIView
 
 # MD Maam Dashboard endpoints
 from TMS.api.MD_maam_apis.views import *
@@ -55,6 +59,13 @@ from TMS.api.bulkTRcreate.views import CreateBulkTrainingRequestOneShotAPIView
 
 # Sequence Participants api
 from TMS.api.TPlanSequence.views import TrainingPlanSequenceReportAPIView
+
+# Engagement Check api
+from TMS.api.EngagementCheck.views import ParticipantStatusCheckAPI
+
+# Training Plan Sequence api
+from TMS.api.TPlanSequence.list import TrainingPlanSequenceListAPIView
+from TMS.api.TPlanSequence.create import CreateTrainingPlanSequenceAPIView
 
 router = DefaultRouter()
 
@@ -489,4 +500,16 @@ urlpatterns = [
             BatchReversalAPIView.as_view(),
             name='batch-reversal'
         ),    
+
+    # Staff CUD apis
+    path('staffCUD/add/', StaffCreateAPIView.as_view(), name='staff-add'),
+    path('staffCUD/update/<str:employee_id>/', StaffUpdateAPIView.as_view(), name='staff-update'),
+    path('staffCUD/delete/<str:employee_id>/', StaffDeleteAPIView.as_view(), name='staff-delete'),
+
+    # Participant engagement Checks
+    path('participant/status/', ParticipantStatusCheckAPI.as_view(), name='participant_status_check'),
+
+    # Training Plan Sequence Creation API
+    path('tplan-sequence/list/', TrainingPlanSequenceListAPIView.as_view(), name='list-sequence-plans'),
+    path('tplan-sequence/create/', CreateTrainingPlanSequenceAPIView.as_view(), name='create-sequence-plan'),
 ]

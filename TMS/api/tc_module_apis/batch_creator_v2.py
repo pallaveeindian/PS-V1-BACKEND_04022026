@@ -8,11 +8,21 @@ from django.shortcuts import get_object_or_404
 from core.models import MasterUser
 from TMS.models import *
 
+from django.db import transaction
+from django.db.models import Count, Q
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from core.models import MasterUser
+from TMS.models import *
+
 class CreateOneShotBatchAPIView(APIView):
     """
     Creates a Batch and maps participants in a single atomic transaction.
-    STRICTLY checks past successful completion history and active date overlaps 
-    BEFORE initiating the transaction.
+    STRICTLY checks past successful completion history, active date overlaps, 
+    and prerequisite sequence step completion BEFORE initiating the transaction.
     """
     permission_classes = [IsAuthenticated]
 
@@ -75,7 +85,7 @@ class CreateOneShotBatchAPIView(APIView):
         else:
             ParticipantModel = TRStaff
 
-		# =====================================================================
+        # =====================================================================
         # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK
         # =====================================================================
         new_start = data.get("start_date")
@@ -85,6 +95,20 @@ class CreateOneShotBatchAPIView(APIView):
         
         active_statuses = ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING', 'REJECTED']
         engaged_rows = []
+
+        # >>> SURGICAL CHECK: DETERMINE PREVIOUS SEQUENCE STEP PLAN ID
+        prev_plan_id = None
+        if plan_id:
+            curr_seq = TrainingPlanSequence.objects.filter(training_plan_id=plan_id, is_active=True).first()
+            if curr_seq and curr_seq.step_order > 1:
+                prev_seq = TrainingPlanSequence.objects.filter(
+                    sequence_group_name=curr_seq.sequence_group_name,
+                    step_order=curr_seq.step_order - 1,
+                    is_active=True
+                ).first()
+                if prev_seq:
+                    prev_plan_id = prev_seq.training_plan_id
+        # <<< END SURGICAL CHECK
 
         if participant_type == "BENEFICIARY":
             participants = TRBeneficiary.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -101,13 +125,12 @@ class CreateOneShotBatchAPIView(APIView):
                         batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
                         batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exists()
                     if already_done:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
@@ -139,6 +162,38 @@ class CreateOneShotBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchBeneficiary.objects.filter(
+                            is_active=True,
+                            beneficiary__lokos_shg_code=p.lokos_shg_code,
+                            beneficiary__lokos_member_code=p.lokos_member_code,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+                        
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -168,19 +223,12 @@ class CreateOneShotBatchAPIView(APIView):
                         is_active=True, is_successful=True,
                         batch_trainer__trainer__trainer__mobile_no=mobile,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exists()
-                    done_mt = BeneficiaryAttendanceSummary.objects.filter(
-                        is_active=True, is_successful=True,
-                        batch_master_trainer__master_trainer__mobile_no=mobile,
-                        training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
-                    ).exists()
-                    if done_tr or done_mt:
+                    if done_tr:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchTrainer.objects.filter(
                         is_active=True,
@@ -190,16 +238,6 @@ class CreateOneShotBatchAPIView(APIView):
                         batch__training_plan_id=plan_id,
                         batch__financial_year=fin_year
                     ).values("batch_id", "batch__code").first()
-
-                    if not overlap_data:
-                        overlap_data = BatchMasterTrainer.objects.filter(
-                            is_active=True,
-                            master_trainer__mobile_no=mobile,
-                            batch__is_active=True,
-                            batch__status__in=active_statuses,
-                            batch__training_plan_id=plan_id,
-                            batch__financial_year=fin_year
-                        ).values("batch_id", "batch__code").first()
 
                     if overlap_data:
                         is_engaged = True
@@ -230,6 +268,35 @@ class CreateOneShotBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchTrainer.objects.filter(
+                            is_active=True,
+                            trainer__trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -259,13 +326,12 @@ class CreateOneShotBatchAPIView(APIView):
                         is_successful=True,
                         batch_staff__staff__staff__employee_id=emp_id,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exists()
                     if already_done:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchStaff.objects.filter(
                         is_active=True,
@@ -295,6 +361,36 @@ class CreateOneShotBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchStaff.objects.filter(
+                            is_active=True,
+                            staff__staff__employee_id=emp_id,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+                        
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -310,7 +406,7 @@ class CreateOneShotBatchAPIView(APIView):
         # Halt immediately if ANY participant fails validation
         if engaged_rows:
             return Response({
-                "error": "One or more participants are already engaged or have successfully completed this training.",
+                "error": "One or more participants are already engaged, have successfully completed this training, or are missing prerequisite step completion.",
                 "engaged_participants": engaged_rows
             }, status=status.HTTP_409_CONFLICT)
         # =====================================================================
@@ -440,8 +536,9 @@ class CreateOneShotBatchAPIView(APIView):
 class OneShotUpdateBatchAPIView(APIView):
     """
     Updates a Batch and its participant mappings atomically.
-    STRICTLY checks past successful completion history and active date overlaps 
-    BEFORE initiating the transaction, excluding the current batch being updated.
+    STRICTLY checks past successful completion history, active date overlaps, 
+    and prerequisite sequence step completion BEFORE initiating the transaction, 
+    excluding the current batch being updated.
     """
     permission_classes = [IsAuthenticated]
 
@@ -511,7 +608,7 @@ class OneShotUpdateBatchAPIView(APIView):
             MappingModel = BatchStaff
             mapping_filter_kwarg = "staff_id"
 
-		# =====================================================================
+        # =====================================================================
         # PRE-TRANSACTION STRICT ENGAGEMENT & HISTORY CHECK (EXCLUDING CURRENT BATCH)
         # =====================================================================
         new_start = data.get("start_date")
@@ -521,6 +618,20 @@ class OneShotUpdateBatchAPIView(APIView):
         
         active_statuses = ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING', 'REJECTED']
         engaged_rows = []
+
+        # >>> SURGICAL CHECK: DETERMINE PREVIOUS SEQUENCE STEP PLAN ID
+        prev_plan_id = None
+        if plan_id:
+            curr_seq = TrainingPlanSequence.objects.filter(training_plan_id=plan_id, is_active=True).first()
+            if curr_seq and curr_seq.step_order > 1:
+                prev_seq = TrainingPlanSequence.objects.filter(
+                    sequence_group_name=curr_seq.sequence_group_name,
+                    step_order=curr_seq.step_order - 1,
+                    is_active=True
+                ).first()
+                if prev_seq:
+                    prev_plan_id = prev_seq.training_plan_id
+        # <<< END SURGICAL CHECK
 
         if participant_type == "BENEFICIARY":
             participants = TRBeneficiary.objects.filter(id__in=all_participant_ids, is_active=True)
@@ -537,14 +648,13 @@ class OneShotUpdateBatchAPIView(APIView):
                         batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
                         batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exclude(batch_id=batch_id).exists()
                     
                     if already_done:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchBeneficiary.objects.filter(
                         is_active=True,
@@ -576,6 +686,38 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchBeneficiary.objects.filter(
+                            is_active=True,
+                            beneficiary__lokos_shg_code=p.lokos_shg_code,
+                            beneficiary__lokos_member_code=p.lokos_member_code,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+                        
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -605,21 +747,13 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_active=True, is_successful=True,
                         batch_trainer__trainer__trainer__mobile_no=mobile,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exclude(batch_id=batch_id).exists()
                     
-                    done_mt = BeneficiaryAttendanceSummary.objects.filter(
-                        is_active=True, is_successful=True,
-                        batch_master_trainer__master_trainer__mobile_no=mobile,
-                        training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
-                    ).exclude(batch_id=batch_id).exists()
-                    
-                    if done_tr or done_mt:
+                    if done_tr:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchTrainer.objects.filter(
                         is_active=True,
@@ -629,16 +763,6 @@ class OneShotUpdateBatchAPIView(APIView):
                         batch__training_plan_id=plan_id,
                         batch__financial_year=fin_year
                     ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
-
-                    if not overlap_data:
-                        overlap_data = BatchMasterTrainer.objects.filter(
-                            is_active=True,
-                            master_trainer__mobile_no=mobile,
-                            batch__is_active=True,
-                            batch__status__in=active_statuses,
-                            batch__training_plan_id=plan_id,
-                            batch__financial_year=fin_year
-                        ).exclude(batch_id=batch_id).values("batch_id", "batch__code").first()
 
                     if overlap_data:
                         is_engaged = True
@@ -669,6 +793,35 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True, is_successful=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchTrainer.objects.filter(
+                            is_active=True,
+                            trainer__trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -698,14 +851,12 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_successful=True,
                         batch_staff__staff__staff__employee_id=emp_id,
                         training_request__training_plan_id=plan_id,
-                        training_request__financial_year=fin_year
                     ).exclude(batch_id=batch_id).exists()
-                    
                     if already_done:
                         is_engaged = True
-                        engage_reason = "Already successfully completed this training plan in this financial year."
+                        engage_reason = "Already successfully completed this training module."
 
-                # NEW Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
+                # Check 1b: Already enrolled in an ACTIVE batch for this SAME plan + year
                 if not is_engaged and fin_year and plan_id:
                     overlap_data = BatchStaff.objects.filter(
                         is_active=True,
@@ -735,6 +886,36 @@ class OneShotUpdateBatchAPIView(APIView):
                         is_engaged = True
                         engage_reason = "Overlapping dates with an active batch."
 
+                # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        is_engaged = True
+                        prev_ongoing = BatchStaff.objects.filter(
+                            is_active=True,
+                            staff__staff__employee_id=emp_id,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).order_by('-id').first()
+                        
+                        if prev_ongoing:
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            engage_reason = "No history found for the prerequisite training step."
+                            overlap_data = None
+                # >>> END SURGICAL CHECK <<<
+
                 if is_engaged:
                     row = {
                         "id": p.id,
@@ -749,7 +930,7 @@ class OneShotUpdateBatchAPIView(APIView):
 
         if engaged_rows:
             return Response({
-                "error": "One or more participants are already engaged or have successfully completed this training.",
+                "error": "One or more participants are already engaged, have successfully completed this training, or are missing prerequisite step completion.",
                 "engaged_participants": engaged_rows
             }, status=status.HTTP_409_CONFLICT)
         # =====================================================================
@@ -887,7 +1068,6 @@ class OneShotUpdateBatchAPIView(APIView):
             return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class OneShotDeleteBatchAPIView(APIView):
     """
