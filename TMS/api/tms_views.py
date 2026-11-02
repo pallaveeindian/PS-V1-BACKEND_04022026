@@ -2635,20 +2635,22 @@ class TrainingRequestListViewSet(ReadOnlyModelViewSet):
 class BulkTrainingEngagementCheckAPI(APIView):
     """
     Bulk check if participants have ALREADY successfully completed a specific training plan 
-    in the given financial year.
+    in the given financial year, OR are currently engaged in an active TrainingRequest 
+    with status 'BATCHING' for the same training plan, financial year, and district.
 
     Input:
     {
         "participant_type": "BENEFICIARY" | "TRAINER" | "STAFF",
         "financial_year": "2023-24",
-        "training_plan_id": 15, # NEW: Required to check if they took THIS specific training
+        "training_plan_id": 15, # Required to check if they took THIS specific training
+        "district_id": 10,      # Optional/Supported if passed in payload
         "ids": ["id1", "id2", ...]
     }
 
     Output:
     {
         "eligible_ids": [...],
-        "engaged_ids": [...] # IDs of participants who already completed this training
+        "engaged_ids": [...] # IDs of participants who already completed or are in BATCHING for this training
     }
     """
 
@@ -2656,6 +2658,7 @@ class BulkTrainingEngagementCheckAPI(APIView):
         participant_type = request.data.get("participant_type")
         financial_year = request.data.get("financial_year")
         training_plan_id = request.data.get("training_plan_id")
+        district_id = request.data.get("district_id") or request.data.get("district")
         ids = request.data.get("ids", [])
 
         if participant_type not in ["BENEFICIARY", "TRAINER", "STAFF"]:
@@ -2682,30 +2685,53 @@ class BulkTrainingEngagementCheckAPI(APIView):
         # BENEFICIARY CASE
         # -------------------------------
         if participant_type == "BENEFICIARY":
-            # Search for Successful Attendance Summaries for these members, for this specific plan & year
+            # 1. Search for Successful Attendance Summaries for these members, for this specific plan & year
             completed_summaries = tms_models.BeneficiaryAttendanceSummary.objects.filter(
                 is_active=True,
                 is_successful=True,
                 batch_beneficiary__isnull=False,
+                batch_beneficiary__is_active=True,
+                batch_beneficiary__beneficiary__is_active=True,
                 batch_beneficiary__beneficiary__lokos_member_code__in=ids,
+                training_request__is_active=True,
                 training_request__training_plan_id=training_plan_id
             )
             
             if financial_year:
                 completed_summaries = completed_summaries.filter(training_request__financial_year=financial_year)
                 
-            engaged_ids = set(map(str, completed_summaries.values_list("batch_beneficiary__beneficiary__lokos_member_code", flat=True)))
+            completed_ids = set(map(str, completed_summaries.values_list("batch_beneficiary__beneficiary__lokos_member_code", flat=True)))
+
+            # 2. Check if already in another active TrainingRequest with status 'BATCHING'
+            batching_qs = tms_models.TRBeneficiary.objects.filter(
+                is_active=True,
+                lokos_member_code__in=ids,
+                training__is_active=True,
+                training__status="BATCHING",
+                training__training_plan_id=training_plan_id
+            )
+            if financial_year:
+                batching_qs = batching_qs.filter(training__financial_year=financial_year)
+            if district_id:
+                batching_qs = batching_qs.filter(training__district_id=district_id)
+
+            batching_ids = set(map(str, batching_qs.values_list("lokos_member_code", flat=True)))
+
+            engaged_ids = completed_ids.union(batching_ids)
 
         # -------------------------------
         # TRAINER CASE
         # -------------------------------
         elif participant_type == "TRAINER":
-            # Trainers can be tracked via batch_trainer or batch_master_trainer depending on creation flow
+            # 1. Trainers can be tracked via batch_trainer or batch_master_trainer depending on creation flow
             completed_as_trainer = tms_models.BeneficiaryAttendanceSummary.objects.filter(
                 is_active=True,
                 is_successful=True,
                 batch_trainer__isnull=False,
+                batch_trainer__is_active=True,
+                batch_trainer__trainer__is_active=True,
                 batch_trainer__trainer__trainer_id__in=ids,
+                training_request__is_active=True,
                 training_request__training_plan_id=training_plan_id
             )
             
@@ -2713,7 +2739,10 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 is_active=True,
                 is_successful=True,
                 batch_master_trainer__isnull=False,
+                batch_master_trainer__is_active=True,
+                batch_master_trainer__master_trainer__is_active=True,
                 batch_master_trainer__master_trainer_id__in=ids,
+                training_request__is_active=True,
                 training_request__training_plan_id=training_plan_id
             )
             
@@ -2723,18 +2752,38 @@ class BulkTrainingEngagementCheckAPI(APIView):
 
             trainer_ids = set(map(str, completed_as_trainer.values_list("batch_trainer__trainer__trainer_id", flat=True)))
             master_ids = set(map(str, completed_as_master.values_list("batch_master_trainer__master_trainer_id", flat=True)))
+
+            # 2. Check if already in another active TrainingRequest with status 'BATCHING'
+            batching_qs = tms_models.TRTrainer.objects.filter(
+                is_active=True,
+                trainer__is_active=True,
+                trainer_id__in=ids,
+                training__is_active=True,
+                training__status="BATCHING",
+                training__training_plan_id=training_plan_id
+            )
+            if financial_year:
+                batching_qs = batching_qs.filter(training__financial_year=financial_year)
+            if district_id:
+                batching_qs = batching_qs.filter(training__district_id=district_id)
+
+            batching_ids = set(map(str, batching_qs.values_list("trainer_id", flat=True)))
             
-            engaged_ids = trainer_ids.union(master_ids)
+            engaged_ids = trainer_ids.union(master_ids).union(batching_ids)
 
         # -------------------------------
         # STAFF CASE 
         # -------------------------------
         elif participant_type == "STAFF":
+            # 1. Search for Successful Attendance Summaries
             completed_summaries = tms_models.BeneficiaryAttendanceSummary.objects.filter(
                 is_active=True,
                 is_successful=True,
                 batch_staff__isnull=False,
+                batch_staff__is_active=True,
+                batch_staff__staff__is_active=True,
                 batch_staff__staff__staff_id__in=ids,  # Or batch_staff__staff_id__in depending on your exact FK setup
+                training_request__is_active=True,
                 training_request__training_plan_id=training_plan_id
             )
             
@@ -2742,7 +2791,25 @@ class BulkTrainingEngagementCheckAPI(APIView):
                 completed_summaries = completed_summaries.filter(training_request__financial_year=financial_year)
                 
             # Note: Assuming TRStaff maps to StaffProfile. If the frontend sends the StaffProfile DB ID, map it correctly.
-            engaged_ids = set(map(str, completed_summaries.values_list("batch_staff__staff_id", flat=True)))
+            completed_ids = set(map(str, completed_summaries.values_list("batch_staff__staff_id", flat=True)))
+
+            # 2. Check if already in another active TrainingRequest with status 'BATCHING'
+            batching_qs = tms_models.TRStaff.objects.filter(
+                is_active=True,
+                staff__is_active=True,
+                staff_id__in=ids,
+                training__is_active=True,
+                training__status="BATCHING",
+                training__training_plan_id=training_plan_id
+            )
+            if financial_year:
+                batching_qs = batching_qs.filter(training__financial_year=financial_year)
+            if district_id:
+                batching_qs = batching_qs.filter(training__district_id=district_id)
+
+            batching_ids = set(map(str, batching_qs.values_list("staff_id", flat=True)))
+
+            engaged_ids = completed_ids.union(batching_ids)
 
         # -------------------------------
         # FINAL RESPONSE

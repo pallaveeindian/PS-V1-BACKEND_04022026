@@ -185,17 +185,17 @@ class ReplaceBatchMasterTrainerAPIView(APIView):
             # 4. New Master Trainer Availability Constraint (UNTOUCHED)
             # ---------------------------------------------------------
             # Check A: Tied to a TR in BATCHING phase
-            is_in_batching_tr = TRTrainer.objects.filter(
-                trainer=new_mt,
-                training__status='BATCHING',
-                is_active=True,
-                training__is_active=True
-            ).exists()
+            # is_in_batching_tr = TRTrainer.objects.filter(
+            #     trainer=new_mt,
+            #     training__status='BATCHING',
+            #     is_active=True,
+            #     training__is_active=True
+            # ).exists()
 
-            if is_in_batching_tr:
-                return Response({
-                    "error": "The selected Master Trainer is currently locked to a Training Request in the 'BATCHING' phase."
-                }, status=status.HTTP_400_BAD_REQUEST)
+            # if is_in_batching_tr:
+            #     return Response({
+            #         "error": "The selected Master Trainer is currently locked to a Training Request in the 'BATCHING' phase."
+            #     }, status=status.HTTP_400_BAD_REQUEST)
 
             # Check B: Overlapping active batch
             if batch.start_date and batch.end_date:

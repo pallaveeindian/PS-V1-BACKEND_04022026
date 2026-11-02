@@ -164,7 +164,15 @@ class FetchTraineesForTrainingPartnerView(APIView):
 
             # Apply Optional Filters for Beneficiaries
             if block_id:
-                trainees = trainees.filter(training__block_id=block_id)
+                try:
+                    block_ids = [int(value.strip()) for value in block_id.split(",") if value.strip()]
+                except ValueError:
+                    return Response(
+                        {"error": "block_id must contain comma-separated numeric IDs."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                trainees = trainees.filter(training__block_id__in=block_ids)
             if panchayat_id:
                 trainees = trainees.filter(panchayat_id=panchayat_id)
             if village_id:

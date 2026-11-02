@@ -10,7 +10,6 @@ from .serializers import BulkTrainingRequestOneShotSerializer
 
 logger = logging.getLogger(__name__)
 
-
 class CreateBulkTrainingRequestOneShotAPIView(APIView):
     """
     Creates one or multiple TrainingRequests along with all of their
@@ -28,6 +27,120 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
         tr_list_data = serializer.validated_data["training_requests"]
         request_user = request.user if getattr(request.user, "is_authenticated", False) else None
 
+        # =================================================================
+        # PRE-TRANSACTION CHECK: PARTICIPANT NOT IN ANOTHER 'BATCHING' TR
+        # (Same financial_year, district, and training_plan as payload TR)
+        # =================================================================
+        engaged_participants = []
+
+        for tr_data in tr_list_data:
+            t_type = tr_data["training_type"]
+            participants_data = tr_data["validated_participants"]
+            fin_year = tr_data["financial_year"]
+            district = tr_data["district"]
+            base_training_plan = tr_data["training_plan"]
+
+            if t_type == "BENEFICIARY":
+                for p in participants_data:
+                    member_code = p["lokos_member_code"]
+                    shg_code = p.get("lokos_shg_code") or ""
+
+                    existing_ben = TRBeneficiary.objects.filter(
+                        is_active=True,
+                        lokos_member_code=member_code,
+                        training__is_active=True,
+                        training__status="BATCHING",
+                        training__financial_year=fin_year,
+                        training__district=district,
+                        training__training_plan=base_training_plan,
+                    ).select_related("training").first()
+
+                    if existing_ben:
+                        engaged_participants.append({
+                            "training_type": "BENEFICIARY",
+                            "member_name": p["member_name"],
+                            "lokos_shg_code": shg_code,
+                            "lokos_member_code": member_code,
+                            "training_request_id": existing_ben.training_id,
+                            "training_plan_id": base_training_plan.id,
+                            "district_id": district.district_id if district else None,
+                            "financial_year": fin_year,
+                            "reason": "Participant is already in an active Training Request with status BATCHING for this financial year, district, and training plan.",
+                        })
+
+            elif t_type == "TRAINER":
+                for p in participants_data:
+                    mt = p["trainer"]
+                    mobile = p.get("mobile_no") or getattr(mt, "mobile_no", None)
+
+                    trainer_q = Q(trainer=mt, trainer__is_active=True)
+                    if mobile:
+                        trainer_q |= Q(mobile_no=mobile) | Q(trainer__mobile_no=mobile, trainer__is_active=True)
+
+                    existing_tr = TRTrainer.objects.filter(
+                        trainer_q,
+                        is_active=True,
+                        training__is_active=True,
+                        training__status="BATCHING",
+                        training__financial_year=fin_year,
+                        training__district=district,
+                        training__training_plan=base_training_plan,
+                    ).select_related("training").first()
+
+                    if existing_tr:
+                        engaged_participants.append({
+                            "training_type": "TRAINER",
+                            "trainer_id": mt.id,
+                            "full_name": p.get("full_name") or mt.full_name or "",
+                            "mobile_no": mobile or "",
+                            "training_request_id": existing_tr.training_id,
+                            "training_plan_id": base_training_plan.id,
+                            "district_id": district.district_id if district else None,
+                            "financial_year": fin_year,
+                            "reason": "Participant is already in an active Training Request with status BATCHING for this financial year, district, and training plan.",
+                        })
+
+            elif t_type == "STAFF":
+                for p in participants_data:
+                    sp = p["staff"]
+                    emp_id = getattr(sp, "employee_id", None)
+
+                    staff_q = Q(staff=sp, staff__is_active=True)
+                    if emp_id:
+                        staff_q |= Q(staff__employee_id=emp_id, staff__is_active=True)
+
+                    existing_st = TRStaff.objects.filter(
+                        staff_q,
+                        is_active=True,
+                        training__is_active=True,
+                        training__status="BATCHING",
+                        training__financial_year=fin_year,
+                        training__district=district,
+                        training__training_plan=base_training_plan,
+                    ).select_related("training").first()
+
+                    if existing_st:
+                        engaged_participants.append({
+                            "training_type": "STAFF",
+                            "staff_id": sp.id,
+                            "full_name": p.get("full_name") or sp.full_name or "",
+                            "employee_id": emp_id or "",
+                            "training_request_id": existing_st.training_id,
+                            "training_plan_id": base_training_plan.id,
+                            "district_id": district.district_id if district else None,
+                            "financial_year": fin_year,
+                            "reason": "Participant is already in an active Training Request with status BATCHING for this financial year, district, and training plan.",
+                        })
+
+        if engaged_participants:
+            return Response(
+                {
+                    "error": "One or more participants are already engaged in an active Training Request with status BATCHING for the same financial year, district, and training plan.",
+                    "engaged_participants": engaged_participants,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         created_requests_summary = []
 
         try:
@@ -42,14 +155,10 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                     base_training_plan = tr_data["training_plan"]
 
                     # 1. Determine all training plans to create (Base plan + any subsequent sequence steps)
-                    plans_to_create = [base_training_plan]
-                    current_seq = TrainingPlanSequence.objects.filter(
-                        training_plan=base_training_plan, is_active=True
-                    ).first()
-
                     current_seq = TrainingPlanSequence.objects.filter(
                         training_plan=base_training_plan,
                         is_active=True,
+                        training_plan__is_active=True,
                     ).first()
 
                     plans_to_create = [base_training_plan]
@@ -60,6 +169,7 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                             step_order__gte=current_seq.step_order,  # includes step 2 and later
                             is_active=True,
                             training_plan__isnull=False,
+                            training_plan__is_active=True,
                         ).order_by("step_order")
 
                         plans_to_create = list(
@@ -80,6 +190,7 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                             remarks=tr_data.get("remarks") or "",
                             is_old=tr_data.get("is_old", False),
                             created_by=creator,
+                            is_active=True,
                         )
 
                         created_participants_count = 0
@@ -110,6 +221,7 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                                     village=p.get("village"),
                                     remarks=p.get("remarks") or "",
                                     created_by=creator,
+                                    is_active=True,
                                 )
                                 for p in participants_data
                             ]
@@ -131,6 +243,7 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                                         block=p.get("block") or mt.empanel_block or tr_instance.block,
                                         remarks=p.get("remarks") or "",
                                         created_by=creator,
+                                        is_active=True,
                                     )
                                 )
                             TRTrainer.objects.bulk_create(trainer_objs)
@@ -151,6 +264,7 @@ class CreateBulkTrainingRequestOneShotAPIView(APIView):
                                         block=p.get("block") or sp.block or tr_instance.block,
                                         remarks=p.get("remarks") or "",
                                         created_by=creator,
+                                        is_active=True,
                                     )
                                 )
                             TRStaff.objects.bulk_create(staff_objs)
