@@ -1204,68 +1204,105 @@ class Batch(SoftDeleteMixin):
     time_of_training = models.CharField(max_length=255, blank=True, null=True)
     is_achievement_counted = models.BooleanField(default=False)
     financial_year = models.CharField("Financial year", max_length=9, null=True, blank=True)
+    includes_lateral_entries = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.code:
-            # 1. Extract Financial Year Short Code (e.g., '2026-27' -> '26')
-            fy_code = "XX"
-            if self.financial_year and len(self.financial_year) >= 4:
-                # Take the last two digits of the starting year (e.g., "2026" -> "26")
-                fy_code = self.financial_year[2:4]
+            # 1. Normalize Batch Metadata
+            level = (self.level or "BLOCK").strip().upper()
+            batch_type = (self.batch_type or "SEPARATE").strip().upper()
+            participant_type = (self.participant_type or "BENEFICIARY").strip().upper()
 
-            # 2. Extract District Short Name
-            district = "XXX"
-            if self.district:
-                district = self.district.district_short_name_en or "XXX"
+            self.level = level
+            self.batch_type = batch_type
 
-            # 3. Extract Training Partner Short Name
-            tp = "XXX"
-            if self.partner:
-                tp = self.partner.tp_short_name or "XXX"
+            # 2. Strict Pre-Generation Validation (Error Reporting)
+            if not self.financial_year or len(str(self.financial_year).strip()) < 4:
+                raise ValueError(
+                    f"Batch code generation failed: Invalid or missing financial_year '{self.financial_year}'."
+                )
 
-            # 4. Extract Plan ID
-            plan_id = 0
-            if self.training_plan:
-                plan_id = self.training_plan.id or 0
+            if not self.training_plan_id:
+                raise ValueError(
+                    "Batch code generation failed: 'training_plan' is required."
+                )
 
-            # 5. Determine Logic Path based on Block and Batch Type
-            if not self.district:
-                # If No District is given (STATE Level without specific district)
-                prefix = f"{fy_code}-UP-STATE-{tp}-{plan_id}"
-            elif not self.block:
-                # If No Block is given (District/State Level without specific block)
-                prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
-            elif self.batch_type == 'COMBINED':
-                # If Combined Batch (Has block but is combined)
-                prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"
+            if not self.partner_id:
+                raise ValueError(
+                    "Batch code generation failed: 'partner' is missing and could not be resolved from centre or user."
+                )
+
+            # 3. Extract Base Code Tokens
+            fy_code = str(self.financial_year).strip()[2:4]
+            tp = (getattr(self.partner, "tp_short_name", None) or "XXX").strip()
+            plan_id = self.training_plan_id
+
+            # 4. Determine Prefix Strictly by Level & Batch Type
+            if level == "STATE":
+                if self.district:
+                    district = (getattr(self.district, "district_short_name_en", None) or "XXX").strip()
+                    prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
+                else:
+                    prefix = f"{fy_code}-UP-STATE-{tp}-{plan_id}"
+
+            elif level == "DISTRICT":
+                if not self.district:
+                    raise ValueError(
+                        "Batch code generation failed: 'district' is required for a DISTRICT-level batch."
+                    )
+                district = (getattr(self.district, "district_short_name_en", None) or "XXX").strip()
+                if batch_type == "COMBINED":
+                    prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"
+                else:
+                    prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
+
+            elif level == "BLOCK":
+                if not self.district:
+                    raise ValueError(
+                        "Batch code generation failed: 'district' is missing for a BLOCK-level batch (blocked fallback to STATE code)."
+                    )
+                district = (getattr(self.district, "district_short_name_en", None) or "XXX").strip()
+
+                if batch_type == "COMBINED":
+                    prefix = f"{fy_code}-{district}-COMB-{tp}-{plan_id}"
+                elif self.block:
+                    block_name = (
+                        getattr(self.block, "block_name_local", None)
+                        or "XXX"
+                    ).strip()
+                    prefix = f"{fy_code}-{district}-{block_name}-{tp}-{plan_id}"
+                elif participant_type in ["TRAINER", "STAFF"]:
+                    # Trainer/Staff separate batches may not have a block assigned
+                    prefix = f"{fy_code}-UP-{district}-{tp}-{plan_id}"
+                else:
+                    raise ValueError(
+                        "Batch code generation failed: 'block' is required for a SEPARATE BLOCK-level BENEFICIARY batch."
+                    )
             else:
-                # If Separate Batch (Has block and is separate)
-                block_name = getattr(self.block, 'block_name_local', "XXX") or "XXX"
-                prefix = f"{fy_code}-{district}-{block_name}-{tp}-{plan_id}"
+                raise ValueError(
+                    f"Batch code generation failed: Unsupported batch level '{level}'."
+                )
 
-            # 6. Sequence Generation with Race-Condition Protection
+            # 5. Sequence Generation with Race-Condition & Prefix-Collision Protection
+            prefix_with_sep = f"{prefix}-"
             with transaction.atomic():
-                # Extract the base prefix without the financial year to ensure the sequence 
-                # continues correctly even if the year prefix format changed slightly.
-                # However, since you want sequence to be unique per prefix, we filter by the EXACT prefix.
-                last_batch = Batch.objects.select_for_update().filter(
-                    code__startswith=prefix
-                ).aggregate(max_seq=Max("code"))
+                last_batch = (
+                    Batch.objects.select_for_update()
+                    .filter(code__startswith=prefix_with_sep)
+                    .aggregate(max_seq=Max("code"))
+                )
 
                 last_code = last_batch["max_seq"]
+                last_seq = 0
 
                 if last_code:
                     try:
-                        # Split by hyphen and take the last part (the sequence)
-                        parts = last_code.split("-")
-                        last_seq = int(parts[-1])
+                        last_seq = int(last_code.rsplit("-", 1)[-1])
                     except (ValueError, IndexError):
                         last_seq = 0
-                else:
-                    last_seq = 0
 
                 new_seq = str(last_seq + 1).zfill(4)
-                self.code = f"{prefix}-{new_seq}"
+                self.code = f"{prefix_with_sep}{new_seq}"
 
         super(Batch, self).save(*args, **kwargs)
 
@@ -1346,6 +1383,7 @@ class BatchBeneficiary(SoftDeleteMixin):
     registered_on = models.DateTimeField(auto_now_add=True)
     attended = models.BooleanField(default=False)
     is_replaced = models.BooleanField(default=False)
+    is_lateral = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'tms_batchbeneficiary'
@@ -1377,6 +1415,7 @@ class BatchTrainer(SoftDeleteMixin):
     registered_on = models.DateTimeField(auto_now_add=True)
     attended = models.BooleanField(default=False)
     is_replaced = models.BooleanField(default=False)
+    is_lateral = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'tms_batchtrainer'
@@ -1408,6 +1447,7 @@ class BatchStaff(SoftDeleteMixin):
     registered_on = models.DateTimeField(auto_now_add=True)
     attended = models.BooleanField(default=False)
     is_replaced = models.BooleanField(default=False)
+    is_lateral = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'tms_batchstaff'
