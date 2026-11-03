@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from django.db import models
 from django.db.models import Count, Sum, Q, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -168,14 +169,16 @@ class PortalSummaryReportAPIView(APIView):
                 batch_id=OuterRef("pk"),
                 is_active=True,
                 block__district_id__isnull=False,
-            ).values("block__district_id")[:1]
+            ).values("block__district_id")[:1],
+            output_field=models.BigIntegerField()
         )
         ben_dist_sq = Subquery(
             BatchBeneficiary.objects.filter(
                 batch_id=OuterRef("pk"),
                 is_active=True,
                 training_request__district_id__isnull=False,
-            ).values("training_request__district_id")[:1]
+            ).values("training_request__district_id")[:1],
+            output_field=models.BigIntegerField()
         )
 
         cov_block_sq = Subquery(
@@ -183,17 +186,19 @@ class PortalSummaryReportAPIView(APIView):
                 batch_id=OuterRef("pk"),
                 is_active=True,
                 block_id__isnull=False,
-            ).values("block_id")[:1]
+            ).values("block_id")[:1],
+            output_field=models.BigIntegerField()
         )
         ben_block_sq = Subquery(
             BatchBeneficiary.objects.filter(
                 batch_id=OuterRef("pk"),
                 is_active=True,
                 training_request__block_id__isnull=False,
-            ).values("training_request__block_id")[:1]
+            ).values("training_request__block_id")[:1],
+            output_field=models.BigIntegerField()
         )
 
-        # Base Querysets with Resolved Effective District
+        # Base Querysets with Resolved Effective District (Casted to prevent mixed type FieldErrors)
         base_batch_qs = (
             Batch.objects.filter(is_active=True, financial_year=fy, **batch_kwargs)
             .exclude(status="DRAFT")
@@ -204,6 +209,7 @@ class PortalSummaryReportAPIView(APIView):
                     "centre__district_id",
                     cov_dist_sq,
                     ben_dist_sq,
+                    output_field=models.BigIntegerField(),
                 )
             )
         )
@@ -225,6 +231,7 @@ class PortalSummaryReportAPIView(APIView):
                         "training_request__district_id",
                         "training_request__block__district_id",
                         f"{participant_fk}__district_id",
+                        output_field=models.BigIntegerField(),
                     )
                 )
             )
@@ -241,6 +248,7 @@ class PortalSummaryReportAPIView(APIView):
                     "district_id",
                     "training__block__district_id",
                     "block__district_id",
+                    output_field=models.BigIntegerField(),
                 )
             )
 
@@ -258,6 +266,7 @@ class PortalSummaryReportAPIView(APIView):
                 "batch__centre__district_id",
                 "training_request__district_id",
                 "training_request__block__district_id",
+                output_field=models.BigIntegerField(),
             )
         )
 
