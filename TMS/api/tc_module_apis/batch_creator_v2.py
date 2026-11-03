@@ -97,14 +97,20 @@ class CreateOneShotBatchAPIView(APIView):
         engaged_rows = []
 
         # >>> SURGICAL CHECK: DETERMINE PREVIOUS SEQUENCE STEP PLAN ID
+        lateral_participant_ids = set()
         prev_plan_id = None
         if plan_id:
-            curr_seq = TrainingPlanSequence.objects.filter(training_plan_id=plan_id, is_active=True).first()
+            curr_seq = TrainingPlanSequence.objects.filter(
+                training_plan_id=plan_id,
+                is_active=True,
+                training_plan__is_active=True
+            ).first()
             if curr_seq and curr_seq.step_order > 1:
                 prev_seq = TrainingPlanSequence.objects.filter(
                     sequence_group_name=curr_seq.sequence_group_name,
                     step_order=curr_seq.step_order - 1,
-                    is_active=True
+                    is_active=True,
+                    training_plan__is_active=True
                 ).first()
                 if prev_seq:
                     prev_plan_id = prev_seq.training_plan_id
@@ -167,22 +173,27 @@ class CreateOneShotBatchAPIView(APIView):
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
                         is_active=True,
                         is_successful=True,
+                        batch__is_active=True,
+                        batch_beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__is_active=True,
                         batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
                         batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchBeneficiary.objects.filter(
                             is_active=True,
+                            beneficiary__is_active=True,
                             beneficiary__lokos_shg_code=p.lokos_shg_code,
                             beneficiary__lokos_member_code=p.lokos_member_code,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
                         
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -190,8 +201,22 @@ class CreateOneShotBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRBeneficiary.objects.filter(
+                                is_active=True,
+                                lokos_shg_code=p.lokos_shg_code,
+                                lokos_member_code=p.lokos_member_code,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -271,21 +296,29 @@ class CreateOneShotBatchAPIView(APIView):
                 # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
                 if not is_engaged and prev_plan_id:
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
-                        is_active=True, is_successful=True,
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_trainer__is_active=True,
+                        batch_trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__is_active=True,
                         batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchTrainer.objects.filter(
                             is_active=True,
+                            trainer__is_active=True,
+                            trainer__trainer__is_active=True,
                             trainer__trainer__mobile_no=mobile,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
 
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -293,8 +326,22 @@ class CreateOneShotBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRTrainer.objects.filter(
+                                is_active=True,
+                                trainer__is_active=True,
+                                trainer__mobile_no=mobile,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -366,20 +413,27 @@ class CreateOneShotBatchAPIView(APIView):
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
                         is_active=True,
                         is_successful=True,
+                        batch__is_active=True,
+                        batch_staff__is_active=True,
+                        batch_staff__staff__is_active=True,
+                        batch_staff__staff__staff__is_active=True,
                         batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchStaff.objects.filter(
                             is_active=True,
+                            staff__is_active=True,
+                            staff__staff__is_active=True,
                             staff__staff__employee_id=emp_id,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
                         
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -387,8 +441,22 @@ class CreateOneShotBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRStaff.objects.filter(
+                                is_active=True,
+                                staff__is_active=True,
+                                staff__employee_id=emp_id,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -469,6 +537,7 @@ class CreateOneShotBatchAPIView(APIView):
                     financial_year=data.get("financial_year"),
                     start_date=data.get("start_date"),
                     end_date=data.get("end_date"),
+                    includes_lateral_entries=bool(lateral_participant_ids),
                     created_by=user
                 )
 
@@ -479,6 +548,7 @@ class CreateOneShotBatchAPIView(APIView):
                 for mapping in parsed_mappings:
                     p_id = mapping['p_id']
                     p_obj = p_db_map[p_id]
+                    is_lat = p_id in lateral_participant_ids
                     
                     tr_id = p_obj.training_id
                     touched_tr_ids.add(tr_id)
@@ -488,11 +558,11 @@ class CreateOneShotBatchAPIView(APIView):
                         combined_block_counts[b_id] = combined_block_counts.get(b_id, 0) + 1
 
                     if participant_type == "BENEFICIARY":
-                        BatchBeneficiary.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
+                        BatchBeneficiary.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id, is_lateral=is_lat)
                     elif participant_type == "TRAINER":
-                        BatchTrainer.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id)
+                        BatchTrainer.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id, is_lateral=is_lat)
                     elif participant_type == "STAFF":
-                        BatchStaff.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id)
+                        BatchStaff.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id, is_lateral=is_lat)
 
                 # 5. Create BatchBlockCoverage for COMBINED batches
                 if batch_type == "COMBINED":
@@ -620,14 +690,20 @@ class OneShotUpdateBatchAPIView(APIView):
         engaged_rows = []
 
         # >>> SURGICAL CHECK: DETERMINE PREVIOUS SEQUENCE STEP PLAN ID
+        lateral_participant_ids = set()
         prev_plan_id = None
         if plan_id:
-            curr_seq = TrainingPlanSequence.objects.filter(training_plan_id=plan_id, is_active=True).first()
+            curr_seq = TrainingPlanSequence.objects.filter(
+                training_plan_id=plan_id,
+                is_active=True,
+                training_plan__is_active=True
+            ).first()
             if curr_seq and curr_seq.step_order > 1:
                 prev_seq = TrainingPlanSequence.objects.filter(
                     sequence_group_name=curr_seq.sequence_group_name,
                     step_order=curr_seq.step_order - 1,
-                    is_active=True
+                    is_active=True,
+                    training_plan__is_active=True
                 ).first()
                 if prev_seq:
                     prev_plan_id = prev_seq.training_plan_id
@@ -691,22 +767,27 @@ class OneShotUpdateBatchAPIView(APIView):
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
                         is_active=True,
                         is_successful=True,
+                        batch__is_active=True,
+                        batch_beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__is_active=True,
                         batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
                         batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchBeneficiary.objects.filter(
                             is_active=True,
+                            beneficiary__is_active=True,
                             beneficiary__lokos_shg_code=p.lokos_shg_code,
                             beneficiary__lokos_member_code=p.lokos_member_code,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
                         
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -714,8 +795,22 @@ class OneShotUpdateBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRBeneficiary.objects.filter(
+                                is_active=True,
+                                lokos_shg_code=p.lokos_shg_code,
+                                lokos_member_code=p.lokos_member_code,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -796,21 +891,29 @@ class OneShotUpdateBatchAPIView(APIView):
                 # >>> SURGICAL CHECK 3: PREREQUISITE SEQUENCE PLAN COMPLETION <<<
                 if not is_engaged and prev_plan_id:
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
-                        is_active=True, is_successful=True,
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_trainer__is_active=True,
+                        batch_trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__is_active=True,
                         batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchTrainer.objects.filter(
                             is_active=True,
+                            trainer__is_active=True,
+                            trainer__trainer__is_active=True,
                             trainer__trainer__mobile_no=mobile,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
 
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -818,8 +921,22 @@ class OneShotUpdateBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRTrainer.objects.filter(
+                                is_active=True,
+                                trainer__is_active=True,
+                                trainer__mobile_no=mobile,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -891,20 +1008,27 @@ class OneShotUpdateBatchAPIView(APIView):
                     has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
                         is_active=True,
                         is_successful=True,
+                        batch__is_active=True,
+                        batch_staff__is_active=True,
+                        batch_staff__staff__is_active=True,
+                        batch_staff__staff__staff__is_active=True,
                         batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__is_active=True,
                         training_request__training_plan_id=prev_plan_id
                     ).exists()
 
                     if not has_successful_prev:
-                        is_engaged = True
                         prev_ongoing = BatchStaff.objects.filter(
                             is_active=True,
+                            staff__is_active=True,
+                            staff__staff__is_active=True,
                             staff__staff__employee_id=emp_id,
                             batch__is_active=True,
                             batch__training_plan_id=prev_plan_id
-                        ).order_by('-id').first()
+                        ).select_related('batch').order_by('-id').first()
                         
                         if prev_ongoing:
+                            is_engaged = True
                             b_status = prev_ongoing.batch.status
                             if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
                                 engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
@@ -912,8 +1036,22 @@ class OneShotUpdateBatchAPIView(APIView):
                                 engage_reason = "Participant did not successfully pass the prerequisite training step."
                             overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
                         else:
-                            engage_reason = "No history found for the prerequisite training step."
-                            overlap_data = None
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRStaff.objects.filter(
+                                is_active=True,
+                                staff__is_active=True,
+                                staff__employee_id=emp_id,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
                 # >>> END SURGICAL CHECK <<<
 
                 if is_engaged:
@@ -1007,6 +1145,7 @@ class OneShotUpdateBatchAPIView(APIView):
                 batch.financial_year = data.get("financial_year")
                 batch.start_date = data.get("start_date")
                 batch.end_date = data.get("end_date")
+                batch.includes_lateral_entries = bool(lateral_participant_ids)
                 batch.updated_by = user
                 batch.save()
 
@@ -1016,6 +1155,7 @@ class OneShotUpdateBatchAPIView(APIView):
 
                 for mapping in parsed_mappings:
                     p_id = mapping['p_id']
+                    is_lat = p_id in lateral_participant_ids
                     
                     if p_id in added_ids:
                         p_obj = p_db_map[p_id]
@@ -1023,15 +1163,16 @@ class OneShotUpdateBatchAPIView(APIView):
                         touched_tr_ids.add(tr_id)
                         
                         if participant_type == "BENEFICIARY":
-                            MappingModel.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id)
+                            MappingModel.objects.create(batch=batch, beneficiary=p_obj, training_request_id=tr_id, is_lateral=is_lat)
                         elif participant_type == "TRAINER":
-                            MappingModel.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id)
+                            MappingModel.objects.create(batch=batch, trainer=p_obj, training_request_id=tr_id, is_lateral=is_lat)
                         elif participant_type == "STAFF":
-                            MappingModel.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id)
+                            MappingModel.objects.create(batch=batch, staff=p_obj, training_request_id=tr_id, is_lateral=is_lat)
                     else:
                         p_obj = p_db_map[p_id]
                         tr_id = mapping['tr_id'] or p_obj.training_id
                         touched_tr_ids.add(tr_id)
+                        existing_mappings.filter(**{mapping_filter_kwarg: p_id, "is_active": True}).update(is_lateral=is_lat)
 
                     if batch_type == "COMBINED":
                         b_id = mapping['block_id']
