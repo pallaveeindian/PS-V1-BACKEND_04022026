@@ -11,7 +11,7 @@ import decimal
 
 from core.models import MasterUser
 from TMS.models import (
-    Batch, TrainingPlan, MasterDistrict, MasterBlock, TrainingPartner, TrainingPartnerCentre,
+    Batch, TrainingPlan, TrainingPlanSequence, MasterDistrict, MasterBlock, TrainingPartner, TrainingPartnerCentre,
     TrainingRequest, TRBeneficiary, TRTrainer, TRStaff, MasterTrainer,
     BatchBeneficiary, BatchTrainer, BatchStaff, BatchMasterTrainer,
     BatchBlockCoverage, BatchEkycVerification, BatchSchedule, BatchAttendance,
@@ -23,7 +23,8 @@ from .serializers import BacklogBatchOneShotSerializer
 class BacklogBatchOneShotAPIView(APIView):
     """
     Creates a comprehensive Offline Backlog Batch in ONE atomic transaction.
-    Enforces strict is_old=True checks, evaluates attendance rules, and manages TR closure.
+    Enforces strict is_old=True checks, past completion & prerequisite sequence checks,
+    automatic lateral entry marking, evaluates attendance rules, and manages TR closure.
     """
     permission_classes = [IsAuthenticated]
 
@@ -36,7 +37,8 @@ class BacklogBatchOneShotAPIView(APIView):
         data = serializer.validated_data
         user = get_object_or_404(
             MasterUser,
-            username=request.user.username
+            username=request.user.username,
+            is_active=True
         )
         now = timezone.now()
 
@@ -57,22 +59,329 @@ class BacklogBatchOneShotAPIView(APIView):
             return Response({"error": "Invalid participant_type."}, status=status.HTTP_400_BAD_REQUEST)
 
         # STRICT PRIMARY CHECK
-        invalid_participants = ParticipantModel.objects.filter(id__in=p_ids, training__is_old=False)
+        invalid_participants = ParticipantModel.objects.filter(
+            id__in=p_ids,
+            is_active=True,
+            training__is_active=True,
+            training__is_old=False
+        )
         if invalid_participants.exists():
             return Response({
                 "error": "CRITICAL: All requested participants MUST belong to a Training Request where is_old=True."
             }, status=status.HTTP_403_FORBIDDEN)
 
         # Fetch participants safely
-        participants_db = ParticipantModel.objects.select_related('training').filter(id__in=p_ids)
+        participants_db = ParticipantModel.objects.select_related('training').filter(
+            id__in=p_ids,
+            is_active=True,
+            training__is_active=True
+        )
         if participants_db.count() != len(p_ids):
             return Response({"error": "One or more participant IDs are invalid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # =====================================================================
+        # 1B. PRE-CREATION STRICT COMPLETION HISTORY & SEQUENCE CHECK
+        # =====================================================================
+        plan_id = b_info.get('training_plan_id')
+        engaged_rows = []
+        lateral_participant_ids = set()
+
+        # Determine Previous Sequence Step Plan ID
+        prev_plan_id = None
+        if plan_id:
+            curr_seq = TrainingPlanSequence.objects.filter(
+                training_plan_id=plan_id,
+                is_active=True,
+                training_plan__is_active=True
+            ).first()
+            if curr_seq and curr_seq.step_order > 1:
+                prev_seq = TrainingPlanSequence.objects.filter(
+                    sequence_group_name=curr_seq.sequence_group_name,
+                    step_order=curr_seq.step_order - 1,
+                    is_active=True,
+                    training_plan__is_active=True
+                ).first()
+                if prev_seq:
+                    prev_plan_id = prev_seq.training_plan_id
+
+        if participant_type == "BENEFICIARY":
+            participants = TRBeneficiary.objects.filter(id__in=p_ids, is_active=True)
+            for p in participants:
+                is_engaged = False
+                engage_reason = ""
+                overlap_data = None
+
+                # Check 1: Already successful in this training plan before
+                if plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=plan_id,
+                    ).exists()
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training module."
+
+                # Check 2: Prerequisite Sequence Plan Completion & Lateral Entry Check
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__is_active=True,
+                        batch_beneficiary__beneficiary__lokos_shg_code=p.lokos_shg_code,
+                        batch_beneficiary__beneficiary__lokos_member_code=p.lokos_member_code,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        prev_ongoing = BatchBeneficiary.objects.filter(
+                            is_active=True,
+                            beneficiary__is_active=True,
+                            beneficiary__lokos_shg_code=p.lokos_shg_code,
+                            beneficiary__lokos_member_code=p.lokos_member_code,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).select_related('batch').order_by('-id').first()
+
+                        if prev_ongoing:
+                            is_engaged = True
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRBeneficiary.objects.filter(
+                                is_active=True,
+                                lokos_shg_code=p.lokos_shg_code,
+                                lokos_member_code=p.lokos_member_code,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
+
+                if is_engaged:
+                    row = {
+                        "id": p.id,
+                        "name": p.member_name,
+                        "lokos_shg_code": p.lokos_shg_code,
+                        "lokos_member_code": p.lokos_member_code,
+                        "reason": engage_reason
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
+
+        elif participant_type == "TRAINER":
+            participants = TRTrainer.objects.select_related('trainer').filter(id__in=p_ids, is_active=True)
+            for p in participants:
+                if not p.trainer or not p.trainer.mobile_no:
+                    continue
+                mobile = p.trainer.mobile_no
+                is_engaged = False
+                engage_reason = ""
+                overlap_data = None
+
+                # Check 1: Already successful in this training plan before
+                if plan_id:
+                    done_tr = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_trainer__is_active=True,
+                        batch_trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=plan_id,
+                    ).exists()
+                    if done_tr:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training module."
+
+                # Check 2: Prerequisite Sequence Plan Completion & Lateral Entry Check
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_trainer__is_active=True,
+                        batch_trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__is_active=True,
+                        batch_trainer__trainer__trainer__mobile_no=mobile,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        prev_ongoing = BatchTrainer.objects.filter(
+                            is_active=True,
+                            trainer__is_active=True,
+                            trainer__trainer__is_active=True,
+                            trainer__trainer__mobile_no=mobile,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).select_related('batch').order_by('-id').first()
+
+                        if prev_ongoing:
+                            is_engaged = True
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRTrainer.objects.filter(
+                                is_active=True,
+                                trainer__is_active=True,
+                                trainer__mobile_no=mobile,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
+
+                if is_engaged:
+                    row = {
+                        "id": p.id,
+                        "name": p.full_name,
+                        "mobile_no": mobile,
+                        "reason": engage_reason
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
+
+        elif participant_type == "STAFF":
+            participants = TRStaff.objects.select_related('staff').filter(id__in=p_ids, is_active=True)
+            for p in participants:
+                if not p.staff or not p.staff.employee_id:
+                    continue
+                emp_id = p.staff.employee_id
+                is_engaged = False
+                engage_reason = ""
+                overlap_data = None
+
+                # Check 1: Already successful in this training plan before
+                if plan_id:
+                    already_done = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_staff__is_active=True,
+                        batch_staff__staff__is_active=True,
+                        batch_staff__staff__staff__is_active=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=plan_id,
+                    ).exists()
+                    if already_done:
+                        is_engaged = True
+                        engage_reason = "Already successfully completed this training module."
+
+                # Check 2: Prerequisite Sequence Plan Completion & Lateral Entry Check
+                if not is_engaged and prev_plan_id:
+                    has_successful_prev = BeneficiaryAttendanceSummary.objects.filter(
+                        is_active=True,
+                        is_successful=True,
+                        batch__is_active=True,
+                        batch_staff__is_active=True,
+                        batch_staff__staff__is_active=True,
+                        batch_staff__staff__staff__is_active=True,
+                        batch_staff__staff__staff__employee_id=emp_id,
+                        training_request__is_active=True,
+                        training_request__training_plan_id=prev_plan_id
+                    ).exists()
+
+                    if not has_successful_prev:
+                        prev_ongoing = BatchStaff.objects.filter(
+                            is_active=True,
+                            staff__is_active=True,
+                            staff__staff__is_active=True,
+                            staff__staff__employee_id=emp_id,
+                            batch__is_active=True,
+                            batch__training_plan_id=prev_plan_id
+                        ).select_related('batch').order_by('-id').first()
+
+                        if prev_ongoing:
+                            is_engaged = True
+                            b_status = prev_ongoing.batch.status
+                            if b_status in ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING']:
+                                engage_reason = f"Prerequisite training step incomplete. Current batch status: {b_status}."
+                            else:
+                                engage_reason = "Participant did not successfully pass the prerequisite training step."
+                            overlap_data = {"batch_id": prev_ongoing.batch.id, "batch__code": prev_ongoing.batch.code}
+                        else:
+                            # Check if onboarded in prerequisite TrainingRequest (irrespective of financial year)
+                            in_prev_tr = TRStaff.objects.filter(
+                                is_active=True,
+                                staff__is_active=True,
+                                staff__employee_id=emp_id,
+                                training__is_active=True,
+                                training__training_plan_id=prev_plan_id
+                            ).exists()
+
+                            if in_prev_tr:
+                                is_engaged = True
+                                engage_reason = "Participant already onboarded in PREREQUISITE training. Please complete their prerequisite training first."
+                                overlap_data = None
+                            else:
+                                # Not in prerequisite batch or training request -> Lateral Entry
+                                lateral_participant_ids.add(p.id)
+
+                if is_engaged:
+                    row = {
+                        "id": p.id,
+                        "name": p.full_name,
+                        "employee_id": emp_id,
+                        "reason": engage_reason
+                    }
+                    if overlap_data:
+                        row["batch_id"] = overlap_data["batch_id"]
+                        row["batch_code"] = overlap_data["batch__code"]
+                    engaged_rows.append(row)
+
+        # Halt immediately if ANY participant fails validation
+        if engaged_rows:
+            return Response({
+                "error": "One or more participants are already engaged, have successfully completed this training, or are missing prerequisite step completion.",
+                "engaged_participants": engaged_rows
+            }, status=status.HTTP_409_CONFLICT)
+        # =====================================================================
 
         try:
             # ---------------------------------------------------------
             # 2. CREATE BATCH (Force Status = REVIEW, is_old = True)
             # ---------------------------------------------------------
-            training_plan = TrainingPlan.objects.get(id=b_info.get('training_plan_id'))
+            training_plan = TrainingPlan.objects.get(id=b_info.get('training_plan_id'), is_active=True)
             total_days = training_plan.no_of_days or 1
 
             batch = Batch.objects.create(
@@ -90,6 +399,7 @@ class BacklogBatchOneShotAPIView(APIView):
                 end_date=b_info.get('end_date'),
                 time_of_training=b_info.get('time_of_training'),
                 financial_year=b_info.get('financial_year'),
+                includes_lateral_entries=bool(lateral_participant_ids),
                 created_by=user
             )
 
@@ -124,15 +434,31 @@ class BacklogBatchOneShotAPIView(APIView):
             for p_obj in participants_db:
                 p_obj.CB_selected = True
                 p_obj.save(update_fields=['CB_selected'])
+                is_lat = p_obj.id in lateral_participant_ids
 
                 if participant_type == 'BENEFICIARY':
-                    bp = BatchBeneficiary.objects.create(batch=batch, beneficiary=p_obj, training_request=p_obj.training)
+                    bp = BatchBeneficiary.objects.create(
+                        batch=batch,
+                        beneficiary=p_obj,
+                        training_request=p_obj.training,
+                        is_lateral=is_lat
+                    )
                     trainee_map[str(p_obj.id)] = bp
                 elif participant_type == 'TRAINER':
-                    bp = BatchTrainer.objects.create(batch=batch, trainer=p_obj, training_request=p_obj.training)
+                    bp = BatchTrainer.objects.create(
+                        batch=batch,
+                        trainer=p_obj,
+                        training_request=p_obj.training,
+                        is_lateral=is_lat
+                    )
                     trainee_map[str(p_obj.id)] = bp
                 elif participant_type == 'STAFF':
-                    bp = BatchStaff.objects.create(batch=batch, staff=p_obj, training_request=p_obj.training)
+                    bp = BatchStaff.objects.create(
+                        batch=batch,
+                        staff=p_obj,
+                        training_request=p_obj.training,
+                        is_lateral=is_lat
+                    )
                     trainee_map[str(p_obj.id)] = bp
 
             # ---------------------------------------------------------
@@ -266,7 +592,7 @@ class BacklogBatchOneShotAPIView(APIView):
                         )
                 elif role == 'trainer':
                     p_obj = trainer_map.get(src_id)
-                    summary = BeneficiaryAttendanceSummary.objects.filter(batch_master_trainer=p_obj).first()
+                    summary = BeneficiaryAttendanceSummary.objects.filter(batch_master_trainer=p_obj, is_active=True).first()
                     if p_obj and summary and summary.is_successful:
                         TPBatchCostBreakup.objects.create(
                             batch=batch, participant_type='MASTER_TRAINER', batch_mastertrainer=p_obj,
@@ -298,9 +624,9 @@ class BacklogBatchOneShotAPIView(APIView):
             tr_ids = set(p.training_id for p in participants_db)
             for tr_id in tr_ids:
                 # select_for_update() prevents race conditions if multiple batches compile simultaneously
-                tr = TrainingRequest.objects.select_for_update().get(id=tr_id)
-                total_p = ParticipantModel.objects.filter(training_id=tr_id).count()
-                selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True).count()
+                tr = TrainingRequest.objects.select_for_update().get(id=tr_id, is_active=True)
+                total_p = ParticipantModel.objects.filter(training_id=tr_id, is_active=True).count()
+                selected_p = ParticipantModel.objects.filter(training_id=tr_id, CB_selected=True, is_active=True).count()
                 
                 if total_p > 0 and total_p == selected_p:
                     tr.status = "COMPLETED"

@@ -67,6 +67,9 @@ from TMS.api.EngagementCheck.views import ParticipantStatusCheckAPI
 from TMS.api.TPlanSequence.list import TrainingPlanSequenceListAPIView
 from TMS.api.TPlanSequence.create import CreateTrainingPlanSequenceAPIView
 
+# Batch History Creation APi
+from TMS.api.BatchHistory_v1.views import *
+
 router = DefaultRouter()
 
 # Masters
@@ -512,4 +515,18 @@ urlpatterns = [
     # Training Plan Sequence Creation API
     path('tplan-sequence/list/', TrainingPlanSequenceListAPIView.as_view(), name='list-sequence-plans'),
     path('tplan-sequence/create/', CreateTrainingPlanSequenceAPIView.as_view(), name='create-sequence-plan'),
+
+    # Batch History Creation API
+        path(
+        "register-batch-history/",
+        BatchHistoryCreateAPIView.as_view(),
+        name="batch-history-create",
+    ),
+
+    # Batch History List API
+    path(
+        "list-batch-history/",
+        BatchHistoryListAPIView.as_view(),
+        name="batch-history-list",
+    )
 ]
