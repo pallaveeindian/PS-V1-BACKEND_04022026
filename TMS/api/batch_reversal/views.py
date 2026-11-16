@@ -77,20 +77,28 @@ class BatchReversalAPIView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN
             )
-        # Only SMMU users can perform Batch Reversal
-        if getattr(master_user, "role_id", None) != 3:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Only SMMU users can reverse batches."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
+        
+        # Only SMMU, DMMU and PMU IT users can perform Batch Reversal
+        ALLOWED_ROLES = {"smmu", "dmmu", "pmu_admin"}
+
+        user_role = (master_user.get_role_name() or "").strip().lower()
+
+        if user_role not in ALLOWED_ROLES:
+             return Response(
+               {
+                 "success": False,
+                  "message": "Only SMMU, DMMU and PMU IT users can reverse batches."
+               },
+               status=status.HTTP_403_FORBIDDEN
+             )
 
         username = master_user.username
 
+        now = timezone.localtime()
+
         reversal_remark = (
-            f"Batch reversal initiated by {username}"
+         f"Batch reversal initiated by {username} "
+         f"on {now.strftime('%d-%m-%Y %I:%M:%S %p')}"
         )
 
         try:
