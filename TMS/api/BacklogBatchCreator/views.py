@@ -570,8 +570,8 @@ class BacklogBatchOneShotAPIView(APIView):
             elif participant_type == 'STAFF':
                 for obj in trainee_map.values(): process_summary(obj, 'batch_staff', True)
 
-            for obj in trainer_map.values():
-                process_summary(obj, 'batch_master_trainer', False)
+            # for obj in trainer_map.values():
+            #     process_summary(obj, 'batch_master_trainer', False)
 
             # ---------------------------------------------------------
             # 8. COSTS & CLOSURE

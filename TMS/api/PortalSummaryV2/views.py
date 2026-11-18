@@ -6,11 +6,13 @@ from django.db import models
 from django.db.models import Count, Sum, Q, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from datetime import datetime, time
 
 from core.models import MasterDistrict, MasterBlock
 from TMS.models import (
     TrainingPlan,
     Batch,
+    BatchHistory,
     BatchBlockCoverage,
     TRBeneficiary,
     TRTrainer,
@@ -113,6 +115,9 @@ class PortalSummaryReportAPIView(APIView):
         # 2. Extract Optional Filters & Scope Parameters
         theme_id = request.query_params.get("theme")
         plan_id = request.query_params.get("training_plan")
+        exact_date_raw = request.query_params.get("exact_date") or request.query_params.get("date")
+        from_date_raw = request.query_params.get("from_date") or request.query_params.get("start_date")
+        to_date_raw = request.query_params.get("to_date") or request.query_params.get("end_date")
         district_id_raw = request.query_params.get("district_id")
         block_wise_raw = str(request.query_params.get("block_wise", "")).strip().lower()
         block_wise = block_wise_raw in ["true", "1", "yes"]
@@ -163,6 +168,47 @@ class PortalSummaryReportAPIView(APIView):
             onb_kwargs["training__training_plan__theme_id"] = theme_id
             tgt_kwargs["training_plan__theme_id"] = theme_id
 
+        # Helper to parse YYYY-MM-DD or DD-MM-YYYY safely
+        def _parse_date(val, param_name):
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(str(val).strip(), fmt).date()
+                except ValueError:
+                    continue
+            raise ValueError(f"Invalid '{param_name}' format '{val}'. Expected YYYY-MM-DD.")
+
+        try:
+            start_dt = None
+            end_dt = None
+
+            if exact_date_raw:
+                d_exact = _parse_date(exact_date_raw, "exact_date")
+                start_dt = timezone.make_aware(datetime.combine(d_exact, time.min))
+                end_dt = timezone.make_aware(datetime.combine(d_exact, time.max))
+            else:
+                if from_date_raw:
+                    d_from = _parse_date(from_date_raw, "from_date")
+                    start_dt = timezone.make_aware(datetime.combine(d_from, time.min))
+                if to_date_raw:
+                    d_to = _parse_date(to_date_raw, "to_date")
+                    end_dt = timezone.make_aware(datetime.combine(d_to, time.max))
+                if start_dt and end_dt and start_dt > end_dt:
+                    return Response(
+                        {"error": "'from_date' cannot be greater than 'to_date'."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if start_dt:
+                onb_kwargs["created_at__gte"] = start_dt
+                tgt_kwargs["created_at__gte"] = start_dt
+
+            if end_dt:
+                onb_kwargs["created_at__lte"] = end_dt
+                tgt_kwargs["created_at__lte"] = end_dt
+
+        except ValueError as ve:
+            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
         # 4. Fallback Subqueries to Recover Missing District/Block on Batches
         cov_dist_sq = Subquery(
             BatchBlockCoverage.objects.filter(
@@ -198,7 +244,29 @@ class PortalSummaryReportAPIView(APIView):
             output_field=models.BigIntegerField()
         )
 
-        # Base Querysets with Resolved Effective District (Casted to prevent mixed type FieldErrors)
+        # Subqueries to fetch the exact timestamp when the Batch transitioned to its current status
+        batch_history_dt_sq = Subquery(
+            BatchHistory.objects.filter(
+                batch_id=OuterRef("pk"),
+                status=OuterRef("status"),
+                is_active=True,
+            )
+            .order_by("-created_at")
+            .values("created_at")[:1],
+            output_field=models.DateTimeField(),
+        )
+        pax_history_dt_sq = Subquery(
+            BatchHistory.objects.filter(
+                batch_id=OuterRef("batch_id"),
+                status=OuterRef("batch__status"),
+                is_active=True,
+            )
+            .order_by("-created_at")
+            .values("created_at")[:1],
+            output_field=models.DateTimeField(),
+        )
+
+        # Base Querysets with Resolved Effective District & BatchHistory Transition Timestamp
         base_batch_qs = (
             Batch.objects.filter(is_active=True, financial_year=fy, **batch_kwargs)
             .exclude(status="DRAFT")
@@ -210,7 +278,12 @@ class PortalSummaryReportAPIView(APIView):
                     cov_dist_sq,
                     ben_dist_sq,
                     output_field=models.BigIntegerField(),
-                )
+                ),
+                status_transition_dt=Coalesce(
+                    batch_history_dt_sq,
+                    "created_at",
+                    output_field=models.DateTimeField(),
+                ),
             )
         )
 
@@ -232,7 +305,12 @@ class PortalSummaryReportAPIView(APIView):
                         "training_request__block__district_id",
                         f"{participant_fk}__district_id",
                         output_field=models.BigIntegerField(),
-                    )
+                    ),
+                    status_transition_dt=Coalesce(
+                        pax_history_dt_sq,
+                        "batch__created_at",
+                        output_field=models.DateTimeField(),
+                    ),
                 )
             )
 
@@ -267,25 +345,46 @@ class PortalSummaryReportAPIView(APIView):
                 "training_request__district_id",
                 "training_request__block__district_id",
                 output_field=models.BigIntegerField(),
-            )
+            ),
+            status_transition_dt=Coalesce(
+                pax_history_dt_sq,
+                "batch__created_at",
+                output_field=models.DateTimeField(),
+            ),
         )
+        if start_dt:
+            base_trained_qs = base_trained_qs.filter(status_transition_dt__gte=start_dt)
+        if end_dt:
+            base_trained_qs = base_trained_qs.filter(status_transition_dt__lte=end_dt)
 
         base_tgt_qs = TrainingPartnerTargets.objects.filter(
             is_active=True, financial_year=fy, **tgt_kwargs
         )
 
         # Helper to annotate batch status counts on any grouped queryset
+        # - 'total' (1_total_batches_created) strictly checks Batch.created_at
+        # - Status breakdown columns strictly check BatchHistory status_transition_dt
         def annotate_batch_status_counts(qs, prefix=""):
             st_field = f"{prefix}status"
+            created_q = Q()
+            trans_q = Q()
+
+            if start_dt:
+                created_q &= Q(**{f"{prefix}created_at__gte": start_dt})
+                trans_q &= Q(status_transition_dt__gte=start_dt)
+            if end_dt:
+                created_q &= Q(**{f"{prefix}created_at__lte": end_dt})
+                trans_q &= Q(status_transition_dt__lte=end_dt)
+
             return qs.annotate(
-                total=Count("id"),
-                scheduled=Count("id", filter=Q(**{st_field: "SCHEDULED"})),
-                pending=Count("id", filter=Q(**{st_field: "PENDING"})),
-                ongoing=Count("id", filter=Q(**{st_field: "ONGOING"})),
-                completed=Count("id", filter=Q(**{st_field: "COMPLETED"})),
-                review=Count("id", filter=Q(**{st_field: "REVIEW"})),
-                closed=Count("id", filter=Q(**{st_field: "CLOSED"})),
-                rejected=Count("id", filter=Q(**{st_field: "REJECTED"})),
+                total=Count("id", filter=created_q),
+                scheduled=Count("id", filter=Q(**{st_field: "SCHEDULED"}) & trans_q),
+                pending=Count("id", filter=Q(**{st_field: "PENDING"}) & trans_q),
+                ongoing=Count("id", filter=Q(**{st_field: "ONGOING"}) & trans_q),
+                completed=Count("id", filter=Q(**{st_field: "COMPLETED"}) & trans_q),
+                review=Count("id", filter=Q(**{st_field: "REVIEW"}) & trans_q),
+                closed=Count("id", filter=Q(**{st_field: "CLOSED"}) & trans_q),
+                rejected=Count("id", filter=Q(**{st_field: "REJECTED"}) & trans_q),
             )
 
         # =====================================================================

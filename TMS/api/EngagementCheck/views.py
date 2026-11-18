@@ -1,4 +1,3 @@
-# Desktop/BDO_Projects/pragati_setu/TMS/api/EngagementCheck/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -26,6 +25,7 @@ class ParticipantStatusCheckAPI(APIView):
 
         active_batch_statuses = ['DRAFT', 'PENDING', 'SCHEDULED', 'ONGOING',  'REJECTED']
         active_request_statuses = ['COMPLETED']
+        ongoing_requests = ['BATCHING']
         # =========================================================================
         # 1. LOGIC FOR TRAINER 
         # =========================================================================
@@ -233,16 +233,19 @@ class ParticipantStatusCheckAPI(APIView):
                     beneficiary__lokos_member_code=code,
                     is_active=True,
                     beneficiary__is_active=True,
+                    is_replaced=False,
                     batch__is_active=True,
                     batch__status__in=active_batch_statuses
                 ).select_related(
                     'batch', 'batch__centre', 'batch__training_plan',
-                    'batch__district', 'batch__block', 'batch__partner'
+                    'batch__district', 'batch__block', 'batch__partner',
+                    'training_request', 'training_request__training_plan'
                 ).first()
 
                 if batch_eng:
                     batch = batch_eng.batch
                     centre = batch.centre
+                    linked_request = batch_eng.training_request
                     results.append({
                         "member_name": member_name,
                         "lokos_member_code": code,
@@ -250,6 +253,16 @@ class ParticipantStatusCheckAPI(APIView):
                         "is_busy": True,
                         "engaged_in": "BATCH",
                         "attendance_status": "NOT_MARKED_YET" if batch.status == 'ONGOING' else "N/A",
+                        "request_data": ({
+                            "request_id": linked_request.id,
+                            "status": linked_request.status,
+                            "level": linked_request.level,
+                            "training_plan": (
+                                linked_request.training_plan.training_name
+                                if linked_request.training_plan and linked_request.training_plan.is_active
+                                else None
+                            ),
+                        } if linked_request else None),
                         "batch_data": {
                             "batch_id": batch.id,
                             "batch_code": batch.code,
@@ -270,7 +283,43 @@ class ParticipantStatusCheckAPI(APIView):
                     })
                     continue
 
-                # Step B: No active batch engagement was found.
+                # Step B: Check the active training request without changing its status.
+                active_request_registration = tms_models.TRBeneficiary.objects.filter(
+                    lokos_member_code=code,
+                    is_active=True,
+                    is_replaced=False,
+                    training__is_active=True,
+                    training__status__in=ongoing_requests,
+                ).select_related(
+                    'training',
+                    'training__training_plan'
+                ).order_by('-id').first()
+
+                if active_request_registration:
+                    training_request = active_request_registration.training
+                    results.append({
+                        "member_name": member_name,
+                        "lokos_member_code": code,
+                        "mobile_no": mobile,
+                        "is_busy": True,
+                        "engaged_in": "TRAINING_REQUEST",
+                        "attendance_status": "N/A",
+                        "batch_data": None,
+                        "request_data": {
+                            "request_id": training_request.id,
+                            "status": training_request.status,
+                            "level": training_request.level,
+                            "training_plan": (
+                                training_request.training_plan.training_name
+                                if training_request.training_plan and training_request.training_plan.is_active
+                                else None
+                            ),
+                        },
+                        "message": "Beneficiary is engaged in an active training request."
+                    })
+                    continue
+
+                # Step C: No active batch or training-request engagement was found.
                 results.append({
                     "member_name": member_name,
                     "lokos_member_code": code,
@@ -278,6 +327,8 @@ class ParticipantStatusCheckAPI(APIView):
                     "is_busy": False,
                     "engaged_in": None,
                     "attendance_status": "N/A",
+                    "batch_data": None,
+                    "request_data": None,
                     "message": "Candidate is completely FREE right now."
                 })
 
