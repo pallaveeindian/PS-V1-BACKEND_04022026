@@ -688,6 +688,25 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
         return master_user, partner, contact_person, dtp, is_admin
 
     # ----------------------------------
+    # TPCP to Centre UNIQUE Validation
+    # ----------------------------------
+    def _validate_unique_assignment(self, contact_person_id, centre_id, exclude_id=None):
+        queryset = tms_models.TPCPToCentre.objects.filter(is_active=True)
+
+        if exclude_id is not None:
+            queryset = queryset.exclude(id=exclude_id)
+
+        if queryset.filter(contact_person_id=contact_person_id).exists():
+            raise PermissionDenied(
+                {"contact_person": "This contact person is already assigned to a centre."}
+            )
+
+        if queryset.filter(allocated_centre_id=centre_id).exists():
+            raise PermissionDenied(
+                {"allocated_centre": "This centre is already assigned to a contact person."}
+            )
+
+    # ----------------------------------
     # Queryset
     # ----------------------------------
     def get_queryset(self):
@@ -728,6 +747,8 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
         contact_person_id = self.request.data.get("contact_person")
         centre_id = self.request.data.get("allocated_centre")
 
+        self._validate_unique_assignment(contact_person_id, centre_id)
+
         cp_obj = tms_models.TrainingPartnerCP.objects.select_related("partner").get(id=contact_person_id)
         centre_obj = tms_models.TrainingPartnerCentre.objects.select_related("partner").get(id=centre_id)
 
@@ -750,6 +771,19 @@ class TPCPToCentreViewSet(BaseTMSModelViewSet):
     def perform_update(self, serializer):
         master_user, partner, contact_person, dtp, is_admin = self._get_access()
         instance = self.get_object()
+
+        contact_person_id = self.request.data.get(
+            "contact_person", instance.contact_person_id
+        )
+        centre_id = self.request.data.get(
+            "allocated_centre", instance.allocated_centre_id
+        )
+
+        self._validate_unique_assignment(
+            contact_person_id,
+            centre_id,
+            exclude_id=instance.id,
+        )        
 
         if not is_admin:
             instance_partner = instance.contact_person.partner
