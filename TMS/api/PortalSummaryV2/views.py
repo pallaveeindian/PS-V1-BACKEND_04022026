@@ -5,14 +5,13 @@ from rest_framework import status
 from django.db import models
 from django.db.models import Count, Sum, Q, OuterRef, Subquery
 from django.db.models.functions import Coalesce
+from datetime import datetime
 from django.utils import timezone
-from datetime import datetime, time
 
 from core.models import MasterDistrict, MasterBlock
 from TMS.models import (
     TrainingPlan,
     Batch,
-    BatchHistory,
     BatchBlockCoverage,
     TRBeneficiary,
     TRTrainer,
@@ -22,6 +21,7 @@ from TMS.models import (
     BatchStaff,
     TrainingPartnerTargets,
     BeneficiaryAttendanceSummary,
+    TMSPortalSummary,
 )
 from .serializers import PortalSummaryReportQuerySerializer
 
@@ -48,6 +48,419 @@ class PortalSummaryReportAPIView(APIView):
 
     def _empty_stats(self):
         return {k: 0 for k in self.STAT_KEYS}
+
+    def _parse_date_param(self, val, param_name):
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(str(val).strip(), fmt).date()
+            except ValueError:
+                continue
+        raise ValueError(
+            f"Invalid '{param_name}' format '{val}'. Expected YYYY-MM-DD."
+        )
+
+    def _empty_snapshot_entry(self):
+        return {
+            "b_st": self._empty_stats(),
+            "p_st": self._empty_stats(),
+            "onb": 0,
+            "tgt": 0,
+            "trn": 0,
+        }
+
+    def _aggregate_snapshots_by_key(self, qs, group_field):
+        rows = qs.values(group_field).annotate(
+            b_total=Coalesce(Sum("total_batches_created"), 0),
+            b_scheduled=Coalesce(Sum("scheduled_batches"), 0),
+            b_pending=Coalesce(Sum("batches_pending_at_dmm"), 0),
+            b_ongoing=Coalesce(Sum("ongoing_batches"), 0),
+            b_completed=Coalesce(Sum("completed_batches"), 0),
+            b_review=Coalesce(Sum("completed_batches_for_verification"), 0),
+            b_closed=Coalesce(Sum("completed_batch_closed"), 0),
+            b_rejected=Coalesce(Sum("batches_rejected_by_dmm"), 0),
+            p_total=Coalesce(Sum("pax_total_batches_created"), 0),
+            p_scheduled=Coalesce(Sum("pax_scheduled_batches"), 0),
+            p_pending=Coalesce(Sum("pax_batches_pending_at_dmm"), 0),
+            p_ongoing=Coalesce(Sum("pax_ongoing_batches"), 0),
+            p_completed=Coalesce(Sum("pax_completed_batches"), 0),
+            p_review=Coalesce(Sum("pax_completed_batches_for_verification"), 0),
+            p_closed=Coalesce(Sum("pax_completed_batch_closed"), 0),
+            p_rejected=Coalesce(Sum("pax_batches_rejected_by_dmm"), 0),
+            onb=Coalesce(Sum("participants_onboarded"), 0),
+            tgt=Coalesce(Sum("total_target"), 0),
+            trn=Coalesce(Sum("participants_trained"), 0),
+        )
+        result = {}
+        for r in rows:
+            result[r[group_field]] = {
+                "b_st": {
+                    "total": r["b_total"],
+                    "scheduled": r["b_scheduled"],
+                    "pending": r["b_pending"],
+                    "ongoing": r["b_ongoing"],
+                    "completed": r["b_completed"],
+                    "review": r["b_review"],
+                    "closed": r["b_closed"],
+                    "rejected": r["b_rejected"],
+                },
+                "p_st": {
+                    "total": r["p_total"],
+                    "scheduled": r["p_scheduled"],
+                    "pending": r["p_pending"],
+                    "ongoing": r["p_ongoing"],
+                    "completed": r["p_completed"],
+                    "review": r["p_review"],
+                    "closed": r["p_closed"],
+                    "rejected": r["p_rejected"],
+                },
+                "onb": r["onb"],
+                "tgt": r["tgt"],
+                "trn": r["trn"],
+            }
+        return result
+
+    def _diff_snapshot_entry(self, end_entry, base_entry):
+        if not base_entry:
+            return end_entry
+        return {
+            "b_st": {
+                k: max(0, end_entry["b_st"][k] - base_entry["b_st"][k])
+                for k in self.STAT_KEYS
+            },
+            "p_st": {
+                k: max(0, end_entry["p_st"][k] - base_entry["p_st"][k])
+                for k in self.STAT_KEYS
+            },
+            "onb": max(0, end_entry["onb"] - base_entry["onb"]),
+            "tgt": end_entry["tgt"],
+            "trn": max(0, end_entry["trn"] - base_entry["trn"]),
+        }
+
+    def _get_snapshot_response(
+        self,
+        *,
+        fy,
+        theme_id,
+        plan_id,
+        district_id,
+        district_obj,
+        block_wise,
+        exact_date,
+        from_date,
+        to_date,
+    ):
+        base_snap_qs = TMSPortalSummary.objects.filter(
+            is_active=True,
+            financial_year=fy,
+        )
+
+        # Resolve target snapshot date(s)
+        if exact_date:
+            has_snap = base_snap_qs.filter(snapshot_date=exact_date).exists()
+            end_snap_date = exact_date if has_snap else None
+            base_snap_date = None
+            report_date_str = exact_date.strftime("%d-%m-%y")
+        else:
+            end_dates_qs = base_snap_qs
+            if from_date:
+                end_dates_qs = end_dates_qs.filter(snapshot_date__gte=from_date)
+            if to_date:
+                end_dates_qs = end_dates_qs.filter(snapshot_date__lte=to_date)
+
+            end_snap_date = (
+                end_dates_qs.order_by("-snapshot_date")
+                .values_list("snapshot_date", flat=True)
+                .first()
+            )
+            base_snap_date = None
+            if from_date and end_snap_date:
+                base_snap_date = (
+                    base_snap_qs.filter(snapshot_date__lt=from_date)
+                    .order_by("-snapshot_date")
+                    .values_list("snapshot_date", flat=True)
+                    .first()
+                )
+
+            if from_date and to_date:
+                report_date_str = f"{from_date.strftime('%d-%m-%y')} to {to_date.strftime('%d-%m-%y')}"
+            elif from_date:
+                report_date_str = f"From {from_date.strftime('%d-%m-%y')}"
+            else:
+                report_date_str = f"Up to {to_date.strftime('%d-%m-%y')}"
+
+        def apply_plan_theme_filter(qs, force_plan_rows=False):
+            if force_plan_rows:
+                qs = qs.filter(training_plan__isnull=False)
+                if theme_id:
+                    qs = qs.filter(theme_id=theme_id)
+                if plan_id:
+                    qs = qs.filter(training_plan_id=plan_id)
+                return qs
+
+            if plan_id:
+                qs = qs.filter(training_plan_id=plan_id)
+                if theme_id:
+                    qs = qs.filter(theme_id=theme_id)
+                return qs
+            if theme_id:
+                return qs.filter(theme_id=theme_id, training_plan__isnull=False)
+            return qs.filter(training_plan__isnull=True)
+
+        def fetch_grouped_map(scope_level, group_field, extra_filters=None, force_plan_rows=False):
+            if not end_snap_date:
+                return {}
+
+            extra = extra_filters or {}
+            end_qs = apply_plan_theme_filter(
+                base_snap_qs.filter(
+                    snapshot_date=end_snap_date,
+                    scope_level=scope_level,
+                    **extra,
+                ),
+                force_plan_rows=force_plan_rows,
+            )
+            end_map = self._aggregate_snapshots_by_key(end_qs, group_field)
+
+            if not base_snap_date:
+                return end_map
+
+            prev_qs = apply_plan_theme_filter(
+                base_snap_qs.filter(
+                    snapshot_date=base_snap_date,
+                    scope_level=scope_level,
+                    **extra,
+                ),
+                force_plan_rows=force_plan_rows,
+            )
+            base_map = self._aggregate_snapshots_by_key(prev_qs, group_field)
+
+            merged = {}
+            for key in set(end_map.keys()) | set(base_map.keys()):
+                merged[key] = self._diff_snapshot_entry(
+                    end_map.get(key, self._empty_snapshot_entry()),
+                    base_map.get(key),
+                )
+            return merged
+
+        snapshot_meta = {
+            "data_source": "snapshot",
+            "snapshot_available": bool(end_snap_date),
+            "snapshot_end_date": end_snap_date.isoformat() if end_snap_date else None,
+            "snapshot_baseline_date": base_snap_date.isoformat() if base_snap_date else None,
+        }
+
+        # =====================================================================
+        # SNAPSHOT MODE 1: DISTRICT + BLOCK-WISE BREAKDOWN
+        # =====================================================================
+        if district_id and block_wise:
+            block_map = fetch_grouped_map(
+                "BLOCK", "block_id", {"district_id": district_id}
+            )
+            dist_map = fetch_grouped_map(
+                "DISTRICT", "district_id", {"district_id": district_id}
+            )
+
+            all_blocks = (
+                MasterBlock.objects.filter(district_id=district_id)
+                .values("block_id", "block_name_en", "block_name_local")
+                .order_by("block_name_en")
+            )
+
+            block_summaries = []
+            for blk in all_blocks:
+                bid = blk["block_id"]
+                entry = block_map.get(bid, self._empty_snapshot_entry())
+                block_summaries.append(
+                    {
+                        "block_id": bid,
+                        "block_name": blk["block_name_en"],
+                        "block_name_local": blk["block_name_local"],
+                        "district_id": district_id,
+                        "district_name": district_obj["district_name_en"],
+                        "summary": self._format_summary_row(
+                            entry["b_st"],
+                            entry["p_st"],
+                            entry["onb"],
+                            0,
+                            entry["trn"],
+                        ),
+                    }
+                )
+
+            d_entry = dist_map.get(district_id, self._empty_snapshot_entry())
+            district_total_summary = self._format_summary_row(
+                d_entry["b_st"],
+                d_entry["p_st"],
+                d_entry["onb"],
+                d_entry["tgt"],
+                d_entry["trn"],
+            )
+
+            return Response(
+                {
+                    "status": "success",
+                    "report_date": report_date_str,
+                    "financial_year": fy,
+                    "district_id": district_id,
+                    "district_name": district_obj["district_name_en"],
+                    "block_wise": True,
+                    **snapshot_meta,
+                    "state_wide_summary": district_total_summary,
+                    "district_summaries": [
+                        {
+                            "district_id": district_id,
+                            "district_name": district_obj["district_name_en"],
+                            "summary": district_total_summary,
+                        }
+                    ],
+                    "block_summaries": block_summaries,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # =====================================================================
+        # SNAPSHOT MODE 2: DISTRICT PLAN-WISE BREAKDOWN
+        # =====================================================================
+        if district_id and not block_wise:
+            plan_map = fetch_grouped_map(
+                "DISTRICT",
+                "training_plan_id",
+                {"district_id": district_id},
+                force_plan_rows=True,
+            )
+
+            plans_qs = (
+                TrainingPlan.objects.filter(is_active=True)
+                .select_related("theme")
+                .order_by("training_name")
+            )
+            if theme_id:
+                plans_qs = plans_qs.filter(theme_id=theme_id)
+            if plan_id:
+                plans_qs = plans_qs.filter(id=plan_id)
+
+            training_plan_summaries = []
+            tot_b_stats = self._empty_stats()
+            tot_p_stats = self._empty_stats()
+            tot_onboarded = 0
+            tot_target = 0
+            tot_trained = 0
+
+            for plan in plans_qs:
+                pid = plan.id
+                entry = plan_map.get(pid, self._empty_snapshot_entry())
+
+                for k in self.STAT_KEYS:
+                    tot_b_stats[k] += entry["b_st"][k]
+                    tot_p_stats[k] += entry["p_st"][k]
+                tot_onboarded += entry["onb"]
+                tot_target += entry["tgt"]
+                tot_trained += entry["trn"]
+
+                training_plan_summaries.append(
+                    {
+                        "training_plan_id": pid,
+                        "training_plan_name": plan.training_name,
+                        "theme_id": plan.theme_id,
+                        "theme_name": plan.theme.theme_name if plan.theme else None,
+                        "district_id": district_id,
+                        "district_name": district_obj["district_name_en"],
+                        "summary": self._format_summary_row(
+                            entry["b_st"],
+                            entry["p_st"],
+                            entry["onb"],
+                            entry["tgt"],
+                            entry["trn"],
+                        ),
+                    }
+                )
+
+            district_total_summary = self._format_summary_row(
+                tot_b_stats, tot_p_stats, tot_onboarded, tot_target, tot_trained
+            )
+
+            return Response(
+                {
+                    "status": "success",
+                    "report_date": report_date_str,
+                    "financial_year": fy,
+                    "district_id": district_id,
+                    "district_name": district_obj["district_name_en"],
+                    "block_wise": False,
+                    **snapshot_meta,
+                    "state_wide_summary": district_total_summary,
+                    "district_summaries": [
+                        {
+                            "district_id": district_id,
+                            "district_name": district_obj["district_name_en"],
+                            "summary": district_total_summary,
+                        }
+                    ],
+                    "training_plan_summaries": training_plan_summaries,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # =====================================================================
+        # SNAPSHOT MODE 3: STATE-WIDE & ALL-DISTRICTS SUMMARY
+        # =====================================================================
+        dist_map = fetch_grouped_map("DISTRICT", "district_id")
+
+        all_districts = (
+            MasterDistrict.objects.all()
+            .values("district_id", "district_name_en")
+            .order_by("district_name_en")
+        )
+
+        district_summaries = []
+        state_b_stats = self._empty_stats()
+        state_p_stats = self._empty_stats()
+        state_onboarded = 0
+        state_target = 0
+        state_trained = 0
+
+        for dist in all_districts:
+            did = dist["district_id"]
+            entry = dist_map.get(did, self._empty_snapshot_entry())
+
+            for k in self.STAT_KEYS:
+                state_b_stats[k] += entry["b_st"][k]
+                state_p_stats[k] += entry["p_st"][k]
+            state_onboarded += entry["onb"]
+            state_target += entry["tgt"]
+            state_trained += entry["trn"]
+
+            district_summaries.append(
+                {
+                    "district_id": did,
+                    "district_name": dist["district_name_en"],
+                    "summary": self._format_summary_row(
+                        entry["b_st"],
+                        entry["p_st"],
+                        entry["onb"],
+                        entry["tgt"],
+                        entry["trn"],
+                    ),
+                }
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "report_date": report_date_str,
+                "financial_year": fy,
+                **snapshot_meta,
+                "state_wide_summary": self._format_summary_row(
+                    state_b_stats,
+                    state_p_stats,
+                    state_onboarded,
+                    state_target,
+                    state_trained,
+                ),
+                "district_summaries": district_summaries,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def _format_summary_row(self, b_st, p_st, onb, tgt, trained_count):
         b_comp = b_st.get("completed", 0)
@@ -115,9 +528,6 @@ class PortalSummaryReportAPIView(APIView):
         # 2. Extract Optional Filters & Scope Parameters
         theme_id = request.query_params.get("theme")
         plan_id = request.query_params.get("training_plan")
-        exact_date_raw = request.query_params.get("exact_date") or request.query_params.get("date")
-        from_date_raw = request.query_params.get("from_date") or request.query_params.get("start_date")
-        to_date_raw = request.query_params.get("to_date") or request.query_params.get("end_date")
         district_id_raw = request.query_params.get("district_id")
         block_wise_raw = str(request.query_params.get("block_wise", "")).strip().lower()
         block_wise = block_wise_raw in ["true", "1", "yes"]
@@ -150,6 +560,49 @@ class PortalSummaryReportAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+        # 2b. Optional Past-Date Snapshot Filters (Exact Date OR From/To Date Range)
+        exact_date_raw = request.query_params.get("exact_date") or request.query_params.get("date")
+        from_date_raw = request.query_params.get("from_date") or request.query_params.get("start_date")
+        to_date_raw = request.query_params.get("to_date") or request.query_params.get("end_date")
+
+        if exact_date_raw or from_date_raw or to_date_raw:
+            try:
+                exact_date = (
+                    self._parse_date_param(exact_date_raw, "exact_date")
+                    if exact_date_raw
+                    else None
+                )
+                from_date = (
+                    self._parse_date_param(from_date_raw, "from_date")
+                    if (from_date_raw and not exact_date)
+                    else None
+                )
+                to_date = (
+                    self._parse_date_param(to_date_raw, "to_date")
+                    if (to_date_raw and not exact_date)
+                    else None
+                )
+            except ValueError as ve:
+                return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
+            if from_date and to_date and from_date > to_date:
+                return Response(
+                    {"error": "'from_date' cannot be greater than 'to_date'."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return self._get_snapshot_response(
+                fy=fy,
+                theme_id=theme_id,
+                plan_id=plan_id,
+                district_id=district_id,
+                district_obj=district_obj,
+                block_wise=block_wise,
+                exact_date=exact_date,
+                from_date=from_date,
+                to_date=to_date,
+            )
+
         # 3. Dynamic Theme & Plan Filter Dictionaries
         batch_kwargs = {}
         pax_batch_kwargs = {}
@@ -167,47 +620,6 @@ class PortalSummaryReportAPIView(APIView):
             pax_batch_kwargs["batch__training_plan__theme_id"] = theme_id
             onb_kwargs["training__training_plan__theme_id"] = theme_id
             tgt_kwargs["training_plan__theme_id"] = theme_id
-
-        # Helper to parse YYYY-MM-DD or DD-MM-YYYY safely
-        def _parse_date(val, param_name):
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
-                try:
-                    return datetime.strptime(str(val).strip(), fmt).date()
-                except ValueError:
-                    continue
-            raise ValueError(f"Invalid '{param_name}' format '{val}'. Expected YYYY-MM-DD.")
-
-        try:
-            start_dt = None
-            end_dt = None
-
-            if exact_date_raw:
-                d_exact = _parse_date(exact_date_raw, "exact_date")
-                start_dt = timezone.make_aware(datetime.combine(d_exact, time.min))
-                end_dt = timezone.make_aware(datetime.combine(d_exact, time.max))
-            else:
-                if from_date_raw:
-                    d_from = _parse_date(from_date_raw, "from_date")
-                    start_dt = timezone.make_aware(datetime.combine(d_from, time.min))
-                if to_date_raw:
-                    d_to = _parse_date(to_date_raw, "to_date")
-                    end_dt = timezone.make_aware(datetime.combine(d_to, time.max))
-                if start_dt and end_dt and start_dt > end_dt:
-                    return Response(
-                        {"error": "'from_date' cannot be greater than 'to_date'."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            if start_dt:
-                onb_kwargs["created_at__gte"] = start_dt
-                tgt_kwargs["created_at__gte"] = start_dt
-
-            if end_dt:
-                onb_kwargs["created_at__lte"] = end_dt
-                tgt_kwargs["created_at__lte"] = end_dt
-
-        except ValueError as ve:
-            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
 
         # 4. Fallback Subqueries to Recover Missing District/Block on Batches
         cov_dist_sq = Subquery(
@@ -244,29 +656,7 @@ class PortalSummaryReportAPIView(APIView):
             output_field=models.BigIntegerField()
         )
 
-        # Subqueries to fetch the exact timestamp when the Batch transitioned to its current status
-        batch_history_dt_sq = Subquery(
-            BatchHistory.objects.filter(
-                batch_id=OuterRef("pk"),
-                status=OuterRef("status"),
-                is_active=True,
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1],
-            output_field=models.DateTimeField(),
-        )
-        pax_history_dt_sq = Subquery(
-            BatchHistory.objects.filter(
-                batch_id=OuterRef("batch_id"),
-                status=OuterRef("batch__status"),
-                is_active=True,
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1],
-            output_field=models.DateTimeField(),
-        )
-
-        # Base Querysets with Resolved Effective District & BatchHistory Transition Timestamp
+        # Base Querysets with Resolved Effective District (Casted to prevent mixed type FieldErrors)
         base_batch_qs = (
             Batch.objects.filter(is_active=True, financial_year=fy, **batch_kwargs)
             .exclude(status="DRAFT")
@@ -278,12 +668,7 @@ class PortalSummaryReportAPIView(APIView):
                     cov_dist_sq,
                     ben_dist_sq,
                     output_field=models.BigIntegerField(),
-                ),
-                status_transition_dt=Coalesce(
-                    batch_history_dt_sq,
-                    "created_at",
-                    output_field=models.DateTimeField(),
-                ),
+                )
             )
         )
 
@@ -305,12 +690,7 @@ class PortalSummaryReportAPIView(APIView):
                         "training_request__block__district_id",
                         f"{participant_fk}__district_id",
                         output_field=models.BigIntegerField(),
-                    ),
-                    status_transition_dt=Coalesce(
-                        pax_history_dt_sq,
-                        "batch__created_at",
-                        output_field=models.DateTimeField(),
-                    ),
+                    )
                 )
             )
 
@@ -345,46 +725,25 @@ class PortalSummaryReportAPIView(APIView):
                 "training_request__district_id",
                 "training_request__block__district_id",
                 output_field=models.BigIntegerField(),
-            ),
-            status_transition_dt=Coalesce(
-                pax_history_dt_sq,
-                "batch__created_at",
-                output_field=models.DateTimeField(),
-            ),
+            )
         )
-        if start_dt:
-            base_trained_qs = base_trained_qs.filter(status_transition_dt__gte=start_dt)
-        if end_dt:
-            base_trained_qs = base_trained_qs.filter(status_transition_dt__lte=end_dt)
 
         base_tgt_qs = TrainingPartnerTargets.objects.filter(
             is_active=True, financial_year=fy, **tgt_kwargs
         )
 
         # Helper to annotate batch status counts on any grouped queryset
-        # - 'total' (1_total_batches_created) strictly checks Batch.created_at
-        # - Status breakdown columns strictly check BatchHistory status_transition_dt
         def annotate_batch_status_counts(qs, prefix=""):
             st_field = f"{prefix}status"
-            created_q = Q()
-            trans_q = Q()
-
-            if start_dt:
-                created_q &= Q(**{f"{prefix}created_at__gte": start_dt})
-                trans_q &= Q(status_transition_dt__gte=start_dt)
-            if end_dt:
-                created_q &= Q(**{f"{prefix}created_at__lte": end_dt})
-                trans_q &= Q(status_transition_dt__lte=end_dt)
-
             return qs.annotate(
-                total=Count("id", filter=created_q),
-                scheduled=Count("id", filter=Q(**{st_field: "SCHEDULED"}) & trans_q),
-                pending=Count("id", filter=Q(**{st_field: "PENDING"}) & trans_q),
-                ongoing=Count("id", filter=Q(**{st_field: "ONGOING"}) & trans_q),
-                completed=Count("id", filter=Q(**{st_field: "COMPLETED"}) & trans_q),
-                review=Count("id", filter=Q(**{st_field: "REVIEW"}) & trans_q),
-                closed=Count("id", filter=Q(**{st_field: "CLOSED"}) & trans_q),
-                rejected=Count("id", filter=Q(**{st_field: "REJECTED"}) & trans_q),
+                total=Count("id"),
+                scheduled=Count("id", filter=Q(**{st_field: "SCHEDULED"})),
+                pending=Count("id", filter=Q(**{st_field: "PENDING"})),
+                ongoing=Count("id", filter=Q(**{st_field: "ONGOING"})),
+                completed=Count("id", filter=Q(**{st_field: "COMPLETED"})),
+                review=Count("id", filter=Q(**{st_field: "REVIEW"})),
+                closed=Count("id", filter=Q(**{st_field: "CLOSED"})),
+                rejected=Count("id", filter=Q(**{st_field: "REJECTED"})),
             )
 
         # =====================================================================

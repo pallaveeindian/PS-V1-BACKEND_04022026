@@ -2106,3 +2106,176 @@ class LearningMaterial(SoftDeleteMixin):
 
     def __str__(self):
         return self.title or f"LearningMaterial-{self.id}"
+
+# ----------------------------
+# Portal Summary Nightly Snapshot
+# ----------------------------
+
+class TMSPortalSummary(SoftDeleteMixin):
+    """
+    Stores daily midnight snapshots of the TMS Portal Summary Report at
+    STATE, DISTRICT, and BLOCK levels—both overall (training_plan=None)
+    and per TrainingPlan.
+    """
+
+    SCOPE_LEVEL_CHOICES = [
+        ("STATE", "State"),
+        ("DISTRICT", "District"),
+        ("BLOCK", "Block"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    snapshot_date = models.DateField(db_index=True)
+    financial_year = models.CharField("Financial year", max_length=9, db_index=True)
+    scope_level = models.CharField(
+        max_length=16, choices=SCOPE_LEVEL_CHOICES, db_index=True
+    )
+
+    # Deterministic unique key (prevents MySQL duplicate rows when FK columns are NULL)
+    # Format: "{YYYY-MM-DD}|{FY}|{SCOPE}|D{district_id or 0}|B{block_id or 0}|P{plan_id or 0}"
+    snapshot_key = models.CharField(max_length=128, unique=True, db_index=True, default="")
+
+    # Geoscope References
+    district = models.ForeignKey(
+        MasterDistrict,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        related_name="tms_portal_summaries",
+    )
+    district_name = models.CharField(max_length=255, null=True, blank=True)
+
+    block = models.ForeignKey(
+        MasterBlock,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        related_name="tms_portal_summaries",
+    )
+    block_name = models.CharField(max_length=255, null=True, blank=True)
+    block_name_local = models.CharField(max_length=255, null=True, blank=True)
+
+    # Theme & Training Plan References (NULL = All Plans overall snapshot)
+    theme = models.ForeignKey(
+        TrainingTheme,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tms_portal_summaries",
+    )
+    theme_name = models.CharField(max_length=200, null=True, blank=True)
+
+    training_plan = models.ForeignKey(
+        TrainingPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tms_portal_summaries",
+    )
+    training_plan_name = models.CharField(max_length=255, null=True, blank=True)
+
+    # ---------------------------------------------------------
+    # Batch Counts (Columns 1 - 14)
+    # ---------------------------------------------------------
+    total_batches_created = models.PositiveIntegerField(default=0)
+    scheduled_batches = models.PositiveIntegerField(default=0)
+    batches_pending_at_dmm = models.PositiveIntegerField(default=0)
+    ongoing_batches = models.PositiveIntegerField(default=0)
+    completed_batches = models.PositiveIntegerField(default=0)
+    completed_batches_for_verification = models.PositiveIntegerField(default=0)
+    completed_batch_closed = models.PositiveIntegerField(default=0)
+    batches_rejected_by_dmm = models.PositiveIntegerField(default=0)
+    total_batches_completed = models.PositiveIntegerField(default=0)
+
+    participants_trained = models.PositiveIntegerField(default=0)
+    participants_dropout = models.PositiveIntegerField(default=0)
+    total_target = models.BigIntegerField(default=0)
+    participants_onboarded = models.PositiveIntegerField(default=0)
+    participants_enrolled_in_batches = models.PositiveIntegerField(default=0)
+    remaining_participants_for_enrollment = models.PositiveIntegerField(default=0)
+    achievement_percentage = models.DecimalField(
+        max_digits=9, decimal_places=2, default=0.00
+    )
+
+    # ---------------------------------------------------------
+    # Participant Counts by Batch Status (Columns 1 - 9)
+    # ---------------------------------------------------------
+    pax_total_batches_created = models.PositiveIntegerField(default=0)
+    pax_scheduled_batches = models.PositiveIntegerField(default=0)
+    pax_batches_pending_at_dmm = models.PositiveIntegerField(default=0)
+    pax_ongoing_batches = models.PositiveIntegerField(default=0)
+    pax_completed_batches = models.PositiveIntegerField(default=0)
+    pax_completed_batches_for_verification = models.PositiveIntegerField(default=0)
+    pax_completed_batch_closed = models.PositiveIntegerField(default=0)
+    pax_batches_rejected_by_dmm = models.PositiveIntegerField(default=0)
+    pax_total_batches_completed = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "tms_portal_summary"
+        managed = True
+        ordering = ["-snapshot_date", "scope_level", "district_name", "block_name"]
+        indexes = [
+            models.Index(
+                fields=["snapshot_date", "financial_year", "scope_level"],
+                name="idx_tms_ps_date_fy_scope",
+            ),
+            models.Index(
+                fields=["snapshot_date", "financial_year", "scope_level", "district"],
+                name="idx_tms_ps_date_fy_sc_dist",
+            ),
+            models.Index(
+                fields=["snapshot_date", "financial_year", "scope_level", "training_plan"],
+                name="idx_tms_ps_date_fy_sc_plan",
+            ),
+            models.Index(
+                fields=["snapshot_date", "financial_year", "scope_level", "theme"],
+                name="idx_tms_ps_date_fy_sc_theme",
+            ),
+        ]
+
+    def to_summary_dict(self):
+        """Returns the exact JSON shape expected by PortalSummaryReportAPIView."""
+        ach_float = float(self.achievement_percentage or 0)
+        return {
+            "batch_counts": {
+                "1_total_batches_created": self.total_batches_created,
+                "2_scheduled_batches": self.scheduled_batches,
+                "3_batches_pending_at_dmm": self.batches_pending_at_dmm,
+                "4_ongoing_batches": self.ongoing_batches,
+                "5_completed_batches": self.completed_batches,
+                "6_completed_batches_for_verification": self.completed_batches_for_verification,
+                "7_completed_batch_closed": self.completed_batch_closed,
+                "8_batches_rejected_by_dmm": self.batches_rejected_by_dmm,
+                "9_total_batches_completed": self.total_batches_completed,
+                "9a_participants_trained": self.participants_trained,
+                "9b_participants_dropout": self.participants_dropout,
+                "10_total_target": self.total_target,
+                "11_participants_onboarded": self.participants_onboarded,
+                "12_participants_enrolled_in_batches": self.participants_enrolled_in_batches,
+                "13_remaining_participants_for_enrollment": self.remaining_participants_for_enrollment,
+                "14_achievement_percentage": f"{ach_float}%",
+            },
+            "participant_counts": {
+                "1_total_batches_created": self.pax_total_batches_created,
+                "2_scheduled_batches": self.pax_scheduled_batches,
+                "3_batches_pending_at_dmm": self.pax_batches_pending_at_dmm,
+                "4_ongoing_batches": self.pax_ongoing_batches,
+                "5_completed_batches": self.pax_completed_batches,
+                "6_completed_batches_for_verification": self.pax_completed_batches_for_verification,
+                "7_completed_batch_closed": self.pax_completed_batch_closed,
+                "8_batches_rejected_by_dmm": self.pax_batches_rejected_by_dmm,
+                "9_total_batches_completed": self.pax_total_batches_completed,
+                "9a_participants_trained": self.participants_trained,
+                "9b_participants_dropout": self.participants_dropout,
+                "10_total_target": None,
+                "11_participants_onboarded": None,
+                "12_participants_enrolled_in_batches": None,
+                "13_remaining_participants_for_enrollment": None,
+                "14_achievement_percentage": None,
+            },
+        }
+
+    def __str__(self):
+        loc = self.block_name or self.district_name or "UP STATE"
+        plan_lbl = self.training_plan_name or "ALL PLANS"
+        return f"[{self.snapshot_date}] {self.financial_year} | {self.scope_level} | {loc} | {plan_lbl}"     
