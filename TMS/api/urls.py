@@ -66,6 +66,7 @@ from TMS.api.EngagementCheck.views import ParticipantStatusCheckAPI
 # Training Plan Sequence api
 from TMS.api.TPlanSequence.list import TrainingPlanSequenceListAPIView
 from TMS.api.TPlanSequence.create import CreateTrainingPlanSequenceAPIView
+from TMS.api.TPlanSequence.delete import DeleteTrainingPlanSequenceAPIView
 
 # Batch History Creation APi
 from TMS.api.BatchHistory_v1.views import *
@@ -515,6 +516,7 @@ urlpatterns = [
     # Training Plan Sequence Creation API
     path('tplan-sequence/list/', TrainingPlanSequenceListAPIView.as_view(), name='list-sequence-plans'),
     path('tplan-sequence/create/', CreateTrainingPlanSequenceAPIView.as_view(), name='create-sequence-plan'),
+    path('tplan-sequence/delete/<int:sequence_id>/', DeleteTrainingPlanSequenceAPIView.as_view(), name='delete-sequence-plan'),
 
     # Batch History Creation API
         path(
