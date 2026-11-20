@@ -375,6 +375,7 @@ class MasterTrainer(SoftDeleteMixin):
         ('BMMU', 'BMMU'),
         ('DMMU', 'DMMU'),
         ('SMMU', 'SMMU'),
+        ('Gender CRP', 'Gender CRP'),
     ]
     designation = models.CharField(
         "Designation",
